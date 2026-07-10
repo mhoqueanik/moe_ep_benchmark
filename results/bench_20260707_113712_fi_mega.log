@@ -1,0 +1,365 @@
+============================================================
+  SECTION fi_mega
+============================================================
+log: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/bench_20260707_113712_fi_mega.log
+csv: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/bench_20260707_113712_fi_mega.csv
+tokens/rank=8  algo=ht  gpus=4  exclude_quant=1
+
+
+>>> RUN path=mega  backend=deep_gemm_mega  tokens/rank=8  gpus=4
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 79, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 330, in _worker
+    mega = MoEEpLayer(
+           ^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/layer.py", line 37, in MoEEpLayer
+    return MoEEpMegaLayer(bootstrap, fleet_params, backend)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/modes/mega_layer.py", line 75, in __init__
+    self._preprocess_weights()
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/modes/mega_layer.py", line 80, in _preprocess_weights
+    self._transformed = self._kernel.preprocess_weights(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/backends/mega/kernel/deep_gemm_mega/backend.py", line 54, in preprocess_weights
+    return preprocess_mega_weights(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/backends/mega/kernel/deep_gemm_mega/weights.py", line 82, in preprocess_mega_weights
+    l2 = _transform_weight_sf(
+         ^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/backends/mega/kernel/deep_gemm_mega/weights.py", line 60, in _transform_weight_sf
+    return w, deep_gemm.transform_sf_into_required_layout(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA driver error (csrc/apis/../jit_kernels/impls/../../jit/handle.hpp:154): 700 (CUDA_ERROR_ILLEGAL_ADDRESS, an illegal memory access was encountered)
+[rank 2] CUDA driver error (csrc/apis/../jit_kernels/impls/../../jit/handle.hpp:154): 700 (CUDA_ERROR_ILLEGAL_ADDRESS, an illegal memory access was encountered)
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 79, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 330, in _worker
+    mega = MoEEpLayer(
+           ^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/layer.py", line 37, in MoEEpLayer
+    return MoEEpMegaLayer(bootstrap, fleet_params, backend)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/modes/mega_layer.py", line 75, in __init__
+    self._preprocess_weights()
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/modes/mega_layer.py", line 80, in _preprocess_weights
+    self._transformed = self._kernel.preprocess_weights(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/backends/mega/kernel/deep_gemm_mega/backend.py", line 54, in preprocess_weights
+    return preprocess_mega_weights(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/backends/mega/kernel/deep_gemm_mega/weights.py", line 82, in preprocess_mega_weights
+    l2 = _transform_weight_sf(
+         ^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/backends/mega/kernel/deep_gemm_mega/weights.py", line 60, in _transform_weight_sf
+    return w, deep_gemm.transform_sf_into_required_layout(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA driver error (csrc/apis/../jit_kernels/impls/../../jit/handle.hpp:154): 700 (CUDA_ERROR_ILLEGAL_ADDRESS, an illegal memory access was encountered)
+[rank 1] CUDA driver error (csrc/apis/../jit_kernels/impls/../../jit/handle.hpp:154): 700 (CUDA_ERROR_ILLEGAL_ADDRESS, an illegal memory access was encountered)
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 79, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 330, in _worker
+    mega = MoEEpLayer(
+           ^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/layer.py", line 37, in MoEEpLayer
+    return MoEEpMegaLayer(bootstrap, fleet_params, backend)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/modes/mega_layer.py", line 75, in __init__
+    self._preprocess_weights()
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/modes/mega_layer.py", line 80, in _preprocess_weights
+    self._transformed = self._kernel.preprocess_weights(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/backends/mega/kernel/deep_gemm_mega/backend.py", line 54, in preprocess_weights
+    return preprocess_mega_weights(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/backends/mega/kernel/deep_gemm_mega/weights.py", line 82, in preprocess_mega_weights
+    l2 = _transform_weight_sf(
+         ^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/backends/mega/kernel/deep_gemm_mega/weights.py", line 60, in _transform_weight_sf
+    return w, deep_gemm.transform_sf_into_required_layout(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA driver error (csrc/apis/../jit_kernels/impls/../../jit/handle.hpp:154): 700 (CUDA_ERROR_ILLEGAL_ADDRESS, an illegal memory access was encountered)
+[rank 3] CUDA driver error (csrc/apis/../jit_kernels/impls/../../jit/handle.hpp:154): 700 (CUDA_ERROR_ILLEGAL_ADDRESS, an illegal memory access was encountered)
+W0707 11:37:22.005000 844277 torch/multiprocessing/spawn.py:165] Terminating process 844344 via signal SIGTERM
+W0707 11:37:22.006000 844277 torch/multiprocessing/spawn.py:165] Terminating process 844345 via signal SIGTERM
+W0707 11:37:22.006000 844277 torch/multiprocessing/spawn.py:165] Terminating process 844347 via signal SIGTERM
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 500, in <module>
+    main()
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 496, in main
+    parallel_launch(cfg)
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 100, in parallel_launch
+    spawn(
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 340, in spawn
+    return start_processes(fn, args, nprocs, join, daemon, start_method="spawn")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 296, in start_processes
+    while not context.join():
+              ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 211, in join
+    raise ProcessRaisedException(msg, error_index, failed_process.pid)
+torch.multiprocessing.spawn.ProcessRaisedException: 
+
+-- Process 2 terminated with the following error:
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 87, in _wrap
+    fn(i, *args)
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 79, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 330, in _worker
+    mega = MoEEpLayer(
+           ^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/layer.py", line 37, in MoEEpLayer
+    return MoEEpMegaLayer(bootstrap, fleet_params, backend)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/modes/mega_layer.py", line 75, in __init__
+    self._preprocess_weights()
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/modes/mega_layer.py", line 80, in _preprocess_weights
+    self._transformed = self._kernel.preprocess_weights(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/backends/mega/kernel/deep_gemm_mega/backend.py", line 54, in preprocess_weights
+    return preprocess_mega_weights(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/backends/mega/kernel/deep_gemm_mega/weights.py", line 82, in preprocess_mega_weights
+    l2 = _transform_weight_sf(
+         ^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/backends/mega/kernel/deep_gemm_mega/weights.py", line 60, in _transform_weight_sf
+    return w, deep_gemm.transform_sf_into_required_layout(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA driver error (csrc/apis/../jit_kernels/impls/../../jit/handle.hpp:154): 700 (CUDA_ERROR_ILLEGAL_ADDRESS, an illegal memory access was encountered)
+
+[warn] mega variant backend=deep_gemm_mega failed (continuing)
+
+>>> RUN path=mega  backend=mxfp8_cutedsl  tokens/rank=8  gpus=4
+[rank2]:[E707 11:37:32.412958341 ProcessGroupNCCL.cpp:3067] [PG ID 0 PG GUID 0(default_pg) Rank 2] Tensor found on device cuda:0 but backend constrained to cuda:2
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 79, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 303, in _worker
+    runtime = bootstrap_moe_ep_runtime(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 191, in bootstrap_moe_ep_runtime
+    owned_nvshmem, owned_torch_dist = _ensure_nvshmem(bootstrap)
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 172, in _ensure_nvshmem
+    owned_nvshmem = _init_nvshmem_after_dist(bootstrap)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 146, in _init_nvshmem_after_dist
+    dist.broadcast(uid_tensor, src=0, group=pg)
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/c10d_logger.py", line 83, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/distributed_c10d.py", line 3074, in broadcast
+    work = group.broadcast([tensor], opts)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.distributed.DistBackendError: Attempt to perform collective on tensor not on device passed to init_process_group
+[rank3]:[E707 11:37:32.496903976 ProcessGroupNCCL.cpp:3067] [PG ID 0 PG GUID 0(default_pg) Rank 3] Tensor found on device cuda:0 but backend constrained to cuda:3
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 79, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 303, in _worker
+    runtime = bootstrap_moe_ep_runtime(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 191, in bootstrap_moe_ep_runtime
+    owned_nvshmem, owned_torch_dist = _ensure_nvshmem(bootstrap)
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 172, in _ensure_nvshmem
+    owned_nvshmem = _init_nvshmem_after_dist(bootstrap)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 146, in _init_nvshmem_after_dist
+    dist.broadcast(uid_tensor, src=0, group=pg)
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/c10d_logger.py", line 83, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/distributed_c10d.py", line 3074, in broadcast
+    work = group.broadcast([tensor], opts)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.distributed.DistBackendError: Attempt to perform collective on tensor not on device passed to init_process_group
+[rank1]:[E707 11:37:32.499226884 ProcessGroupNCCL.cpp:3067] [PG ID 0 PG GUID 0(default_pg) Rank 1] Tensor found on device cuda:0 but backend constrained to cuda:1
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 79, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 303, in _worker
+    runtime = bootstrap_moe_ep_runtime(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 191, in bootstrap_moe_ep_runtime
+    owned_nvshmem, owned_torch_dist = _ensure_nvshmem(bootstrap)
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 172, in _ensure_nvshmem
+    owned_nvshmem = _init_nvshmem_after_dist(bootstrap)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 146, in _init_nvshmem_after_dist
+    dist.broadcast(uid_tensor, src=0, group=pg)
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/c10d_logger.py", line 83, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/distributed_c10d.py", line 3074, in broadcast
+    work = group.broadcast([tensor], opts)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.distributed.DistBackendError: Attempt to perform collective on tensor not on device passed to init_process_group
+[rank 2] Attempt to perform collective on tensor not on device passed to init_process_group
+W0707 11:37:33.199000 844794 torch/multiprocessing/spawn.py:165] Terminating process 844879 via signal SIGTERM
+W0707 11:37:33.200000 844794 torch/multiprocessing/spawn.py:165] Terminating process 844880 via signal SIGTERM
+W0707 11:37:33.200000 844794 torch/multiprocessing/spawn.py:165] Terminating process 844882 via signal SIGTERM
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 500, in <module>
+    main()
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 496, in main
+    parallel_launch(cfg)
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 100, in parallel_launch
+    spawn(
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 340, in spawn
+    return start_processes(fn, args, nprocs, join, daemon, start_method="spawn")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 296, in start_processes
+    while not context.join():
+              ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 211, in join
+    raise ProcessRaisedException(msg, error_index, failed_process.pid)
+torch.multiprocessing.spawn.ProcessRaisedException: 
+
+-- Process 2 terminated with the following error:
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 87, in _wrap
+    fn(i, *args)
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 79, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 303, in _worker
+    runtime = bootstrap_moe_ep_runtime(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 191, in bootstrap_moe_ep_runtime
+    owned_nvshmem, owned_torch_dist = _ensure_nvshmem(bootstrap)
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 172, in _ensure_nvshmem
+    owned_nvshmem = _init_nvshmem_after_dist(bootstrap)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 146, in _init_nvshmem_after_dist
+    dist.broadcast(uid_tensor, src=0, group=pg)
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/c10d_logger.py", line 83, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/distributed_c10d.py", line 3074, in broadcast
+    work = group.broadcast([tensor], opts)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.distributed.DistBackendError: Attempt to perform collective on tensor not on device passed to init_process_group
+
+[warn] mega variant backend=mxfp8_cutedsl failed (continuing)
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=8  gpus=4
+[rank2]:[E707 11:37:43.844776813 ProcessGroupNCCL.cpp:3067] [PG ID 0 PG GUID 0(default_pg) Rank 2] Tensor found on device cuda:0 but backend constrained to cuda:2
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 79, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 303, in _worker
+    runtime = bootstrap_moe_ep_runtime(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 191, in bootstrap_moe_ep_runtime
+    owned_nvshmem, owned_torch_dist = _ensure_nvshmem(bootstrap)
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 172, in _ensure_nvshmem
+    owned_nvshmem = _init_nvshmem_after_dist(bootstrap)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 146, in _init_nvshmem_after_dist
+    dist.broadcast(uid_tensor, src=0, group=pg)
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/c10d_logger.py", line 83, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/distributed_c10d.py", line 3074, in broadcast
+    work = group.broadcast([tensor], opts)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.distributed.DistBackendError: Attempt to perform collective on tensor not on device passed to init_process_group
+[rank1]:[E707 11:37:43.910168586 ProcessGroupNCCL.cpp:3067] [PG ID 0 PG GUID 0(default_pg) Rank 1] Tensor found on device cuda:0 but backend constrained to cuda:1
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 79, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 303, in _worker
+    runtime = bootstrap_moe_ep_runtime(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 191, in bootstrap_moe_ep_runtime
+    owned_nvshmem, owned_torch_dist = _ensure_nvshmem(bootstrap)
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 172, in _ensure_nvshmem
+    owned_nvshmem = _init_nvshmem_after_dist(bootstrap)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 146, in _init_nvshmem_after_dist
+    dist.broadcast(uid_tensor, src=0, group=pg)
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/c10d_logger.py", line 83, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/distributed_c10d.py", line 3074, in broadcast
+    work = group.broadcast([tensor], opts)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.distributed.DistBackendError: Attempt to perform collective on tensor not on device passed to init_process_group
+[rank3]:[E707 11:37:43.916536608 ProcessGroupNCCL.cpp:3067] [PG ID 0 PG GUID 0(default_pg) Rank 3] Tensor found on device cuda:0 but backend constrained to cuda:3
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 79, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 303, in _worker
+    runtime = bootstrap_moe_ep_runtime(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 191, in bootstrap_moe_ep_runtime
+    owned_nvshmem, owned_torch_dist = _ensure_nvshmem(bootstrap)
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 172, in _ensure_nvshmem
+    owned_nvshmem = _init_nvshmem_after_dist(bootstrap)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 146, in _init_nvshmem_after_dist
+    dist.broadcast(uid_tensor, src=0, group=pg)
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/c10d_logger.py", line 83, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/distributed_c10d.py", line 3074, in broadcast
+    work = group.broadcast([tensor], opts)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.distributed.DistBackendError: Attempt to perform collective on tensor not on device passed to init_process_group
+[rank 2] Attempt to perform collective on tensor not on device passed to init_process_group
+W0707 11:37:44.554000 845237 torch/multiprocessing/spawn.py:165] Terminating process 845323 via signal SIGTERM
+W0707 11:37:44.556000 845237 torch/multiprocessing/spawn.py:165] Terminating process 845324 via signal SIGTERM
+W0707 11:37:44.556000 845237 torch/multiprocessing/spawn.py:165] Terminating process 845326 via signal SIGTERM
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 500, in <module>
+    main()
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 496, in main
+    parallel_launch(cfg)
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 100, in parallel_launch
+    spawn(
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 340, in spawn
+    return start_processes(fn, args, nprocs, join, daemon, start_method="spawn")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 296, in start_processes
+    while not context.join():
+              ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 211, in join
+    raise ProcessRaisedException(msg, error_index, failed_process.pid)
+torch.multiprocessing.spawn.ProcessRaisedException: 
+
+-- Process 2 terminated with the following error:
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 87, in _wrap
+    fn(i, *args)
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 79, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 303, in _worker
+    runtime = bootstrap_moe_ep_runtime(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 191, in bootstrap_moe_ep_runtime
+    owned_nvshmem, owned_torch_dist = _ensure_nvshmem(bootstrap)
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 172, in _ensure_nvshmem
+    owned_nvshmem = _init_nvshmem_after_dist(bootstrap)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer/flashinfer/moe_ep/core/runtime/bootstrap.py", line 146, in _init_nvshmem_after_dist
+    dist.broadcast(uid_tensor, src=0, group=pg)
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/c10d_logger.py", line 83, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/distributed/distributed_c10d.py", line 3074, in broadcast
+    work = group.broadcast([tensor], opts)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.distributed.DistBackendError: Attempt to perform collective on tensor not on device passed to init_process_group
+
+[warn] mega variant backend=nvfp4_cutedsl failed (continuing)
+
+=== summary (/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/bench_20260707_113712_fi_mega.csv) ===

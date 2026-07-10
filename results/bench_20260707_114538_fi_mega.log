@@ -1,0 +1,118 @@
+============================================================
+  SECTION fi_mega
+============================================================
+log: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/bench_20260707_114538_fi_mega.log
+csv: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/bench_20260707_114538_fi_mega.csv
+tokens/rank=8  algo=ht  gpus=4  exclude_quant=1
+
+
+>>> RUN path=mega  backend=deep_gemm_mega  tokens/rank=8  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8 tokens/rank
+  E2E latency (us) : p50=268.2  min=259.8  max=292.0  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 119310.4 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8,4,256,8,7168,2048,268.2,259.8,292.0,119310.4
+
+>>> RUN path=mega  backend=mxfp8_cutedsl  tokens/rank=8  gpus=4
+!!!! Iket is not enabled !!!!
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : mxfp8_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8 tokens/rank
+  E2E latency (us) : p50=797.7  min=782.1  max=968.3  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 40113.1 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,8,4,256,8,7168,2048,797.7,782.1,968.3,40113.1
+!!!! Iket is not enabled !!!!
+!!!! Iket is not enabled !!!!
+NVSHMEM v3.6.5
+!!!! Iket is not enabled !!!!
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=8  gpus=4
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 86, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 352, in _worker
+    tensor_kwargs = _prestage_inputs(cfg, rank, world, device, problem)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 241, in _prestage_inputs
+    fc1_alpha, fc2_alpha, fc1_norm_const = make_dummy_epilogue_params(num_local)
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: make_dummy_epilogue_params() missing 1 required keyword-only argument: 'generator'
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 86, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 352, in _worker
+    tensor_kwargs = _prestage_inputs(cfg, rank, world, device, problem)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 241, in _prestage_inputs
+    fc1_alpha, fc2_alpha, fc1_norm_const = make_dummy_epilogue_params(num_local)
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: make_dummy_epilogue_params() missing 1 required keyword-only argument: 'generator'
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 86, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 352, in _worker
+    tensor_kwargs = _prestage_inputs(cfg, rank, world, device, problem)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 241, in _prestage_inputs
+    fc1_alpha, fc2_alpha, fc1_norm_const = make_dummy_epilogue_params(num_local)
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: make_dummy_epilogue_params() missing 1 required keyword-only argument: 'generator'
+!!!! Iket is not enabled !!!!
+[rank 1] make_dummy_epilogue_params() missing 1 required keyword-only argument: 'generator'
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 86, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 352, in _worker
+    tensor_kwargs = _prestage_inputs(cfg, rank, world, device, problem)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 241, in _prestage_inputs
+    fc1_alpha, fc2_alpha, fc1_norm_const = make_dummy_epilogue_params(num_local)
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: make_dummy_epilogue_params() missing 1 required keyword-only argument: 'generator'
+W0707 11:46:31.040000 847283 torch/multiprocessing/spawn.py:165] Terminating process 847369 via signal SIGTERM
+W0707 11:46:31.041000 847283 torch/multiprocessing/spawn.py:165] Terminating process 847371 via signal SIGTERM
+W0707 11:46:31.042000 847283 torch/multiprocessing/spawn.py:165] Terminating process 847372 via signal SIGTERM
+Traceback (most recent call last):
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 507, in <module>
+    main()
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 503, in main
+    parallel_launch(cfg)
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 107, in parallel_launch
+    spawn(
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 340, in spawn
+    return start_processes(fn, args, nprocs, join, daemon, start_method="spawn")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 296, in start_processes
+    while not context.join():
+              ^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 211, in join
+    raise ProcessRaisedException(msg, error_index, failed_process.pid)
+torch.multiprocessing.spawn.ProcessRaisedException: 
+
+-- Process 1 terminated with the following error:
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/dist-packages/torch/multiprocessing/spawn.py", line 87, in _wrap
+    fn(i, *args)
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 86, in _worker_entry
+    _worker(
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 352, in _worker
+    tensor_kwargs = _prestage_inputs(cfg, rank, world, device, problem)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/bench_moe_ep_mega.py", line 241, in _prestage_inputs
+    fc1_alpha, fc2_alpha, fc1_norm_const = make_dummy_epilogue_params(num_local)
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: make_dummy_epilogue_params() missing 1 required keyword-only argument: 'generator'
+
+[warn] mega variant backend=nvfp4_cutedsl failed (continuing)
+
+=== summary (/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/bench_20260707_114538_fi_mega.csv) ===
+path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8,4,256,8,7168,2048,268.2,259.8,292.0,119310.4
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,8,4,256,8,7168,2048,797.7,782.1,968.3,40113.1

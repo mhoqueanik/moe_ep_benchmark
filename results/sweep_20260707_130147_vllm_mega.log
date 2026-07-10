@@ -1,0 +1,557 @@
+################################################################
+  SWEEP SECTION vllm_mega
+################################################################
+sweep log: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260707_130147_vllm_mega.log
+sweep csv: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260707_130147_vllm_mega.csv
+sweep points (tokens/rank): 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192
+algo=ht  gpus=4  exclude_quant=1
+
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=1
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=1  gpus=4
+INFO 07-07 13:01:57 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:01:57 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:01:58 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:01:58 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:01:58 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:01:58 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:01:58 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:01:58 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:01:58 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:01:58 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:01:58 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:01:59 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:01:59 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:01:59 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:01:59 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:01:59 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:01:59 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:01:59 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:01:59 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:01:59 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:02:01 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:02:04 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:02:04 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 1 tokens/rank
+  E2E latency (us) : p50=144.4  min=127.4  max=164.8  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 27707.0 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,1,4,256,8,7168,2048,144.4,127.4,164.8,27707.0
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=2
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=2  gpus=4
+INFO 07-07 13:02:24 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:02:24 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:02:24 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:02:24 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:02:24 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:02:24 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:02:24 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:02:24 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:02:25 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:02:25 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:02:25 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:02:25 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:02:25 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:02:25 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:02:25 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:02:25 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:02:25 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:02:25 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:02:25 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:02:25 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:02:27 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:02:30 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:02:30 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 2 tokens/rank
+  E2E latency (us) : p50=157.3  min=148.5  max=175.8  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 50844.0 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,2,4,256,8,7168,2048,157.3,148.5,175.8,50844.0
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=4
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=4  gpus=4
+INFO 07-07 13:02:47 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:02:47 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:02:48 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:02:48 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:02:48 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:02:48 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:02:48 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:02:48 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:02:48 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:02:48 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:02:48 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:02:49 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:02:49 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:02:49 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:02:49 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:02:49 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:02:49 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:02:49 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:02:49 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:02:49 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:02:51 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:02:54 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:02:54 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 4 tokens/rank
+  E2E latency (us) : p50=199.7  min=192.8  max=229.7  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 80115.4 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,4,4,256,8,7168,2048,199.7,192.8,229.7,80115.4
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=8
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=8  gpus=4
+INFO 07-07 13:03:11 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:03:11 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:03:11 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:03:11 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:03:11 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:03:11 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:03:11 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:03:11 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:03:12 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:03:12 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:03:12 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:03:12 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:03:12 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:03:12 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:03:12 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:03:12 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:03:12 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:03:13 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:03:13 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:03:13 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:03:15 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:03:18 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:03:18 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8 tokens/rank
+  E2E latency (us) : p50=253.1  min=242.9  max=501.4  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 126438.2 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8,4,256,8,7168,2048,253.1,242.9,501.4,126438.2
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=16
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=16  gpus=4
+INFO 07-07 13:03:37 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:03:37 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:03:37 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:03:37 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:03:37 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:03:37 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:03:37 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:03:37 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:03:38 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:03:38 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:03:38 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:03:38 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:03:38 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:03:38 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:03:38 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:03:38 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:03:38 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:03:39 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:03:39 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:03:39 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:03:41 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:03:43 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:03:43 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 16 tokens/rank
+  E2E latency (us) : p50=298.2  min=288.5  max=850.6  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 214592.3 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,16,4,256,8,7168,2048,298.2,288.5,850.6,214592.3
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=32
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=32  gpus=4
+INFO 07-07 13:04:00 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:04:00 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:04:00 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:04:00 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:04:00 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:04:00 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:04:01 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:04:01 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:04:01 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:04:01 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:04:01 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:04:01 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:04:01 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:04:01 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:04:02 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:04:02 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:04:02 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:04:02 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:04:02 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:04:02 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:04:04 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:04:07 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:04:07 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 32 tokens/rank
+  E2E latency (us) : p50=325.9  min=318.0  max=350.7  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 392792.3 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,32,4,256,8,7168,2048,325.9,318.0,350.7,392792.3
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=64
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=64  gpus=4
+INFO 07-07 13:04:24 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:04:24 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:04:24 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:04:24 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:04:24 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:04:24 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:04:24 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:04:24 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:04:25 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:04:25 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:04:25 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:04:25 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:04:25 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:04:25 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:04:25 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:04:25 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:04:25 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:04:25 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:04:25 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:04:25 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:04:28 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:04:30 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:04:30 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 64 tokens/rank
+  E2E latency (us) : p50=331.4  min=321.0  max=353.7  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 772536.3 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,64,4,256,8,7168,2048,331.4,321.0,353.7,772536.3
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=128
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=128  gpus=4
+INFO 07-07 13:04:47 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:04:47 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:04:47 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:04:47 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:04:47 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:04:47 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:04:47 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:04:47 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:04:48 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:04:48 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:04:48 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:04:48 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:04:48 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:04:48 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:04:49 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:04:49 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:04:49 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:04:49 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:04:49 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:04:49 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:04:51 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:04:53 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:04:53 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 128 tokens/rank
+  E2E latency (us) : p50=341.4  min=334.0  max=582.9  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 1499671.9 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,128,4,256,8,7168,2048,341.4,334.0,582.9,1499671.9
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=256
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=256  gpus=4
+INFO 07-07 13:05:14 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:05:14 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:05:14 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:05:14 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:05:14 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:05:14 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:05:14 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:05:14 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:05:15 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:05:15 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:05:15 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:05:15 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:05:15 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:05:15 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:05:15 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:05:15 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:05:15 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:05:15 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:05:15 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:05:15 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:05:17 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:05:20 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:05:20 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 256 tokens/rank
+  E2E latency (us) : p50=350.3  min=337.6  max=371.2  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 2923175.2 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,256,4,256,8,7168,2048,350.3,337.6,371.2,2923175.2
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=512
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=512  gpus=4
+INFO 07-07 13:05:40 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:05:40 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:05:40 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:05:40 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:05:40 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:05:40 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:05:40 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:05:40 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:05:41 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:05:41 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:05:41 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:05:41 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:05:41 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:05:41 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:05:41 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:05:41 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:05:41 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:05:41 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:05:41 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:05:41 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:05:44 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:05:46 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:05:46 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 512 tokens/rank
+  E2E latency (us) : p50=404.5  min=394.6  max=431.2  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 5062490.2 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,512,4,256,8,7168,2048,404.5,394.6,431.2,5062490.2
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=1024
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=1024  gpus=4
+INFO 07-07 13:06:06 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:06:06 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:06:06 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:06:06 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:06:06 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:06:06 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:06:06 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:06:06 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:06:07 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:06:07 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:06:07 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:06:07 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:06:07 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:06:07 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:06:07 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:06:07 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:06:07 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:06:07 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:06:07 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:06:07 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:06:10 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:06:12 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:06:12 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 1024 tokens/rank
+  E2E latency (us) : p50=528.6  min=520.0  max=565.3  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 7748418.6 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,1024,4,256,8,7168,2048,528.6,520.0,565.3,7748418.6
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=2048
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=2048  gpus=4
+INFO 07-07 13:06:32 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:06:32 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:06:33 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:06:33 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:06:33 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:06:33 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:06:33 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:06:33 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:06:33 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:06:33 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:06:33 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:06:34 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:06:34 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:06:34 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:06:34 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:06:34 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:06:34 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:06:34 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:06:34 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:06:34 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:06:36 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:06:39 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:06:39 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 2048 tokens/rank
+  E2E latency (us) : p50=879.7  min=865.6  max=904.7  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 9312138.7 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,2048,4,256,8,7168,2048,879.7,865.6,904.7,9312138.7
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=4096
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=4096  gpus=4
+INFO 07-07 13:06:58 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:06:58 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:06:58 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:06:58 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:06:58 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:06:58 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:06:58 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:06:58 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:06:59 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:06:59 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:06:59 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:06:59 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:06:59 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:06:59 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:07:00 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:07:00 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:07:00 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:07:00 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:07:00 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:07:00 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:07:02 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:07:05 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:07:05 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 4096 tokens/rank
+  E2E latency (us) : p50=1554.6  min=1445.4  max=2280.7  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 10538774.3 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,4096,4,256,8,7168,2048,1554.6,1445.4,2280.7,10538774.3
+
+============================================================
+  SWEEP section=vllm_mega  tokens/rank=8192
+============================================================
+
+>>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=8192  gpus=4
+INFO 07-07 13:07:24 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:07:24 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:07:24 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:07:24 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:07:24 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:07:24 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-07 13:07:24 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:07:24 [nixl_utils.py:32] NIXL is available
+INFO 07-07 13:07:25 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:07:25 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:07:25 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:07:25 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:07:25 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:07:25 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:07:25 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:07:25 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:07:25 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:07:25 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-07 13:07:25 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-07 13:07:25 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-07 13:07:28 [pynccl.py:111] vLLM is using nccl==2.28.9
+INFO 07-07 13:07:30 [cuda_communicator.py:168] Using AgRsAll2AllManager all2all manager.
+INFO 07-07 13:07:30 [parallel_state.py:1715] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+
+=== vLLM MoE-EP (mega) result ===
+  mega backend     : vllm_deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (finalized at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8192 tokens/rank
+  E2E latency (us) : p50=3096.5  min=2970.6  max=3194.3  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 10582393.2 tok/s
+BENCH_CSV,vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8192,4,256,8,7168,2048,3096.5,2970.6,3194.3,10582393.2
+
+=== sweep summary (/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260707_130147_vllm_mega.csv) ===
+path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,1,4,256,8,7168,2048,144.4,127.4,164.8,27707.0
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,2,4,256,8,7168,2048,157.3,148.5,175.8,50844.0
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,4,4,256,8,7168,2048,199.7,192.8,229.7,80115.4
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8,4,256,8,7168,2048,253.1,242.9,501.4,126438.2
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,16,4,256,8,7168,2048,298.2,288.5,850.6,214592.3
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,32,4,256,8,7168,2048,325.9,318.0,350.7,392792.3
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,64,4,256,8,7168,2048,331.4,321.0,353.7,772536.3
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,128,4,256,8,7168,2048,341.4,334.0,582.9,1499671.9
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,256,4,256,8,7168,2048,350.3,337.6,371.2,2923175.2
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,512,4,256,8,7168,2048,404.5,394.6,431.2,5062490.2
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,1024,4,256,8,7168,2048,528.6,520.0,565.3,7748418.6
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,2048,4,256,8,7168,2048,879.7,865.6,904.7,9312138.7
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,4096,4,256,8,7168,2048,1554.6,1445.4,2280.7,10538774.3
+vllm_mega,mega,fused_symm_mega,vllm_deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8192,4,256,8,7168,2048,3096.5,2970.6,3194.3,10582393.2

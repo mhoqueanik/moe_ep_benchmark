@@ -1,0 +1,89 @@
+log: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/bench_20260706_143902.log
+csv: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/bench_20260706_143902.csv
+
+>>> RUN experts=deepgemm  algo=ht  tokens/rank=8  gpus=4
+INFO 07-06 14:39:14 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-06 14:39:14 [nixl_utils.py:32] NIXL is available
+INFO 07-06 14:39:14 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-06 14:39:14 [nixl_utils.py:32] NIXL is available
+INFO 07-06 14:39:14 [deep_gemm.py:113] DeepGEMM E8M0 enabled on current platform.
+INFO 07-06 14:39:14 [deep_gemm.py:113] DeepGEMM E8M0 enabled on current platform.
+INFO 07-06 14:39:14 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-06 14:39:14 [nixl_utils.py:32] NIXL is available
+INFO 07-06 14:39:14 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-06 14:39:14 [nixl_utils.py:32] NIXL is available
+INFO 07-06 14:39:14 [deep_gemm.py:113] DeepGEMM E8M0 enabled on current platform.
+INFO 07-06 14:39:14 [deep_gemm.py:113] DeepGEMM E8M0 enabled on current platform.
+INFO 07-06 14:39:18 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-06 14:39:18 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-06 14:39:18 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:18 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:18 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-06 14:39:18 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-06 14:39:18 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-06 14:39:18 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-06 14:39:18 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:18 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:18 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:18 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:18 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-06 14:39:18 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-06 14:39:18 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:18 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+
+=== vLLM MoE-EP (non-mega) result ===
+  dispatch/combine : DeepEP high-throughput all2all (NVSHMEM dispatch/combine)
+  local MoE compute: DeepGEMM contiguous grouped GEMM (fp8 block)
+  activation quant : excluded (input pre-quantized once, reused)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8 tokens/rank
+  E2E latency (us) : p50=1374.5  min=1324.0  max=1454.9  (50 iters, 20 warmup, CUDA-event timed, eager)
+  throughput       : 23280.4 tok/s
+BENCH_CSV,ht,deepep_high_throughput,deepgemm_contiguous,no,8,4,256,8,7168,2048,1374.5,1324.0,1454.9,23280.4
+
+>>> RUN experts=trtllm  algo=ht  tokens/rank=8  gpus=4
+INFO 07-06 14:39:33 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-06 14:39:33 [nixl_utils.py:32] NIXL is available
+INFO 07-06 14:39:33 [deep_gemm.py:113] DeepGEMM E8M0 enabled on current platform.
+INFO 07-06 14:39:33 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-06 14:39:33 [nixl_utils.py:32] NIXL is available
+INFO 07-06 14:39:33 [deep_gemm.py:113] DeepGEMM E8M0 enabled on current platform.
+INFO 07-06 14:39:33 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-06 14:39:33 [nixl_utils.py:32] NIXL is available
+INFO 07-06 14:39:33 [nixl_utils.py:20] Setting UCX_RCACHE_MAX_UNRELEASED to '1024' to avoid a rare memory leak in UCX when using NIXL.
+INFO 07-06 14:39:33 [nixl_utils.py:32] NIXL is available
+INFO 07-06 14:39:33 [deep_gemm.py:113] DeepGEMM E8M0 enabled on current platform.
+INFO 07-06 14:39:33 [deep_gemm.py:113] DeepGEMM E8M0 enabled on current platform.
+INFO 07-06 14:39:38 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-06 14:39:38 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-06 14:39:38 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:38 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:38 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-06 14:39:38 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-06 14:39:38 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:38 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:38 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-06 14:39:38 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-06 14:39:38 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:38 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:38 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 07-06 14:39:38 [vllm.py:840] Asynchronous scheduling is enabled.
+INFO 07-06 14:39:38 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+INFO 07-06 14:39:38 [kernel.py:205] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'])
+2026-07-06 14:39:38,572 - WARNING - core.py:2854 - flashinfer.jit: the single torch.Tensor return type is deprecated and will be replaced with List[torch.Tensor] in the v0.8.0.
+2026-07-06 14:39:38,572 - WARNING - core.py:2854 - flashinfer.jit: the single torch.Tensor return type is deprecated and will be replaced with List[torch.Tensor] in the v0.8.0.
+2026-07-06 14:39:38,572 - WARNING - core.py:2854 - flashinfer.jit: the single torch.Tensor return type is deprecated and will be replaced with List[torch.Tensor] in the v0.8.0.
+2026-07-06 14:39:38,575 - WARNING - core.py:2854 - flashinfer.jit: the single torch.Tensor return type is deprecated and will be replaced with List[torch.Tensor] in the v0.8.0.
+
+=== vLLM MoE-EP (non-mega) result ===
+  dispatch/combine : DeepEP high-throughput all2all (NVSHMEM dispatch/combine)
+  local MoE compute: TRT-LLM-gen fp8 block-scale grouped GEMM
+  activation quant : excluded (input pre-quantized once, reused)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8 tokens/rank
+  E2E latency (us) : p50=1108.8  min=1083.2  max=1524.1  (50 iters, 20 warmup, CUDA-event timed, eager)
+  throughput       : 28860.0 tok/s
+BENCH_CSV,ht,deepep_high_throughput,trtllm_fp8_blockscale,no,8,4,256,8,7168,2048,1108.8,1083.2,1524.1,28860.0
+
+=== summary (/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/bench_20260706_143902.csv) ===
+algo,comm_backend,compute_kernel,quant_timed,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s
+ht,deepep_high_throughput,deepgemm_contiguous,no,8,4,256,8,7168,2048,1374.5,1324.0,1454.9,23280.4
+ht,deepep_high_throughput,trtllm_fp8_blockscale,no,8,4,256,8,7168,2048,1108.8,1083.2,1524.1,28860.0
