@@ -134,6 +134,26 @@ def _mega_knobs():
     return {k: tuple(v) if isinstance(v, list) else v for k, v in knobs.items()}
 
 
+def _mega_ikr() -> bool:
+    """MEGA_IKR=1 -> in_kernel_fc2_reduce (in-flight REDG top-k combine)."""
+    return bool(int(os.environ.get("MEGA_IKR", "0")))
+
+
+def _mega_combine_dtype() -> str:
+    """MEGA_COMBINE_DTYPE=bf16|mxfp8|nvfp4 -> cross-rank combine wire format."""
+    return os.environ.get("MEGA_COMBINE_DTYPE", "bf16")
+
+
+def _mega_variant_suffix() -> str:
+    """CSV compute_kernel suffix for the MEGA_IKR / MEGA_COMBINE_DTYPE variant."""
+    parts = []
+    if _mega_ikr():
+        parts.append("ikr")
+    if _mega_combine_dtype() != "bf16":
+        parts.append(f"combine_{_mega_combine_dtype()}")
+    return ("+" + "+".join(parts)) if parts else ""
+
+
 def _build_megakernel_config(cfg: Cfg):
     if cfg.mega_backend == "deep_gemm_mega":
         from flashinfer.moe_ep import DeepGemmMegaMoeConfig
@@ -153,6 +173,7 @@ def _build_megakernel_config(cfg: Cfg):
             kind=cfg.mxfp8_kind,
             gate_up_clamp=cfg.gate_up_clamp,
             fast_math=cfg.fast_math,
+            in_kernel_fc2_reduce=_mega_ikr(),
             knobs=_mega_knobs(),
         )
     if cfg.mega_backend == "nvfp4_cutedsl":
@@ -163,6 +184,8 @@ def _build_megakernel_config(cfg: Cfg):
             top_k=cfg.top_k,
             gate_up_clamp=cfg.gate_up_clamp,
             fast_math=cfg.fast_math,
+            in_kernel_fc2_reduce=_mega_ikr(),
+            combine_dtype=_mega_combine_dtype(),
             knobs=_mega_knobs(),
         )
     raise ValueError(f"unknown mega backend: {cfg.mega_backend}")
@@ -477,7 +500,11 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
             tok_s = tokens_total / (us * 1e-6) if us > 0 else float("nan")
 
             comm_backend = "fused_symm_mega"
-            compute_kernel = cfg.mega_backend
+            compute_kernel = cfg.mega_backend + (
+                _mega_variant_suffix()
+                if cfg.mega_backend in ("nvfp4_cutedsl", "mxfp8_cutedsl")
+                else ""
+            )
 
             if cfg.mega_backend == "deep_gemm_mega":
                 weight_dtype = "fp4_int8_block32"

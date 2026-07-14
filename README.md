@@ -129,6 +129,8 @@ VLLM_MEGA=0 SEQ_LENS="1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192" ./moe_ep
 | `MEGA_LIST` | `deep_gemm_mega mxfp8_cutedsl nvfp4_cutedsl` | FI mega backends |
 | `MEGA_KNOBS` | *(unset)* | Cutedsl kernel knobs: `auto` = online autotune at first forward; a JSON dict (e.g. `'{"flag_batch": 4}'`) = explicit override; unset = shim heuristic |
 | `MEGA_TIMING` | `e2e` | Timed region: `e2e` = full FI forward from a barrier-cold start (arg prep + kernel + output copy); `e2e_pipelined` = same full forward but iters back-to-back enqueued (steady-state serving shape); `kernel` = tester-parity bare kernel launch (cutedsl backends; matches `cutedsl_megamoe tester perf_run`) |
+| `MEGA_IKR` | `0` | `1` = `in_kernel_fc2_reduce` (in-flight REDG top-k combine) on the cutedsl backends; CSV `compute_kernel` gains a `+ikr` suffix. In `kernel` mode the thunk includes the required per-launch `output.zero_()` |
+| `MEGA_COMBINE_DTYPE` | `bf16` | Cross-rank combine wire format for `nvfp4_cutedsl`: `mxfp8` (`32e4m3xe8m0`, 2x less combine traffic) or `nvfp4` (`16e2m1xbf16`, 4x less); CSV suffix `+combine_<fmt>`. Mutually exclusive with `MEGA_IKR=1` |
 | `VLLM_MEGA` | `1` | Include `vllm_mega` when `SECTION=all` |
 | `EXCLUDE_QUANT` | `1` | Exclude input quant from split-path timing |
 | `PYTHON` | `python` | Interpreter for vLLM scripts |
