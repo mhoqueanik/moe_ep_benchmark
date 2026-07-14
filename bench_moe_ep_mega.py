@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import dataclasses
+import json
 import os
 import socket
 import traceback
@@ -115,6 +116,24 @@ def parallel_launch(cfg: Cfg):
 # --------------------------------------------------------------------------
 # Backend helpers
 # --------------------------------------------------------------------------
+def _mega_knobs():
+    """Cutedsl kernel tuning knobs from MEGA_KNOBS (cutedsl backends only).
+
+    Unset/empty -> None (the shim's token-count heuristic); "auto" -> online
+    autotune at the first forward (collective sweep, winner kept for the
+    session); otherwise a JSON dict, e.g.
+    '{"mma_tiler_mnk": [256, 128, 256], "flag_batch": 4}' (lists become the
+    tuples the tuner expects).
+    """
+    raw = os.environ.get("MEGA_KNOBS", "").strip()
+    if not raw:
+        return None
+    if raw == "auto":
+        return "auto"
+    knobs = json.loads(raw)
+    return {k: tuple(v) if isinstance(v, list) else v for k, v in knobs.items()}
+
+
 def _build_megakernel_config(cfg: Cfg):
     if cfg.mega_backend == "deep_gemm_mega":
         from flashinfer.moe_ep import DeepGemmMegaMoeConfig
@@ -134,6 +153,7 @@ def _build_megakernel_config(cfg: Cfg):
             kind=cfg.mxfp8_kind,
             gate_up_clamp=cfg.gate_up_clamp,
             fast_math=cfg.fast_math,
+            knobs=_mega_knobs(),
         )
     if cfg.mega_backend == "nvfp4_cutedsl":
         from flashinfer.moe_ep import Nvfp4CutedslMegaMoeConfig
@@ -143,6 +163,7 @@ def _build_megakernel_config(cfg: Cfg):
             top_k=cfg.top_k,
             gate_up_clamp=cfg.gate_up_clamp,
             fast_math=cfg.fast_math,
+            knobs=_mega_knobs(),
         )
     raise ValueError(f"unknown mega backend: {cfg.mega_backend}")
 
@@ -190,7 +211,7 @@ def _prestage_inputs(cfg, rank, world, device, problem):
         )
 
     if cfg.mega_backend == "mxfp8_cutedsl":
-        from flashinfer.moe_ep.backends.mega.kernel.cutedsl_backend_kernels.frontend import (
+        from flashinfer.moe_ep.kernel_src.cutedsl_megamoe import (
             get_symm_buffer_for_mxfp8_mega_moe,
         )
         from flashinfer.moe_ep.backends.mega.kernel.mxfp8_cutedsl.staging import (
@@ -229,7 +250,7 @@ def _prestage_inputs(cfg, rank, world, device, problem):
         )
 
     if cfg.mega_backend == "nvfp4_cutedsl":
-        from flashinfer.moe_ep.backends.mega.kernel.cutedsl_backend_kernels.frontend import (
+        from flashinfer.moe_ep.kernel_src.cutedsl_megamoe import (
             get_symm_buffer_for_mega_moe,
             make_dummy_epilogue_params,
         )
@@ -346,8 +367,8 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
                 num_experts=cfg.num_experts,
                 max_tokens_per_rank=max_m,
                 token_hidden_size=cfg.hidden,
-                weights=weights,
             ),
+            weights=weights,
             backend=MegaConfig(
                 megakernel=megakernel_cfg,
                 quantize_input=False,
@@ -368,22 +389,77 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
             mega._kernel.compute(workspace, transformed, output=y)
             return y
 
-        for _ in range(cfg.warmup):
+        # MEGA_TIMING selects the timed region:
+        #   e2e (default) - the full FI forward path (arg prep, workspace
+        #     reset, kernel, sync, output copy), each iter launched from a
+        #     global barrier + idle GPU (cold-start latency).
+        #   kernel - tester parity (cutedsl_megamoe tester/solver.py
+        #     perf_run): a prebuilt bare kernel launch, iters enqueued
+        #     back-to-back with no host sync between, per-iter events, 300MB
+        #     L2 flush outside the event window (steady-state kernel time).
+        #     cutedsl backends only; deep_gemm_mega falls back to the same
+        #     loop around compute() (no thunk API), so its "kernel" time
+        #     still includes the FI wrapper overhead.
+        timing_mode = os.environ.get("MEGA_TIMING", "e2e")
+        if timing_mode not in ("e2e", "kernel"):
+            raise ValueError(f"MEGA_TIMING must be e2e|kernel, got {timing_mode!r}")
+
+        thunk = None
+        if timing_mode == "kernel":
+            # One full forward first so MEGA_KNOBS=auto (autotune at first
+            # compute()) fires before the thunk snapshots the winning compile.
             run()
+            if cfg.mega_backend == "nvfp4_cutedsl":
+                from flashinfer.moe_ep.kernel_src.cutedsl_megamoe import (
+                    nvfp4_mega_launch_thunk,
+                )
+
+                thunk = nvfp4_mega_launch_thunk(
+                    transformed[0], transformed[1], workspace
+                )
+            elif cfg.mega_backend == "mxfp8_cutedsl":
+                from flashinfer.moe_ep.kernel_src.cutedsl_megamoe import (
+                    mxfp8_mega_launch_thunk,
+                )
+
+                thunk = mxfp8_mega_launch_thunk(
+                    transformed[0], transformed[1], workspace
+                )
+        timed = thunk if thunk is not None else run
+
+        for _ in range(cfg.warmup):
+            timed()
         torch.cuda.synchronize()
         dist.barrier()
 
-        ev0 = torch.cuda.Event(enable_timing=True)
-        ev1 = torch.cuda.Event(enable_timing=True)
         samples: list[float] = []
-        for _ in range(cfg.iters):
-            dist.barrier()
+        if timing_mode == "kernel":
+            events = [
+                (
+                    torch.cuda.Event(enable_timing=True),
+                    torch.cuda.Event(enable_timing=True),
+                )
+                for _ in range(cfg.iters)
+            ]
+            for ev0, ev1 in events:
+                # L2 flush outside the event window (matches tester perf_run).
+                _ = torch.randn(300 * 1024 * 1024 // 4, dtype=torch.float32, device=device)
+                ev0.record()
+                timed()
+                ev1.record()
             torch.cuda.synchronize()
-            ev0.record()
-            run()
-            ev1.record()
-            torch.cuda.synchronize()
-            samples.append(ev0.elapsed_time(ev1) * 1e3)  # ms -> us
+            samples = [ev0.elapsed_time(ev1) * 1e3 for ev0, ev1 in events]
+        else:
+            ev0 = torch.cuda.Event(enable_timing=True)
+            ev1 = torch.cuda.Event(enable_timing=True)
+            for _ in range(cfg.iters):
+                dist.barrier()
+                torch.cuda.synchronize()
+                ev0.record()
+                timed()
+                ev1.record()
+                torch.cuda.synchronize()
+                samples.append(ev0.elapsed_time(ev1) * 1e3)  # ms -> us
 
         us = median(samples)
         us_min, us_max = min(samples), max(samples)
@@ -427,6 +503,8 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
                 f"  geometry         : {world} GPUs (DP={world}, EP={world}, TP=1), "
                 f"{cfg.num_experts} experts, top-{cfg.top_k}, hidden={cfg.hidden}, "
                 f"inter={cfg.intermediate}, {cfg.tokens_per_rank} tokens/rank\n"
+                f"  timing mode      : {timing_mode} "
+                f"({'tester-parity bare kernel launch' if timing_mode == 'kernel' else 'full FI forward, barrier-cold'})\n"
                 f"  E2E latency (us) : p50={us:.1f}  min={us_min:.1f}  max={us_max:.1f}  "
                 f"({cfg.iters} iters, {cfg.warmup} warmup, CUDA-event timed)\n"
                 f"  throughput       : {tok_s:.1f} tok/s\n"
@@ -501,7 +579,7 @@ def main():
 
     if cfg.mega_backend in ("mxfp8_cutedsl", "nvfp4_cutedsl"):
         importlib.import_module(
-            "flashinfer.moe_ep.backends.mega.kernel.cutedsl_backend_kernels"
+            "flashinfer.moe_ep.kernel_src.cutedsl_megamoe"
         )
     if cfg.mega_backend == "deep_gemm_mega":
         import deep_gemm  # noqa: F401

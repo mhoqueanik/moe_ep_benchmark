@@ -127,6 +127,8 @@ VLLM_MEGA=0 SEQ_LENS="1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192" ./moe_ep
 | `ITERS` | `50` | Timed iterations |
 | `EXPERTS_LIST` | `deepgemm trtllm` | Split-path expert backends |
 | `MEGA_LIST` | `deep_gemm_mega mxfp8_cutedsl nvfp4_cutedsl` | FI mega backends |
+| `MEGA_KNOBS` | *(unset)* | Cutedsl kernel knobs: `auto` = online autotune at first forward; a JSON dict (e.g. `'{"flag_batch": 4}'`) = explicit override; unset = shim heuristic |
+| `MEGA_TIMING` | `e2e` | Timed region: `e2e` = full FI forward from a barrier-cold start (arg prep + reset + kernel + sync + output copy); `kernel` = tester-parity bare kernel launch, back-to-back enqueued (cutedsl backends; matches `cutedsl_megamoe tester perf_run`) |
 | `VLLM_MEGA` | `1` | Include `vllm_mega` when `SECTION=all` |
 | `EXCLUDE_QUANT` | `1` | Exclude input quant from split-path timing |
 | `PYTHON` | `python` | Interpreter for vLLM scripts |
