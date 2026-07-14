@@ -393,6 +393,11 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
         #   e2e (default) - the full FI forward path (arg prep, workspace
         #     reset, kernel, sync, output copy), each iter launched from a
         #     global barrier + idle GPU (cold-start latency).
+        #   e2e_pipelined - the SAME full FI forward path, but iters enqueued
+        #     back-to-back with no per-iter barrier/sync (steady-state, like a
+        #     serving pipeline).  e2e minus e2e_pipelined isolates the
+        #     barrier-cold collective start skew; e2e_pipelined minus kernel
+        #     isolates the per-call host/copy cost.
         #   kernel - tester parity (cutedsl_megamoe tester/solver.py
         #     perf_run): a prebuilt bare kernel launch, iters enqueued
         #     back-to-back with no host sync between, per-iter events, 300MB
@@ -401,8 +406,10 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
         #     loop around compute() (no thunk API), so its "kernel" time
         #     still includes the FI wrapper overhead.
         timing_mode = os.environ.get("MEGA_TIMING", "e2e")
-        if timing_mode not in ("e2e", "kernel"):
-            raise ValueError(f"MEGA_TIMING must be e2e|kernel, got {timing_mode!r}")
+        if timing_mode not in ("e2e", "e2e_pipelined", "kernel"):
+            raise ValueError(
+                f"MEGA_TIMING must be e2e|e2e_pipelined|kernel, got {timing_mode!r}"
+            )
 
         thunk = None
         if timing_mode == "kernel":
@@ -433,7 +440,7 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
         dist.barrier()
 
         samples: list[float] = []
-        if timing_mode == "kernel":
+        if timing_mode in ("kernel", "e2e_pipelined"):
             events = [
                 (
                     torch.cuda.Event(enable_timing=True),
@@ -504,7 +511,13 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
                 f"{cfg.num_experts} experts, top-{cfg.top_k}, hidden={cfg.hidden}, "
                 f"inter={cfg.intermediate}, {cfg.tokens_per_rank} tokens/rank\n"
                 f"  timing mode      : {timing_mode} "
-                f"({'tester-parity bare kernel launch' if timing_mode == 'kernel' else 'full FI forward, barrier-cold'})\n"
+                + "("
+                + {
+                    "kernel": "tester-parity bare kernel launch",
+                    "e2e_pipelined": "full FI forward, back-to-back enqueued",
+                    "e2e": "full FI forward, barrier-cold",
+                }[timing_mode]
+                + ")\n"
                 f"  E2E latency (us) : p50={us:.1f}  min={us_min:.1f}  max={us_max:.1f}  "
                 f"({cfg.iters} iters, {cfg.warmup} warmup, CUDA-event timed)\n"
                 f"  throughput       : {tok_s:.1f} tok/s\n"
