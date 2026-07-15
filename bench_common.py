@@ -72,6 +72,37 @@ def make_problem(
         scores, top_k, dim=-1, largest=True, sorted=False
     )
 
+    w13_bf16, w2_bf16 = make_expert_weights(
+        rank,
+        num_local_experts=num_local_experts,
+        hidden=hidden,
+        intermediate=intermediate,
+        device=device,
+    )
+
+    return BenchProblem(
+        hidden_states=hidden_states,
+        topk_weights=topk_weights,
+        topk_ids=topk_ids.to(torch.int64),
+        w13_bf16=w13_bf16,
+        w2_bf16=w2_bf16,
+    )
+
+
+def make_expert_weights(
+    rank: int,
+    *,
+    num_local_experts: int,
+    hidden: int,
+    intermediate: int,
+    device: torch.device | int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Deterministic per-rank bf16 expert weights (same stream as make_problem).
+
+    Any rank can regenerate any other rank's expert weights from the seed, so
+    the accuracy reference can cover ALL experts locally without gathering the
+    multi-GB weight set over NCCL.
+    """
     weight_g = torch.Generator(device=device).manual_seed(WEIGHT_SEED_BASE + rank)
     w13_bf16 = (
         torch.randn(
@@ -95,14 +126,67 @@ def make_problem(
         )
         / WEIGHT_SCALE
     )
+    return w13_bf16, w2_bf16
 
-    return BenchProblem(
-        hidden_states=hidden_states,
-        topk_weights=topk_weights,
-        topk_ids=topk_ids.to(torch.int64),
-        w13_bf16=w13_bf16,
-        w2_bf16=w2_bf16,
-    )
+
+def compute_dense_moe_reference(
+    problem: BenchProblem,
+    *,
+    world_size: int,
+    num_local_experts: int,
+    hidden: int,
+    intermediate: int,
+    device: torch.device | int,
+    gate_up_clamp: float | None = None,
+) -> torch.Tensor:
+    """fp32 dense-MoE ground truth for this rank's tokens (all experts).
+
+    Mega-backend convention: canonical ``w13 = [gate; up]``, activation
+    ``silu(clamp(gate, max=c)) * clamp(up, -c, c)``, output
+    ``Σ_k topk_weight · fc2(fc12(x))`` — the topk-weight application point
+    (in-fc1 vs post-fc2) is equivalent in exact arithmetic, so one reference
+    serves deep_gemm and both cutedsl dtypes.  The measured gap to this
+    reference is the full quantization + kernel-arithmetic accuracy loss
+    (weight quant, activation quant, fc1-out requant, combine wire).
+    """
+    x = problem.hidden_states.float()
+    topk_ids = problem.topk_ids
+    topk_w = problem.topk_weights.float()
+    out = torch.zeros(x.shape[0], hidden, dtype=torch.float32, device=x.device)
+
+    for src_rank in range(world_size):
+        w13, w2 = make_expert_weights(
+            src_rank,
+            num_local_experts=num_local_experts,
+            hidden=hidden,
+            intermediate=intermediate,
+            device=device,
+        )
+        for local_e in range(num_local_experts):
+            global_e = src_rank * num_local_experts + local_e
+            routing_mask = topk_ids == global_e
+            if not routing_mask.any():
+                continue
+            routed = routing_mask.nonzero(as_tuple=False)
+            tokens, slots = routed[:, 0], routed[:, 1]
+
+            g1 = x[tokens] @ w13[local_e].float().transpose(0, 1)  # (R, 2I)
+            gate = g1[:, :intermediate]
+            up = g1[:, intermediate:]
+            if gate_up_clamp is not None:
+                limit = abs(float(gate_up_clamp))
+                gate = gate.clamp(max=limit)
+                up = up.clamp(min=-limit, max=limit)
+            act = torch.nn.functional.silu(gate) * up
+            g2 = act @ w2[local_e].float().transpose(0, 1)  # (R, hidden)
+            out.index_put_(
+                (tokens,),
+                g2 * topk_w[tokens, slots].unsqueeze(-1),
+                accumulate=True,
+            )
+        del w13, w2
+
+    return out
 
 
 def make_split_fp8_weights(

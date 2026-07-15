@@ -31,7 +31,12 @@ from statistics import median
 import torch
 import torch.distributed as dist
 
-from bench_common import make_mega_fp4_weights, make_problem, next_pow2
+from bench_common import (
+    compute_dense_moe_reference,
+    make_mega_fp4_weights,
+    make_problem,
+    next_pow2,
+)
 
 
 @dataclasses.dataclass
@@ -275,20 +280,16 @@ def _prestage_inputs(cfg, rank, world, device, problem):
     if cfg.mega_backend == "nvfp4_cutedsl":
         from flashinfer.moe_ep.kernel_src.cutedsl_megamoe import (
             get_symm_buffer_for_mega_moe,
-            make_dummy_epilogue_params,
         )
         from flashinfer.moe_ep.backends.mega.kernel.nvfp4_cutedsl.staging import (
             stage_mega_moe_inputs,
         )
 
-        num_local = cfg.num_experts // world
-        # make_dummy_epilogue_params now requires a seeded generator; use a
-        # deterministic per-rank seed so the epilogue scalars are reproducible
-        # (mirrors bench_common's per-rank seeding).
-        epilogue_g = torch.Generator(device=device).manual_seed(23 + rank)
-        fc1_alpha, fc2_alpha, fc1_norm_const = make_dummy_epilogue_params(
-            num_local, generator=epilogue_g
-        )
+        # Identity epilogue scalars (fc1_alpha = fc2_alpha = fc1_norm_const = 1,
+        # the symm-buffer defaults): the kernel loads them either way (zero perf
+        # difference vs the old random make_dummy_epilogue_params), and identity
+        # keeps the output on real model math so the accuracy-loss pass can
+        # compare it against the bf16 dense reference.
         buf = get_symm_buffer_for_mega_moe(
             cfg.num_experts,
             max_m,
@@ -316,9 +317,6 @@ def _prestage_inputs(cfg, rank, world, device, problem):
             scales=t_scales,
             topk_ids=topk_ids,
             topk_weights=topk_w,
-            fc1_alpha=fc1_alpha,
-            fc2_alpha=fc2_alpha,
-            fc1_norm_const=fc1_norm_const,
         )
 
     raise ValueError(cfg.mega_backend)
@@ -495,6 +493,34 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
         us_min, us_max = min(samples), max(samples)
         dist.barrier()
 
+        # Accuracy-loss pass (MEGA_ACC=0 disables): one un-timed full forward
+        # compared against the fp32 dense-MoE ground truth over ALL experts
+        # (each rank regenerates peer weights from their deterministic seeds).
+        # Reported separately from the latency/speedup numbers as a global
+        # rel-L2 percentage — it captures the full low-precision cost of the
+        # path (weight quant + activation quant + fc1-out requant + combine
+        # wire) relative to bf16 model math.
+        acc_loss_pct = float("nan")
+        if bool(int(os.environ.get("MEGA_ACC", "1"))):
+            run()
+            torch.cuda.synchronize()
+            y_val = y.float()
+            y_ref = compute_dense_moe_reference(
+                problem,
+                world_size=world,
+                num_local_experts=num_local,
+                hidden=cfg.hidden,
+                intermediate=cfg.intermediate,
+                device=device,
+                gate_up_clamp=cfg.gate_up_clamp,
+            )
+            sums = torch.stack(
+                [(y_val - y_ref).square().sum(), y_ref.square().sum()]
+            )
+            dist.all_reduce(sums)
+            acc_loss_pct = 100.0 * (sums[0] / sums[1].clamp_min(1e-30)).sqrt().item()
+            dist.barrier()
+
         if rank == 0:
             tokens_total = m * world
             tok_s = tokens_total / (us * 1e-6) if us > 0 else float("nan")
@@ -519,14 +545,16 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
             header = (
                 "path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,"
                 "input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,"
-                "top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s"
+                "top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s,"
+                "acc_loss_pct"
             )
             row = (
                 f"mega,mega,{comm_backend},{compute_kernel},no,"
                 f"{weight_dtype},bfloat16,{act_compute_dtype},"
                 f"{cfg.tokens_per_rank},{world},{cfg.num_experts},{cfg.top_k},"
                 f"{cfg.hidden},{cfg.intermediate},"
-                f"{us:.1f},{us_min:.1f},{us_max:.1f},{tok_s:.1f}"
+                f"{us:.1f},{us_min:.1f},{us_max:.1f},{tok_s:.1f},"
+                f"{acc_loss_pct:.3f}"
             )
 
             print(
@@ -548,6 +576,8 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
                 f"  E2E latency (us) : p50={us:.1f}  min={us_min:.1f}  max={us_max:.1f}  "
                 f"({cfg.iters} iters, {cfg.warmup} warmup, CUDA-event timed)\n"
                 f"  throughput       : {tok_s:.1f} tok/s\n"
+                f"  accuracy loss    : {acc_loss_pct:.3f}% rel-L2 vs bf16 dense "
+                f"reference (all-rank; MEGA_ACC=0 to skip)\n"
                 f"BENCH_CSV,{row}",
                 flush=True,
             )

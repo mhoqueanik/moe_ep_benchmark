@@ -1,0 +1,101 @@
+################################################################
+  SWEEP SECTION fi_mega
+################################################################
+sweep log: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260714_163020_fi_mega.log
+sweep csv: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260714_163020_fi_mega.csv
+sweep points (tokens/rank): 8 64 512 2048 8192
+algo=ht  gpus=4  exclude_quant=1
+
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=8
+============================================================
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=8  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl+combine_mxfp8
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8 tokens/rank
+  timing mode      : kernel (tester-parity bare kernel launch)
+  E2E latency (us) : p50=142.3  min=139.3  max=153.6  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 224820.2 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_mxfp8,no,nvfp4_block16,bfloat16,nvfp4_block16,8,4,256,8,7168,2048,142.3,139.3,153.6,224820.2
+NVSHMEM v3.6.5
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=64
+============================================================
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=64  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl+combine_mxfp8
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 64 tokens/rank
+  timing mode      : kernel (tester-parity bare kernel launch)
+  E2E latency (us) : p50=185.3  min=181.0  max=193.5  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 1381215.5 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_mxfp8,no,nvfp4_block16,bfloat16,nvfp4_block16,64,4,256,8,7168,2048,185.3,181.0,193.5,1381215.5
+NVSHMEM v3.6.5
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=512
+============================================================
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=512  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl+combine_mxfp8
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 512 tokens/rank
+  timing mode      : kernel (tester-parity bare kernel launch)
+  E2E latency (us) : p50=214.8  min=208.8  max=220.2  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 9535871.3 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_mxfp8,no,nvfp4_block16,bfloat16,nvfp4_block16,512,4,256,8,7168,2048,214.8,208.8,220.2,9535871.3
+NVSHMEM v3.6.5
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=2048
+============================================================
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=2048  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl+combine_mxfp8
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 2048 tokens/rank
+  timing mode      : kernel (tester-parity bare kernel launch)
+  E2E latency (us) : p50=472.2  min=464.9  max=479.2  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 17350051.0 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_mxfp8,no,nvfp4_block16,bfloat16,nvfp4_block16,2048,4,256,8,7168,2048,472.2,464.9,479.2,17350051.0
+NVSHMEM v3.6.5
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=8192
+============================================================
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=8192  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl+combine_mxfp8
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8192 tokens/rank
+  timing mode      : kernel (tester-parity bare kernel launch)
+  E2E latency (us) : p50=1545.2  min=1461.2  max=1588.0  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 21205877.2 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_mxfp8,no,nvfp4_block16,bfloat16,nvfp4_block16,8192,4,256,8,7168,2048,1545.2,1461.2,1588.0,21205877.2
+NVSHMEM v3.6.5
+
+=== sweep summary (/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260714_163020_fi_mega.csv) ===
+path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s
+mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_mxfp8,no,nvfp4_block16,bfloat16,nvfp4_block16,8,4,256,8,7168,2048,142.3,139.3,153.6,224820.2
+mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_mxfp8,no,nvfp4_block16,bfloat16,nvfp4_block16,64,4,256,8,7168,2048,185.3,181.0,193.5,1381215.5
+mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_mxfp8,no,nvfp4_block16,bfloat16,nvfp4_block16,512,4,256,8,7168,2048,214.8,208.8,220.2,9535871.3
+mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_mxfp8,no,nvfp4_block16,bfloat16,nvfp4_block16,2048,4,256,8,7168,2048,472.2,464.9,479.2,17350051.0
+mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_mxfp8,no,nvfp4_block16,bfloat16,nvfp4_block16,8192,4,256,8,7168,2048,1545.2,1461.2,1588.0,21205877.2

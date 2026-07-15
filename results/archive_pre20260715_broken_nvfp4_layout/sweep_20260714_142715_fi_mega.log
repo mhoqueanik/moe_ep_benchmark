@@ -1,0 +1,73 @@
+################################################################
+  SWEEP SECTION fi_mega
+################################################################
+sweep log: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260714_142715_fi_mega.log
+sweep csv: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260714_142715_fi_mega.csv
+sweep points (tokens/rank): 512 1024
+algo=ht  gpus=4  exclude_quant=1
+
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=512
+============================================================
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=512  gpus=4
+[cutedsl-autotune] nvfp4_mega: winner {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 128, 256), 'flag_batch': 4, 'token_back_mode': 'reuse_dispatch_warps'} (306.3 us median, max across ranks) out of 12 candidates:
+         306.3 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 128, 256), 'flag_batch': 4, 'token_back_mode': 'reuse_dispatch_warps'}
+         310.5 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 128, 256), 'flag_batch': 4, 'token_back_mode': 'standalone_warps'}
+         315.0 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 128, 256), 'flag_batch': 8, 'token_back_mode': 'reuse_dispatch_warps'}
+         319.5 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 128, 256), 'flag_batch': 8, 'token_back_mode': 'standalone_warps'}
+         340.1 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 256, 256), 'flag_batch': 4, 'token_back_mode': 'standalone_warps'}
+         341.4 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 256, 256), 'flag_batch': 4, 'token_back_mode': 'reuse_dispatch_warps'}
+         351.9 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 256, 256), 'flag_batch': 8, 'token_back_mode': 'standalone_warps'}
+         353.5 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 256, 256), 'flag_batch': 8, 'token_back_mode': 'reuse_dispatch_warps'}
+         361.4 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 128, 256), 'flag_batch': 4, 'token_back_mode': 'epi_warps'}
+         370.0 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 128, 256), 'flag_batch': 8, 'token_back_mode': 'epi_warps'}
+         390.6 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 256, 256), 'flag_batch': 4, 'token_back_mode': 'epi_warps'}
+         402.0 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 256, 256), 'flag_batch': 8, 'token_back_mode': 'epi_warps'}
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 512 tokens/rank
+  timing mode      : e2e_pipelined (full FI forward, back-to-back enqueued)
+  E2E latency (us) : p50=230.4  min=226.0  max=239.6  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 8889506.2 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,512,4,256,8,7168,2048,230.4,226.0,239.6,8889506.2
+NVSHMEM v3.6.5
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=1024
+============================================================
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=1024  gpus=4
+[cutedsl-autotune] nvfp4_mega: winner {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 256, 256), 'flag_batch': 4, 'token_back_mode': 'standalone_warps'} (405.3 us median, max across ranks) out of 12 candidates:
+         405.3 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 256, 256), 'flag_batch': 4, 'token_back_mode': 'standalone_warps'}
+         412.0 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 256, 256), 'flag_batch': 4, 'token_back_mode': 'reuse_dispatch_warps'}
+         412.1 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 128, 256), 'flag_batch': 4, 'token_back_mode': 'standalone_warps'}
+         418.4 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 256, 256), 'flag_batch': 8, 'token_back_mode': 'standalone_warps'}
+         422.6 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 128, 256), 'flag_batch': 4, 'token_back_mode': 'reuse_dispatch_warps'}
+         423.6 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 256, 256), 'flag_batch': 8, 'token_back_mode': 'reuse_dispatch_warps'}
+         425.5 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 128, 256), 'flag_batch': 8, 'token_back_mode': 'standalone_warps'}
+         431.5 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 128, 256), 'flag_batch': 8, 'token_back_mode': 'reuse_dispatch_warps'}
+         550.4 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 128, 256), 'flag_batch': 4, 'token_back_mode': 'epi_warps'}
+         559.8 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 256, 256), 'flag_batch': 4, 'token_back_mode': 'epi_warps'}
+         560.2 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 128, 256), 'flag_batch': 8, 'token_back_mode': 'epi_warps'}
+         574.6 us  {'cluster_shape_mnk': (2, 1, 1), 'group_hint': 512, 'epi_flag_batch': (2, 4), 'load_balance_mode': 'atomic_counter', 'mma_tiler_mnk': (256, 256, 256), 'flag_batch': 8, 'token_back_mode': 'epi_warps'}
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 1024 tokens/rank
+  timing mode      : e2e_pipelined (full FI forward, back-to-back enqueued)
+  E2E latency (us) : p50=330.5  min=326.6  max=336.8  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 12394093.1 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,1024,4,256,8,7168,2048,330.5,326.6,336.8,12394093.1
+NVSHMEM v3.6.5
+
+=== sweep summary (/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260714_142715_fi_mega.csv) ===
+path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,512,4,256,8,7168,2048,230.4,226.0,239.6,8889506.2
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,1024,4,256,8,7168,2048,330.5,326.6,336.8,12394093.1

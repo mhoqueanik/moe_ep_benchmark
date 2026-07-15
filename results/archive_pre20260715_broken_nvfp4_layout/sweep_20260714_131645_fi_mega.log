@@ -1,0 +1,73 @@
+################################################################
+  SWEEP SECTION fi_mega
+################################################################
+sweep log: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260714_131645_fi_mega.log
+sweep csv: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260714_131645_fi_mega.csv
+sweep points (tokens/rank): 8 2048
+algo=ht  gpus=4  exclude_quant=1
+
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=8
+============================================================
+
+>>> RUN path=mega  backend=deep_gemm_mega  tokens/rank=8  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 384 experts, top-6, hidden=7168, inter=3072, 8 tokens/rank
+  timing mode      : e2e (full FI forward, barrier-cold)
+  E2E latency (us) : p50=315.6  min=311.1  max=338.8  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 101404.5 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8,4,384,6,7168,3072,315.6,311.1,338.8,101404.5
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=8  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 384 experts, top-6, hidden=7168, inter=3072, 8 tokens/rank
+  timing mode      : e2e (full FI forward, barrier-cold)
+  E2E latency (us) : p50=343.7  min=335.2  max=497.4  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 93096.9 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,8,4,384,6,7168,3072,343.7,335.2,497.4,93096.9
+NVSHMEM v3.6.5
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=2048
+============================================================
+
+>>> RUN path=mega  backend=deep_gemm_mega  tokens/rank=2048  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 384 experts, top-6, hidden=7168, inter=3072, 2048 tokens/rank
+  timing mode      : e2e (full FI forward, barrier-cold)
+  E2E latency (us) : p50=944.0  min=923.0  max=985.3  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 8678407.4 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,2048,4,384,6,7168,3072,944.0,923.0,985.3,8678407.4
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=2048  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 384 experts, top-6, hidden=7168, inter=3072, 2048 tokens/rank
+  timing mode      : e2e (full FI forward, barrier-cold)
+  E2E latency (us) : p50=960.4  min=952.4  max=981.9  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 8529921.3 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,2048,4,384,6,7168,3072,960.4,952.4,981.9,8529921.3
+NVSHMEM v3.6.5
+
+=== sweep summary (/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260714_131645_fi_mega.csv) ===
+path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8,4,384,6,7168,3072,315.6,311.1,338.8,101404.5
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,8,4,384,6,7168,3072,343.7,335.2,497.4,93096.9
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,2048,4,384,6,7168,3072,944.0,923.0,985.3,8678407.4
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,2048,4,384,6,7168,3072,960.4,952.4,981.9,8529921.3

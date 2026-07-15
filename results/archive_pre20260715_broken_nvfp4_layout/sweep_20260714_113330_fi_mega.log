@@ -1,0 +1,241 @@
+################################################################
+  SWEEP SECTION fi_mega
+################################################################
+sweep log: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260714_113330_fi_mega.log
+sweep csv: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260714_113330_fi_mega.csv
+sweep points (tokens/rank): 8 64 512 2048 8192
+algo=ht  gpus=4  exclude_quant=1
+
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=8
+============================================================
+
+>>> RUN path=mega  backend=deep_gemm_mega  tokens/rank=8  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8 tokens/rank
+  E2E latency (us) : p50=237.7  min=233.2  max=252.4  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 134634.8 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8,4,256,8,7168,2048,237.7,233.2,252.4,134634.8
+
+>>> RUN path=mega  backend=mxfp8_cutedsl  tokens/rank=8  gpus=4
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : mxfp8_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8 tokens/rank
+  E2E latency (us) : p50=690.9  min=676.4  max=840.7  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 46317.7 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,8,4,256,8,7168,2048,690.9,676.4,840.7,46317.7
+NVSHMEM v3.6.5
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=8  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8 tokens/rank
+  E2E latency (us) : p50=465.1  min=453.6  max=1325.8  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 68808.9 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,8,4,256,8,7168,2048,465.1,453.6,1325.8,68808.9
+NVSHMEM v3.6.5
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=64
+============================================================
+
+>>> RUN path=mega  backend=deep_gemm_mega  tokens/rank=64  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 64 tokens/rank
+  E2E latency (us) : p50=315.8  min=311.2  max=328.2  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 810742.3 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,64,4,256,8,7168,2048,315.8,311.2,328.2,810742.3
+
+>>> RUN path=mega  backend=mxfp8_cutedsl  tokens/rank=64  gpus=4
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : mxfp8_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 64 tokens/rank
+  E2E latency (us) : p50=848.2  min=830.5  max=986.7  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 301812.8 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,64,4,256,8,7168,2048,848.2,830.5,986.7,301812.8
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+NVSHMEM v3.6.5
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=64  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 64 tokens/rank
+  E2E latency (us) : p50=490.0  min=473.8  max=645.2  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 522483.1 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,64,4,256,8,7168,2048,490.0,473.8,645.2,522483.1
+NVSHMEM v3.6.5
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=512
+============================================================
+
+>>> RUN path=mega  backend=deep_gemm_mega  tokens/rank=512  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 512 tokens/rank
+  E2E latency (us) : p50=386.2  min=378.3  max=400.7  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 5303501.1 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,512,4,256,8,7168,2048,386.2,378.3,400.7,5303501.1
+
+>>> RUN path=mega  backend=mxfp8_cutedsl  tokens/rank=512  gpus=4
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : mxfp8_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 512 tokens/rank
+  E2E latency (us) : p50=940.1  min=922.0  max=1091.1  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 2178500.9 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,512,4,256,8,7168,2048,940.1,922.0,1091.1,2178500.9
+NVSHMEM v3.6.5
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=512  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 512 tokens/rank
+  E2E latency (us) : p50=614.6  min=600.0  max=767.8  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 3332378.8 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,512,4,256,8,7168,2048,614.6,600.0,767.8,3332378.8
+NVSHMEM v3.6.5
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=2048
+============================================================
+
+>>> RUN path=mega  backend=deep_gemm_mega  tokens/rank=2048  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 2048 tokens/rank
+  E2E latency (us) : p50=847.1  min=824.0  max=894.9  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 9670960.6 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,2048,4,256,8,7168,2048,847.1,824.0,894.9,9670960.6
+
+>>> RUN path=mega  backend=mxfp8_cutedsl  tokens/rank=2048  gpus=4
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : mxfp8_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 2048 tokens/rank
+  E2E latency (us) : p50=1657.8  min=1646.8  max=1680.3  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 4941512.5 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,2048,4,256,8,7168,2048,1657.8,1646.8,1680.3,4941512.5
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+NVSHMEM v3.6.5
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=2048  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 2048 tokens/rank
+  E2E latency (us) : p50=1121.2  min=1113.6  max=1164.8  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 7306144.5 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,2048,4,256,8,7168,2048,1121.2,1113.6,1164.8,7306144.5
+NVSHMEM v3.6.5
+
+============================================================
+  SWEEP section=fi_mega  tokens/rank=8192
+============================================================
+
+>>> RUN path=mega  backend=deep_gemm_mega  tokens/rank=8192  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : deep_gemm_mega
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8192 tokens/rank
+  E2E latency (us) : p50=3093.0  min=3003.2  max=3193.7  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 10594162.8 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8192,4,256,8,7168,2048,3093.0,3003.2,3193.7,10594162.8
+
+>>> RUN path=mega  backend=mxfp8_cutedsl  tokens/rank=8192  gpus=4
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : mxfp8_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8192 tokens/rank
+  E2E latency (us) : p50=6450.0  min=6428.4  max=6488.7  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 5080272.3 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,8192,4,256,8,7168,2048,6450.0,6428.4,6488.7,5080272.3
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+[fc12 stages] num_ab_stage=(5, 5) num_acc_stage=2 misc_budget=30752 c_bytes_total=16384 smem_cap=232448 unused_smem=13792
+NVSHMEM v3.6.5
+
+>>> RUN path=mega  backend=nvfp4_cutedsl  tokens/rank=8192  gpus=4
+
+=== FlashInfer MoE-EP (mega) result ===
+  mega backend     : nvfp4_cutedsl
+  staging          : excluded (pre-quantized once; timed = compute only)
+  weight prep      : excluded (preprocessed at layer init)
+  geometry         : 4 GPUs (DP=4, EP=4, TP=1), 256 experts, top-8, hidden=7168, inter=2048, 8192 tokens/rank
+  E2E latency (us) : p50=5118.0  min=5090.4  max=5142.0  (50 iters, 20 warmup, CUDA-event timed)
+  throughput       : 6402441.0 tok/s
+BENCH_CSV,mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,8192,4,256,8,7168,2048,5118.0,5090.4,5142.0,6402441.0
+NVSHMEM v3.6.5
+
+=== sweep summary (/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/results/sweep_20260714_113330_fi_mega.csv) ===
+path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8,4,256,8,7168,2048,237.7,233.2,252.4,134634.8
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,8,4,256,8,7168,2048,690.9,676.4,840.7,46317.7
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,8,4,256,8,7168,2048,465.1,453.6,1325.8,68808.9
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,64,4,256,8,7168,2048,315.8,311.2,328.2,810742.3
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,64,4,256,8,7168,2048,848.2,830.5,986.7,301812.8
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,64,4,256,8,7168,2048,490.0,473.8,645.2,522483.1
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,512,4,256,8,7168,2048,386.2,378.3,400.7,5303501.1
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,512,4,256,8,7168,2048,940.1,922.0,1091.1,2178500.9
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,512,4,256,8,7168,2048,614.6,600.0,767.8,3332378.8
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,2048,4,256,8,7168,2048,847.1,824.0,894.9,9670960.6
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,2048,4,256,8,7168,2048,1657.8,1646.8,1680.3,4941512.5
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,2048,4,256,8,7168,2048,1121.2,1113.6,1164.8,7306144.5
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8192,4,256,8,7168,2048,3093.0,3003.2,3193.7,10594162.8
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,8192,4,256,8,7168,2048,6450.0,6428.4,6488.7,5080272.3
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,8192,4,256,8,7168,2048,5118.0,5090.4,5142.0,6402441.0
