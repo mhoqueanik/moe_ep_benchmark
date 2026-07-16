@@ -1,4 +1,3 @@
-=== native / prefill (in=1024 out=1 n=128) -> /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/logs/bench_20260715_214011_native_prefill.log
 ERROR 07-15 21:40:41 [config.py:29] Failed to import Triton kernels. Please make sure your triton version is compatible. Error: No module named 'triton_kernels.matmul_ogs'
 /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/venv0251/lib/python3.12/site-packages/vllm/benchmarks/throughput.py:1159: UserWarning: Both --input-len and --random-input-len are specified. The random version (--random-input-len) will be preferred in this run.
   validate_args(args)

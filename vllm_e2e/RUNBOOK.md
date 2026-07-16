@@ -93,20 +93,33 @@ JOBID=$JOBID bash $W/in_container.sh \
   'source venv0251/bin/activate && python compare_outputs.py results/smoke_native.json results/smoke_fi_dg.json'
 ```
 
-Expectation: **fi_dg vs native is greedy-token EXACT** (identical weight
-transform + identical deep_gemm kernel; only staging/launch plumbing differs).
-fi_nvfp4 / fi_mxfp8 are requantized — compare logprob divergence, not exact
-tokens.
+Measured (2026-07-15, see FINDINGS.md): native is bit-deterministic
+run-to-run (8/8 exact). fi_dg is NOT (2/8 vs itself) and lands at
+*statistical parity* with native (|dlogprob| 0.01-0.06/token), despite
+bit-identical staging and argument-identical kernel launches — root cause of
+the nondeterminism unresolved. fi_nvfp4 shows the expected larger
+double-quantization delta (|dlogprob| 0.02-0.20/token, generations coherent).
+Compare logprob divergence, not exact tokens, and always collect the
+native-vs-native control first.
 
 ## 5. Throughput benchmark
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'bash bench_throughput.sh'
 # knobs: BACKENDS="native fi_dg fi_nvfp4" WORKLOADS="prefill:1024:1 decode:128:256 mixed:512:128" NUM_PROMPTS=256 EAGER=0
+# detached (survives the launching shell/session):
+bash $W/launch_detached.sh $JOBID my_bench 'BACKENDS="fi_nvfp4" EAGER=1 bash bench_throughput.sh'
 ```
 
 Results land in `results/bench_<stamp>.csv` (+ per-run JSON from
 `vllm bench throughput --output-json`).
+
+**Repeat every cell ≥3x and use medians.** Prefill-heavy cells showed ±35%
+cross-engine-restart variance on identical inputs (decode/mixed cells were
+stable within ~2%). `vllm bench throughput` fixes the prompt set (seed 0) and
+forces output lengths (`ignore_eos=True`), so per-cell token counts are
+identical across backends — the variance is engine-side (suspect NCCL algo
+selection per run).
 
 ## 6. Results
 
@@ -123,3 +136,13 @@ See `FINDINGS.md`.
   dequant-to-bf16 + requant (double quantization) — small accuracy delta vs
   native is expected and reported in FINDINGS.md.
 - EPLB is not supported on the fi path (wrapper stubs the EPLB hooks).
+- vLLM workers carry a stale `LOCAL_RANK`; flashinfer's internal
+  `set_device(LOCAL_RANK)` then lands work on the wrong GPU (illegal memory
+  access at weight load). `fi_utils.ensure_fi_moe_ep_runtime` pins LOCAL_RANK
+  to the worker's current device before any fi construction — keep that if
+  you refactor.
+- The fi layer retains its canonical `MoEWeightPack` after preprocessing;
+  the wrapper nulls it (`_mega_layer._weights = None`) — without this the
+  cutedsl paths OOM (43 layers x ~3.2 GB of retained bf16 dequants).
+- CUDA graphs (`EAGER=0`) are untested on the fi path — all published numbers
+  are eager-mode both sides.

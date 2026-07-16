@@ -57,3 +57,100 @@ ERROR 07-15 21:27:14 [mxfp4.py:53] Failed to import Triton kernels. Please make 
 (Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:21 [weight_utils.py:849] Filesystem type for checkpoints: LUSTRE. Checkpoint size: 148.66 GiB. Available RAM: 822.74 GiB.
 (Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:21 [weight_utils.py:811] Prefetching checkpoint files into page cache started (in background, num_threads=8, block_size=16777216 bytes)
 (Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:   0% Completed | 0/46 [00:00<?, ?it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:   4% Completed | 2/46 [00:00<00:16,  2.63it/s]
+(Worker_TP2_EP2 pid=2063150) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 10% (2/11)
+(Worker_TP2_EP2 pid=2063150) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 20% (3/11)
+(Worker_TP2_EP2 pid=2063150) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 30% (4/11)
+(Worker_TP3_EP3 pid=2063151) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 10% (2/11)
+(Worker_TP3_EP3 pid=2063151) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 20% (3/11)
+(Worker_TP2_EP2 pid=2063150) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 40% (5/11)
+(Worker_TP2_EP2 pid=2063150) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 50% (6/11)
+(Worker_TP3_EP3 pid=2063151) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 30% (4/11)
+(Worker_TP2_EP2 pid=2063150) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 60% (7/11)
+(Worker_TP3_EP3 pid=2063151) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 40% (5/11)
+(Worker_TP3_EP3 pid=2063151) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 50% (6/11)
+(Worker_TP1_EP1 pid=2063149) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 10% (2/12)
+(Worker_TP1_EP1 pid=2063149) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 20% (3/12)
+(Worker_TP1_EP1 pid=2063149) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 30% (4/12)
+(Worker_TP3_EP3 pid=2063151) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 60% (7/11)
+(Worker_TP3_EP3 pid=2063151) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 70% (8/11)
+(Worker_TP1_EP1 pid=2063149) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 40% (5/12)
+(Worker_TP2_EP2 pid=2063150) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 70% (8/11)
+(Worker_TP1_EP1 pid=2063149) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 50% (6/12)
+(Worker_TP1_EP1 pid=2063149) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 60% (8/12)
+(Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 10% (2/12)
+(Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 20% (3/12)
+(Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 30% (4/12)
+(Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 40% (5/12)
+(Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 50% (6/12)
+(Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 60% (8/12)
+(Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 70% (9/12)
+(Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 80% (10/12)
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:   7% Completed | 3/46 [00:01<00:18,  2.34it/s]
+(Worker_TP2_EP2 pid=2063150) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 80% (9/11)
+(Worker_TP2_EP2 pid=2063150) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 90% (10/11)
+(Worker_TP2_EP2 pid=2063150) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 100% (11/11)
+(Worker_TP2_EP2 pid=2063150) INFO 07-15 21:27:22 [weight_utils.py:806] Prefetching checkpoint files into page cache finished in 1.38s
+(Worker_TP3_EP3 pid=2063151) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 80% (9/11)
+(Worker_TP3_EP3 pid=2063151) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 90% (10/11)
+(Worker_TP3_EP3 pid=2063151) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 100% (11/11)
+(Worker_TP1_EP1 pid=2063149) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 70% (9/12)
+(Worker_TP3_EP3 pid=2063151) INFO 07-15 21:27:22 [weight_utils.py:806] Prefetching checkpoint files into page cache finished in 1.39s
+(Worker_TP1_EP1 pid=2063149) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 80% (10/12)
+(Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 90% (11/12)
+(Worker_TP1_EP1 pid=2063149) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 90% (11/12)
+(Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 100% (12/12)
+(Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:22 [weight_utils.py:806] Prefetching checkpoint files into page cache finished in 1.38s
+(Worker_TP1_EP1 pid=2063149) INFO 07-15 21:27:22 [weight_utils.py:783] Prefetching checkpoint files: 100% (12/12)
+(Worker_TP1_EP1 pid=2063149) INFO 07-15 21:27:22 [weight_utils.py:806] Prefetching checkpoint files into page cache finished in 1.39s
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:   9% Completed | 4/46 [00:01<00:16,  2.55it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  11% Completed | 5/46 [00:01<00:14,  2.78it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  13% Completed | 6/46 [00:02<00:13,  2.93it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  15% Completed | 7/46 [00:02<00:12,  3.05it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  17% Completed | 8/46 [00:02<00:12,  3.12it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  20% Completed | 9/46 [00:03<00:11,  3.18it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  22% Completed | 10/46 [00:03<00:11,  3.22it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  24% Completed | 11/46 [00:03<00:10,  3.26it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  26% Completed | 12/46 [00:03<00:10,  3.27it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  28% Completed | 13/46 [00:04<00:10,  3.30it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  30% Completed | 14/46 [00:04<00:09,  3.29it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  33% Completed | 15/46 [00:04<00:09,  3.31it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  35% Completed | 16/46 [00:05<00:09,  3.30it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  37% Completed | 17/46 [00:05<00:08,  3.32it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  39% Completed | 18/46 [00:05<00:08,  3.31it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  41% Completed | 19/46 [00:06<00:08,  3.30it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  43% Completed | 20/46 [00:06<00:07,  3.26it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  46% Completed | 21/46 [00:06<00:07,  3.29it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  48% Completed | 22/46 [00:07<00:07,  3.30it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  50% Completed | 23/46 [00:07<00:06,  3.32it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  52% Completed | 24/46 [00:07<00:06,  3.32it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  54% Completed | 25/46 [00:07<00:06,  3.33it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  57% Completed | 26/46 [00:08<00:06,  3.32it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  59% Completed | 27/46 [00:08<00:05,  3.34it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  61% Completed | 28/46 [00:08<00:05,  3.32it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  63% Completed | 29/46 [00:09<00:05,  3.33it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  65% Completed | 30/46 [00:09<00:04,  3.31it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  67% Completed | 31/46 [00:09<00:04,  3.33it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  70% Completed | 32/46 [00:10<00:04,  3.32it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  72% Completed | 33/46 [00:10<00:03,  3.33it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  74% Completed | 34/46 [00:10<00:03,  3.32it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  76% Completed | 35/46 [00:10<00:03,  3.32it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  78% Completed | 36/46 [00:11<00:03,  3.32it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  80% Completed | 37/46 [00:11<00:02,  3.33it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  83% Completed | 38/46 [00:11<00:02,  3.32it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  85% Completed | 39/46 [00:12<00:02,  3.33it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  87% Completed | 40/46 [00:12<00:01,  3.32it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  89% Completed | 41/46 [00:12<00:01,  3.34it/s]
+(Worker_TP2_EP2 pid=2063150) [fi_moe_ep] ep_rank=2 world=4 cuda.current_device=2 megakernel=nvfp4_cutedsl
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  91% Completed | 42/46 [00:13<00:01,  3.33it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  93% Completed | 43/46 [00:13<00:00,  3.34it/s]
+(Worker_TP3_EP3 pid=2063151) [fi_moe_ep] ep_rank=3 world=4 cuda.current_device=3 megakernel=nvfp4_cutedsl
+(Worker_TP1_EP1 pid=2063149) [fi_moe_ep] ep_rank=1 world=4 cuda.current_device=1 megakernel=nvfp4_cutedsl
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards:  96% Completed | 44/46 [00:13<00:00,  3.32it/s]
+(Worker_TP0_EP0 pid=2063148) Loading safetensors checkpoint shards: 100% Completed | 46/46 [00:13<00:00,  3.35it/s]
+(Worker_TP0_EP0 pid=2063148) 
+(Worker_TP0_EP0 pid=2063148) [fi_moe_ep] ep_rank=0 world=4 cuda.current_device=0 megakernel=nvfp4_cutedsl
+(Worker_TP0_EP0 pid=2063148) /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/venv0251/lib/python3.12/site-packages/torch/distributed/c10d_logger.py:83: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+(Worker_TP0_EP0 pid=2063148)   return func(*args, **kwargs)
+(Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:43 [default_loader.py:430] Loading weights took 22.80 seconds
+(Worker_TP0_EP0 pid=2063148) INFO 07-15 21:27:45 [gpu_model_runner.py:5306] Model loading took 39.98 GiB memory and 23.544130 seconds
