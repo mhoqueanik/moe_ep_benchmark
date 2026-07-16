@@ -1,0 +1,100 @@
+# Findings: vLLM 0.25.1 e2e — native deep_gemm mega vs flashinfer moe_ep
+
+**Date:** 2026-07-15 · **Model:** DeepSeek-V4-Flash (4096 h / 2048 moe-inter /
+256 experts / top-6 / 43 layers, fp4 experts + ue8m0-32 scales) ·
+**Hardware:** 4x GB200 (one node), TP=4 + EP=4 · **Stack:** vLLM 0.25.1 wheel,
+flashinfer branch `new_cutedsl_kernels` (0.6.15, editable), deep_gemm from the
+fi-ep container, CuTe-DSL 4.6.1.
+
+## Headline throughput (offline `vllm bench throughput`, eager, 128 prompts)
+
+CSV: `results/bench_20260715_205636.csv` (per-cell JSON alongside).
+Identical prompt sets (seed 0) and forced identical output token counts
+(`ignore_eos=True`) per cell.
+
+**⚠ Run-to-run variance dominates single measurements.** The prefill cell
+flipped between repeats (run 1: native 4221 / fi_dg 5864; run 2: native 6465 /
+fi_dg 4862 — each side "won" by ~35% once), with identical prompts and token
+counts. Cross-engine-restart variance (suspect: per-run NCCL algo selection
+for the TP allreduces, JIT/cache warmth) is larger than any backend delta.
+All conclusions below use medians over repeats; single-run tables are kept
+only as raw data.
+
+Raw cells so far (tok/s total):
+
+| workload (in/out) | native r1 | fi_dg r1 | native r2 | fi_dg r2 |
+|---|---|---|---|---|
+| prefill 1024/1  | 4221 | 5864 | 6465 | 4862 |
+| decode 128/256  | 6598 | 6163 | (running) | (running) |
+| mixed 512/128   | 7186 | 6408 | (running) | (running) |
+
+- **fi_dg = flashinfer moe_ep `deep_gemm_mega` kernel** — the *same*
+  `deep_gemm.fp8_fp4_mega_moe` kernel as native, argument-identical launch,
+  bit-identical input staging (proven, see below). Any true delta is
+  layer/runtime plumbing only; current data says fi_dg ≈ native within
+  (large) noise.
+- **Both sides eager**: fi-path CUDA-graph compatibility untested; graphs-on
+  native decode would be faster in production. Fair A/B, conservative
+  absolutes.
+
+## Correctness
+
+Method: 8 fixed prompts, greedy 64 tokens, per-token logprobs
+(`smoke_infer.py` / `compare_outputs.py`, dumps in `results/smoke_*.json`).
+
+| comparison | greedy exact | mean \|dlogprob\| (common prefix) |
+|---|---|---|
+| native vs native (rerun) | **8/8** | 0.0000 |
+| native vs fi_dg | 3/8 | 0.01–0.06 |
+| fi_dg vs fi_dg (rerun) | 2/8 | 0.01–0.08 |
+
+- Native is fully deterministic run-to-run.
+- **fi_dg is NOT deterministic run-to-run**, with self-divergence the same
+  magnitude as its divergence from native → fi_dg is at *statistical parity*
+  with native (all outputs coherent and quality-equivalent), but some source
+  of nondeterministic accumulation exists in the fi launch context. OPEN
+  QUESTION — staging is bit-exact and kernel args identical, so suspicion is
+  on kernel-internal scheduling sensitivity to context (SM occupancy from
+  other engine work, stream state). Chase with nsys / single-layer dumps.
+- Supporting probe: vLLM's fused `prepare_megamoe_inputs` and fi's
+  `stage_mega_moe_inputs` produce **bit-identical** fp8 x / packed-ue8m0 sf /
+  topk buffers on identical inputs.
+
+## Integration bugs found (fixed in `patch_0251/`)
+
+1. **Stale `LOCAL_RANK` in vLLM workers vs flashinfer device binding.**
+   flashinfer's runtime/layer constructors call
+   `torch.cuda.set_device(LOCAL_RANK or bootstrap.rank)`; vLLM workers carry a
+   `LOCAL_RANK` that doesn't match the worker's assigned device, so weight
+   transforms launched on the wrong GPU → `CUDA_ERROR_ILLEGAL_ADDRESS` in
+   `deep_gemm.transform_sf_into_required_layout` at load. Fix: pin
+   `os.environ["LOCAL_RANK"] = str(torch.cuda.current_device())` before
+   bootstrap (fi_utils). Consider upstream: flashinfer should not rebind the
+   device when one is already bound.
+2. **`FleetParams.weights` API move** — branch moved weights to
+   `MoEEpLayer(weights=...)`; old 0.24-era patch passed it inside FleetParams.
+
+## Dependency matrix for vLLM 0.25.1 on the fi-ep container (aarch64)
+
+All encoded in `setup_container.sh`; every bullet was a real breakage:
+
+| package | vllm 0.25.1 pin | what we run | why |
+|---|---|---|---|
+| torch | 2.11.0 | 2.11.0+cu130 (venv) | vllm ops use stable-libtorch ABI → NGC torch 2.12 mismatch is fine |
+| nvidia-cutlass-dsl | 4.5.2 | **4.6.1** | 4.5.2 compiles fi cutedsl mega kernels 34–54% slower (TUNING.md) |
+| quack-kernels | >=0.3.3 (resolves old) | 0.6.1 | old quack breaks on dsl 4.6 (`cute.core.ThrMma` removed) |
+| (vendored) vllm cute kernels | — | sed `cute.core.ThrMma`→`cute.ThrMma` | pure rename in dsl 4.6 |
+| apache-tvm-ffi | 0.1.9 | **0.1.11** | dsl 4.6.1 needs `make_kwargs_wrapper(map_dataclass_to_tuple=)`; 0.1.12 breaks tilelang |
+| tilelang | ==0.1.9 | 0.1.12 | 0.1.9 breaks on tvm-ffi >0.1.9 registry; 0.1.12 caps tvm-ffi at 0.1.11 |
+| flashinfer-python | ==0.6.13 | branch 0.6.15 editable, `--no-deps` | pip 24.0 resolver also crashes on NGC dist metadata |
+
+## Status / next steps
+
+- [x] native + fi_dg e2e working, benchmarked (this doc)
+- [ ] prefill repeat run (in flight)
+- [ ] fi_nvfp4 smoke (in flight; checkpoint fp4 → bf16 dequant → nvfp4 requant
+      path, expect larger logprob delta from double quantization)
+- [ ] fi_dg nondeterminism root-cause
+- [ ] CUDA-graph compatibility of fi path (then graphs-on sweep)
+- [ ] serve-mode (DP4 TP1 EP) benchmark with TTFT/TPOT, matching the old
+      `run_deepseek_v4_flash.sh` topology

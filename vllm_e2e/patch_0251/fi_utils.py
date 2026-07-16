@@ -385,6 +385,15 @@ def make_fi_mega_moe_experts_cls(mega_moe_experts_cls: type[nn.Module]) -> type[
                 weights=weights,
                 fast_math=self._fast_math,
             )
+            # The layer preprocesses at construction (_transformed holds the
+            # kernel-ready tensors, which alias or replace the pack) but keeps
+            # a reference to the canonical MoEWeightPack. For the cutedsl
+            # kernels that pack is a per-layer bf16 DEQUANT copy (~3.2 GB per
+            # layer here, 43 MoE layers -> OOM); for deep_gemm it pins the
+            # loader-side fp4 originals. Drop it — repeated preprocessing is
+            # already guarded by `_transformed is not None`.
+            self._mega_layer._weights = None
+            del weights
             self.w13_weight = None
             self.w13_weight_scale = None
             self.w2_weight = None

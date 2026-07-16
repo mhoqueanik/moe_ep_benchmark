@@ -1,0 +1,5 @@
+backend,workload,input_len,output_len,num_prompts,eager,requests_per_s,total_tok_per_s,output_tok_per_s
+native,decode,128,256,128,1,5.72,6593.55,732.62
+native,mixed,512,128,128,1,5.81,6688.31,743.15
+fi_dg,decode,128,256,128,1,5.45,6283.58,698.18
+fi_dg,mixed,512,128,128,1,5.31,6112.67,679.19
