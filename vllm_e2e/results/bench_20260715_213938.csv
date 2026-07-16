@@ -1,1 +1,2 @@
 backend,workload,input_len,output_len,num_prompts,eager,requests_per_s,total_tok_per_s,output_tok_per_s
+fi_nvfp4,prefill,1024,1,128,1,3.92,4515.97,501.77

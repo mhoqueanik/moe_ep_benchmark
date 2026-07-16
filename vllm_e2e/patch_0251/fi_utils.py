@@ -313,11 +313,18 @@ def build_fi_mega_layer(
     return layer
 
 
+_MOE_SKIP_PADDING: bool | None = None
+
+
 def resolve_mega_moe_is_padding(num_tokens: int) -> torch.Tensor | None:
-    import vllm.envs as envs
     from vllm.forward_context import get_forward_context, is_forward_context_available
 
-    if not envs.VLLM_MOE_SKIP_PADDING or not is_forward_context_available():
+    global _MOE_SKIP_PADDING
+    if _MOE_SKIP_PADDING is None:
+        import vllm.envs as envs
+
+        _MOE_SKIP_PADDING = bool(envs.VLLM_MOE_SKIP_PADDING)
+    if not _MOE_SKIP_PADDING or not is_forward_context_available():
         return None
     is_padding = get_forward_context().is_padding
     if is_padding is None:
@@ -356,6 +363,7 @@ def make_fi_mega_moe_experts_cls(mega_moe_experts_cls: type[nn.Module]) -> type[
             self._activation_clamp = activation_clamp
             self._fast_math = fast_math
             self._mega_layer = None
+            self._fast_ctx = None
 
         def finalize_weights(self) -> None:
             if self._mega_layer is not None:
@@ -431,9 +439,7 @@ def make_fi_mega_moe_experts_cls(mega_moe_experts_cls: type[nn.Module]) -> type[
                     f"but the symmetric buffer was sized for {self.max_num_tokens}."
                 )
 
-            ensure_fi_moe_ep_runtime(self._vllm_config)
-            self.finalize_weights()
-            assert self._mega_layer is not None
+            from flashinfer.moe_ep import MoEEpTensors
 
             num_tokens = hidden_states.shape[0]
             is_padding = resolve_mega_moe_is_padding(num_tokens)
@@ -442,15 +448,49 @@ def make_fi_mega_moe_experts_cls(mega_moe_experts_cls: type[nn.Module]) -> type[
                 is_padding=is_padding,
             )
 
-            from flashinfer.moe_ep import MoEEpTensors
+            # Validated-once fast path (mirrors the microbench's cached-launch
+            # loop): MoEEpMegaLayer.forward() re-runs bootstrap/dist checks and
+            # input validation on every call, which costs real host time at
+            # 43 MoE layers x one call per engine step. After the first
+            # successful full forward the layer is immutable, so go straight
+            # to the kernel backend's stage_inputs + compute.
+            fast = self._fast_ctx
+            if fast is not None:
+                kernel, workspace, transformed, hidden_size = fast
+                t = MoEEpTensors(
+                    hidden_states=hidden_states,
+                    topk_ids=topk_ids,
+                    topk_weights=topk_weights,
+                )
+                kernel.stage_inputs(t, workspace, quantize_input=True)
+                y = torch.empty(
+                    num_tokens,
+                    hidden_size,
+                    dtype=torch.bfloat16,
+                    device=hidden_states.device,
+                )
+                return kernel.compute(workspace, transformed, output=y)
 
-            return self._mega_layer.forward(
+            ensure_fi_moe_ep_runtime(self._vllm_config)
+            self.finalize_weights()
+            assert self._mega_layer is not None
+
+            y = self._mega_layer.forward(
                 MoEEpTensors(
                     hidden_states=hidden_states,
                     topk_ids=topk_ids,
                     topk_weights=topk_weights,
                 )
             )
+            layer = self._mega_layer
+            if hidden_states.dtype == torch.bfloat16:
+                self._fast_ctx = (
+                    layer._kernel,
+                    layer._ensure_workspace(),
+                    layer._transformed,
+                    layer._fleet_params.token_hidden_size,
+                )
+            return y
 
     _DeepseekV4MegaMoEExpertsFI.__name__ = "DeepseekV4MegaMoEExpertsFI"
     _DeepseekV4MegaMoEExpertsFI.__qualname__ = "DeepseekV4MegaMoEExpertsFI"

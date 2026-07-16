@@ -66,4 +66,4 @@ for backend in $BACKENDS; do
     done
 done
 echo "wrote $OUT_CSV"
-column -t -s, "$OUT_CSV"
+cat "$OUT_CSV"

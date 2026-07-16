@@ -2,3 +2,6 @@ backend,workload,input_len,output_len,num_prompts,eager,requests_per_s,total_tok
 backend,workload,input_len,output_len,num_prompts,eager,requests_per_s,total_tok_per_s,output_tok_per_s
 fi_nvfp4,prefill,1024,1,128,1,NA,NA,NA
 fi_nvfp4,decode,128,256,128,1,NA,NA,NA
+native,prefill,1024,1,128,1,5.60,6452.33,716.93
+fi_nvfp4,mixed,512,128,128,1,NA,NA,NA
+fi_dg,prefill,1024,1,128,1,4.65,5351.23,594.58
