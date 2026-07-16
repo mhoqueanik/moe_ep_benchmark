@@ -6,7 +6,50 @@
 flashinfer branch `new_cutedsl_kernels` (0.6.15, editable), deep_gemm from the
 fi-ep container, CuTe-DSL 4.6.1.
 
-## Headline throughput (offline `vllm bench throughput`, eager, 128 prompts)
+## Headline throughput — offline repeat matrix (2026-07-15 23:00, DEFINITIVE)
+
+`bench_offline.py` / `run_offline_matrix.sh`: one engine boot per cell,
+5 timed rounds after warmup, **prefix caching off** (with it on, repeat
+rounds are 100% cache hits — observed fake 91k tok/s "prefill"), eager, 128
+prompts, fixed token-id prompts (seed 0). fi wrapper at full native parity:
+validated-once fast path + one shared symm workspace across all 43 layers.
+Round spreads < 3% — engine-restart variance eliminated.
+
+| cell (tok/s median) | native | fi_dg | fi_nvfp4 | fi_dg/nat | nvfp4/nat |
+|---|---|---|---|---|---|
+| prefill 1024in/1out | 31777 | 28350 | 25843 | **0.89x** | **0.81x** |
+| decode 128in/256out | 1681 | 1421 | 1318 | **0.85x** | **0.78x** |
+
+JSONs: `results/offline_20260715_221930_*.json`.
+
+Interpretation:
+- Even with dispatch fast path + shared workspace, **fi_dg trails native by
+  11-15%** — the remaining gap is NOT per-call validation (removed) and NOT
+  workspace duplication (removed). Prime suspect: staging. Native uses ONE
+  fused `prepare_megamoe_inputs` kernel; fi's `stage_mega_moe_inputs` is
+  `per_token_cast_to_fp8` (allocating) + 4 separate copies into the
+  workspace = ~5-6x the launches+allocs per layer per step. Needs a profile
+  to confirm (next step).
+- **fi_nvfp4 is SLOWER than fi_dg** (0.91x of fi_dg at prefill) despite the
+  kernel being 1.35-1.65x faster than dg at this tokens/step in the
+  microbench. Prime suspect: the CuTeDSL frontend's launch-kwargs cache keys
+  on tensor identity — in the microbench the same input tensors are reused
+  every iteration (cache hits), but vLLM hands the layer FRESH
+  hidden_states/topk tensors every step, forcing the full cute-tensor-view
+  rebuild (from_dlpack x12) per layer per step. This is the same artifact
+  documented in the 2026-07-14 microbench methodology fix, now appearing in
+  production form. Fix direction: stage into fixed buffers before launch so
+  cached launch kwargs stay valid.
+- The MoE layer is only part of step time, so kernel-level wins/losses are
+  diluted ~2-3x in these e2e numbers.
+
+## Superseded: cross-engine `vllm bench throughput` cells (eager, 128 prompts)
+
+**Methodology notes discovered after the fact:** (1) these cells boot a
+fresh engine per measurement — prefill-heavy cells showed ±35% cross-restart
+variance; (2) the "prefill" cells actually generated ~128 output tokens per
+prompt (the dataset ignores `--output-len 1`), so they are mixed workloads,
+not pure prefill. Kept as raw data only — use the repeat matrix above.
 
 CSV: `results/bench_20260715_205636.csv` (per-cell JSON alongside).
 Identical prompt sets (seed 0) and forced identical output token counts

@@ -1,0 +1,56 @@
+patched: /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/venv0251/lib/python3.12/site-packages/vllm/models/deepseek_v4/nvidia (backup: model.py.orig)
+=== native / prefill:1024:1 -> /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/results/offline_20260715_221930_native_prefill.json
+[bench_offline] native/prefill round 0 (warmup): 28783.0 total tok/s
+[bench_offline] native/prefill round 1: 31717.9 total tok/s
+[bench_offline] native/prefill round 2: 31776.9 total tok/s
+[bench_offline] native/prefill round 3: 30876.4 total tok/s
+[bench_offline] native/prefill round 4: 31867.1 total tok/s
+[bench_offline] native/prefill round 5: 31828.4 total tok/s
+[bench_offline] median 31776.9 tok/s -> /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/results/offline_20260715_221930_native_prefill.json
+=== native / decode:128:256 -> /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/results/offline_20260715_221930_native_decode.json
+[bench_offline] native/decode round 0 (warmup): 1675.6 total tok/s
+[bench_offline] native/decode round 1: 1685.9 total tok/s
+[bench_offline] native/decode round 2: 1647.4 total tok/s
+[bench_offline] native/decode round 3: 1694.0 total tok/s
+[bench_offline] native/decode round 4: 1679.2 total tok/s
+[bench_offline] native/decode round 5: 1681.3 total tok/s
+[bench_offline] median 1681.3 tok/s -> /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/results/offline_20260715_221930_native_decode.json
+=== fi_dg / prefill:1024:1 -> /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/results/offline_20260715_221930_fi_dg_prefill.json
+[bench_offline] fi_dg/prefill round 0 (warmup): 27079.2 total tok/s
+[bench_offline] fi_dg/prefill round 1: 27265.7 total tok/s
+[bench_offline] fi_dg/prefill round 2: 27362.0 total tok/s
+[bench_offline] fi_dg/prefill round 3: 28349.7 total tok/s
+[bench_offline] fi_dg/prefill round 4: 28351.6 total tok/s
+[bench_offline] fi_dg/prefill round 5: 28358.7 total tok/s
+[bench_offline] median 28349.7 tok/s -> /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/results/offline_20260715_221930_fi_dg_prefill.json
+=== fi_dg / decode:128:256 -> /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/results/offline_20260715_221930_fi_dg_decode.json
+[bench_offline] fi_dg/decode round 0 (warmup): 1055.9 total tok/s
+[bench_offline] fi_dg/decode round 1: 1395.3 total tok/s
+[bench_offline] fi_dg/decode round 2: 1409.6 total tok/s
+[bench_offline] fi_dg/decode round 3: 1421.0 total tok/s
+[bench_offline] fi_dg/decode round 4: 1426.0 total tok/s
+[bench_offline] fi_dg/decode round 5: 1430.9 total tok/s
+[bench_offline] median 1421.0 tok/s -> /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/results/offline_20260715_221930_fi_dg_decode.json
+=== fi_nvfp4 / prefill:1024:1 -> /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/results/offline_20260715_221930_fi_nvfp4_prefill.json
+[bench_offline] fi_nvfp4/prefill round 0 (warmup): 24782.6 total tok/s
+[bench_offline] fi_nvfp4/prefill round 1: 25738.4 total tok/s
+[bench_offline] fi_nvfp4/prefill round 2: 25622.2 total tok/s
+[bench_offline] fi_nvfp4/prefill round 3: 25842.5 total tok/s
+[bench_offline] fi_nvfp4/prefill round 4: 25852.6 total tok/s
+[bench_offline] fi_nvfp4/prefill round 5: 25878.4 total tok/s
+[bench_offline] median 25842.5 tok/s -> /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/results/offline_20260715_221930_fi_nvfp4_prefill.json
+=== fi_nvfp4 / decode:128:256 -> /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/results/offline_20260715_221930_fi_nvfp4_decode.json
+[bench_offline] fi_nvfp4/decode round 0 (warmup): 1300.2 total tok/s
+[bench_offline] fi_nvfp4/decode round 1: 1318.0 total tok/s
+[bench_offline] fi_nvfp4/decode round 2: 1318.0 total tok/s
+[bench_offline] fi_nvfp4/decode round 3: 1318.0 total tok/s
+[bench_offline] fi_nvfp4/decode round 4: 1316.7 total tok/s
+[bench_offline] fi_nvfp4/decode round 5: 1319.1 total tok/s
+[bench_offline] median 1318.0 tok/s -> /lustre/fsw/coreai_libraries_cudnn/mhoqueanik/moe_ep_benchmark/vllm_e2e/results/offline_20260715_221930_fi_nvfp4_decode.json
+=== medians ===
+    fi_dg   decode: median   1421.0 min   1395.3 max   1430.9 tok/s
+    fi_dg  prefill: median  28349.7 min  27265.7 max  28358.7 tok/s
+ fi_nvfp4   decode: median   1318.0 min   1316.7 max   1319.1 tok/s
+ fi_nvfp4  prefill: median  25842.5 min  25622.2 max  25878.4 tok/s
+   native   decode: median   1681.3 min   1647.4 max   1694.0 tok/s
+   native  prefill: median  31776.9 min  30876.4 max  31867.1 tok/s
