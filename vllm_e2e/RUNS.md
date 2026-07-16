@@ -80,12 +80,24 @@ JSONs: `results/offline_20260715_221930_*.json`.
 | 12 | nsys profile matrix | 2389111 | 3 backends, prefill | attribution chart above | results/nsys_20260715_225236_* |
 | 13 | offline fi_nvfp4 knobs=auto | 2389111 | FI_MOE_EP_KNOBS=auto | *running* | logs/offline_nvfp4_auto.log |
 
-## Open items
+## Open items / next-run plan
 
-1. cutedsl kernel retune at (4096, 2048, 256, top6) — knobs=auto is the
-   first probe (run 13); geometry needs a kernel-repo sweep.
-2. Fuse fi staging into one kernel writing symm buffers (native parity).
-3. Fixed-address staging so the cutedsl launch-kwargs cache hits on vLLM's
-   fresh per-step tensors.
-4. fi_dg run-to-run nondeterminism root cause.
-5. CUDA-graph compatibility of the fi path; serve-mode (DP4) TTFT/TPOT bench.
+1. **[next run] DP4/TP1+EP topology** (old `run_deepseek_v4_flash.sh` serve
+   config): eliminates the per-layer TP allreduce entirely (21-36% of GPU
+   time in the nsys profile, plus its skew noise) — attention goes
+   data-parallel, cross-rank traffic collapses into the mega kernel's own
+   dispatch/combine. Run all backends under `vllm serve` + `vllm bench
+   serve` for TTFT/TPOT too.
+2. **[next run] Wire the cutedsl backend's own fused staging+quant kernels**
+   (kernel-repo frontend `quantize_input=True` path) instead of the generic
+   torch staging the wrapper currently gets — kills the 98-launches/layer-
+   step soup (23% of fi_nvfp4 GPU time) AND gives fixed-address staging so
+   the launch-kwargs cache hits on vLLM's fresh per-step tensors.
+3. cutedsl kernel retune at (4096, 2048, 256, top6): knobs=auto (run 13)
+   restored the kernel win (710us vs dg 1176us) but LOST e2e at prefill —
+   tuner-harness vs pipelined-e2e mismatch; needs kernel-repo sweep at this
+   geometry + e2e-validated profiles, and a correctness smoke for the
+   auto+shared-workspace combination.
+4. Fuse fi_dg staging into one kernel writing symm buffers (native parity).
+5. fi_dg run-to-run nondeterminism root cause.
+6. CUDA-graph compatibility of the fi path.
