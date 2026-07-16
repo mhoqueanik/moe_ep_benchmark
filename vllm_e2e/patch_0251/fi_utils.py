@@ -271,6 +271,38 @@ def build_fi_mega_config(
     )
 
 
+# All MoE layers share one symmetric workspace, like the native path's
+# class-level DeepseekV4MegaMoEExperts._symm_buffer_cache. Without this the
+# fi path allocates one symm buffer PER LAYER (43x memory + cold working
+# sets); the workspace is stateless across forwards (kernel tail-cleans) and
+# layers execute sequentially on one stream, so sharing is safe.
+_SHARED_WORKSPACE: dict[tuple, object] = {}
+
+
+def _shared_workspace_for(layer, megakernel: str):
+    import torch
+
+    fp = layer._fleet_params
+    kcfg = layer._kernel._kernel_config
+    key = (
+        megakernel,
+        id(layer._kernel.ep_comm_group) if hasattr(layer._kernel, "ep_comm_group") else 0,
+        torch.cuda.current_device(),
+        fp.num_experts,
+        fp.max_tokens_per_rank,
+        kcfg.top_k,
+        fp.token_hidden_size,
+        kcfg.intermediate_size,
+    )
+    ws = _SHARED_WORKSPACE.get(key)
+    if ws is None:
+        ws = layer._ensure_workspace()
+        _SHARED_WORKSPACE[key] = ws
+    else:
+        layer._workspace = ws
+    return ws
+
+
 def build_fi_mega_layer(
     bootstrap: "BootstrapConfig",
     *,
@@ -402,6 +434,11 @@ def make_fi_mega_moe_experts_cls(mega_moe_experts_cls: type[nn.Module]) -> type[
             # already guarded by `_transformed is not None`.
             self._mega_layer._weights = None
             del weights
+            # Bind the cross-layer shared workspace BEFORE first forward so
+            # this layer never allocates its own (native-path parity).
+            _shared_workspace_for(
+                self._mega_layer, resolve_fi_megakernel(self._vllm_config)
+            )
             self.w13_weight = None
             self.w13_weight_scale = None
             self.w2_weight = None
