@@ -58,6 +58,10 @@ def main() -> None:
         enforce_eager=args.enforce_eager,
         kv_cache_dtype="fp8",
         block_size=256,
+        # Repeat rounds reuse the same prompts: with prefix caching on, every
+        # round after warmup is a 100% cache hit and "prefill" measures nothing
+        # (observed: 91k tok/s fake prefill). Disable for honest repeats.
+        enable_prefix_caching=False,
     )
 
     # Fixed random-token prompts (seed 0), same for every round and backend.
