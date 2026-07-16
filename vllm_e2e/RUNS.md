@@ -46,11 +46,22 @@ How to read it (details in FINDINGS.md "nsys attribution"):
 round spread < 3%. fi wrapper with fast path + shared workspace.
 JSONs: `results/offline_20260715_221930_*.json`.
 
-| tok/s (median) | native | fi_dg | fi_nvfp4 |
-|---|---|---|---|
-| prefill 1024/1 | 31777 | 28350 (0.89x) | 25843 (0.81x) |
-| decode 128/256 | 1681 | 1421 (0.85x) | 1318 (0.78x) |
-| fi_nvfp4 + `FI_MOE_EP_KNOBS=auto` | — | — | *pending (see below)* |
+| tok/s (median) | native | fi_dg | fi_nvfp4 (default knobs) | fi_nvfp4 (`KNOBS=auto`) |
+|---|---|---|---|---|
+| prefill 1024/1 | 31777 | 28350 (0.89x) | 25843 (0.81x) | 22348 (0.70x) |
+| decode 128/256 | 1681 | 1421 (0.85x) | 1318 (0.78x) | 1154 (0.69x) |
+
+**knobs=auto paradox:** the autotuner's winner (ikr + mma 256x256 +
+flag_batch 8 + standalone_warps) measured **710 µs** in its own harness vs
+1464 µs default / 1176 µs dg — a 2x kernel-level win — yet e2e got ~13%
+WORSE on both workloads. The tuner's metric (synchronized collective
+launches, median of max-across-ranks) does not transfer to the pipelined
+engine; suspects: ikr's cross-rank atomics under real skew, and a possible
+interaction with the shared-workspace patch binding buffers before the
+knob switch (auto+sharedws correctness smoke: run 15). Also: auto re-tunes
+per encountered shape (24 cute.compiles each, 576+ candidate timings in the
+decode engine) — unusable in-engine; production should pin an
+e2e-validated knob dict via `FI_MOE_EP_KNOBS='{...}'`.
 
 ## Correctness (greedy 64 tok x 8 prompts, per-token logprobs)
 
@@ -78,7 +89,9 @@ JSONs: `results/offline_20260715_221930_*.json`.
 | 10 | offline matrix v2 | 2388721 | + prefix caching off, shared workspace | DEFINITIVE table above | results/offline_20260715_221930_*.json |
 | 11 | smoke fi_dg fast-path | 2389111 | optimized wrapper | correctness unchanged | results/smoke_fi_dg_fast.json |
 | 12 | nsys profile matrix | 2389111 | 3 backends, prefill | attribution chart above | results/nsys_20260715_225236_* |
-| 13 | offline fi_nvfp4 knobs=auto | 2389111 | FI_MOE_EP_KNOBS=auto | *running* | logs/offline_nvfp4_auto.log |
+| 13 | offline fi_nvfp4 knobs=auto | 2389111 | FI_MOE_EP_KNOBS=auto | kernel 710us win, e2e 13% LOSS (see paradox note) | results/offline_20260715_231848_fi_nvfp4_*.json |
+| 14 | 4.5.2 DSL sensitivity (microbench, same day) | — | kernel-level, TUNING.md | 4.6.1 = perf floor (34-54% slower on 4.5.2) | flashinfer TUNING.md |
+| 15 | smoke fi_nvfp4 knobs=auto | 2389111 | auto+sharedws correctness | *running* | logs/smoke_nvfp4_auto.log |
 
 ## Open items / next-run plan
 
