@@ -20,22 +20,10 @@ kernel self-time; identical workload, 64 prompts x warmup+2 rounds).
 `staging+small` = MoE staging/quant + small torch kernels
 (elementwise/copy/reduce/index).
 
-```
-   native |████████████████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒░░░░···::      | 34.3s GPU
-          MoE mega 33%(11.3s)  allreduce 36%(12.4s)  staging+small 5%(1.7s)
-          attention 7%(2.3s)  mhc/norm 4%(1.5s)  rope/kv 4%(1.3s)  other 11%(3.9s)
+![GPU time attribution: native vs fi_dg vs fi_nvfp4](results/gpu_time_attribution.png)
 
-    fi_dg |████████████████████████▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒░░░░···::        | 30.3s GPU
-          MoE mega 40%(12.0s)  allreduce 21%(6.2s)  staging+small 11%(3.4s)
-          attention 7%(2.2s)  mhc/norm 5%(1.5s)  rope/kv 4%(1.2s)  other 12%(3.8s)
-
- fi_nvfp4 |████████████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░░··::      | 51.5s GPU
-          MoE mega 27%(14.1s)  allreduce 29%(14.7s)  staging+small 23%(11.7s)
-          attention 5%(2.3s)  mhc/norm 3%(1.5s)  rope/kv 3%(1.3s)  other 11%(5.8s)
-
-          █ MoE mega kernel   ▓ TP allreduce   ▒ MoE staging + small torch
-          ░ attention   · mhc/norm   : rope/kv-quant   (space) other
-```
+(Regenerate with `python make_time_attribution_chart.py`; "other" folds
+mhc/norm 1.5s + rope/kv ~1.3s + dense/sampler/misc.)
 
 How to read it (details in FINDINGS.md "nsys attribution"):
 
