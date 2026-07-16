@@ -43,6 +43,60 @@ Interpretation:
 - The MoE layer is only part of step time, so kernel-level wins/losses are
   diluted ~2-3x in these e2e numbers.
 
+## nsys attribution — where the fi perf goes (2026-07-15 23:00)
+
+Profiles: `results/nsys_20260715_225236_{native,fi_dg,fi_nvfp4}.nsys-rep`
+(+ `_cuda_gpu_kern_sum.csv` / `_cuda_api_sum.csv`), prefill workload, 64
+prompts, warmup + 2 rounds, CUDA-trace only. Caveat: nsys adds per-API-call
+host overhead, so wall times under the profiler are biased *against*
+launch-heavy backends — use it for kernel self-times and counts, not wall.
+
+**1. The cutedsl nvfp4 mega kernel is NOT faster than dg at this model's
+geometry.** GPU self-time per launch (same engine, same steps):
+
+| mega kernel | avg / launch | instances |
+|---|---|---|
+| native `deep_gemm::sm100_fp8_fp4_mega_moe` | **1176 µs** | 8428 |
+| fi_dg same kernel | 1297 µs (launch-skew-inflated, see below) | 8428 |
+| fi_nvfp4 `Sm100MegaMoEKernel` (cutedsl) | **1464 µs** | 9632 |
+
+The microbench's 1.35–1.65x nvfp4 win was at (hidden 7168, top-8); this
+model is (hidden 4096, moe-inter 2048, 256E, **top-6**) — a geometry the
+kernel sweep never covered, running on `default_knobs` profiles derived at
+7168-hidden. At 4096-hidden the dg kernel's per-token work also halves. So
+the kernel-level advantage itself did not transfer. Actions: run
+`FI_MOE_EP_KNOBS=auto` (online autotune at this geometry), and add
+(4096, 2048, 256, top6) to the kernel-repo tuning sweep.
+
+**2. Staging kernel soup — the integration-side eater.** cudaLaunchKernel
+calls for the identical workload:
+
+| backend | cudaLaunchKernel | memcpyAsync | approx torch kernels per MoE-layer step |
+|---|---|---|---|
+| native | 100k | 128k | ~1 (fused `_prepare_megamoe_inputs_kernel`, 63.8 µs) |
+| fi_dg | 330k (3.3x) | 185k | ~5-10 (`per_token_cast_to_fp8` reduce+elementwise+4 copies) |
+| fi_nvfp4 | **946k (9.4x)** | 231k | **~98** (input-quant + staging torch soup: 97k elementwise, 63k copies, 54k binary, 44k index, 32k reduce ≈ 8.2 s GPU) |
+
+fi_nvfp4 spends ~8.2 s of GPU time in small torch kernels vs native's 0.6 s
+fused staging — plus the matching host-side launch cost and the cutedsl
+launch-kwargs cache misses (fresh vLLM tensors each step) documented above.
+
+**3. Launch-skew redistribution, not allreduce difference.** The TP
+allreduce avg swings wildly (native 646 µs, fi_dg 327 µs, fi_nvfp4 770 µs at
+identical counts) because whichever collective/mega kernel arrives last
+absorbs the inter-rank skew as spin-wait. fi_dg's mega-kernel avg being 10%
+above native's (same kernel, same inputs) is this skew, driven by its extra
+host-side staging time — total GPU busy for fi_dg is actually LOWER than
+native (30.3 vs 34.3 s) while wall is higher: fi_dg is host-gap-bound.
+
+**Bottom line:** the e2e deficit decomposes into (a) kernel: nvfp4 cutedsl
+needs retuning/sweeping at this model's geometry — it is currently ~25%
+slower per launch than dg here; (b) integration: fi staging must become one
+fused kernel writing the symm buffers directly (native parity) and the
+cutedsl frontend needs fixed-address staging so its launch-kwargs cache
+hits. Fixing (b) alone should roughly close fi_dg's 11-15% gap; fixing both
+is required before fi_nvfp4 can win e2e.
+
 ## Superseded: cross-engine `vllm bench throughput` cells (eager, 128 prompts)
 
 **Methodology notes discovered after the fact:** (1) these cells boot a
