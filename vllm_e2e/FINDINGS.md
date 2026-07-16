@@ -97,6 +97,20 @@ cutedsl frontend needs fixed-address staging so its launch-kwargs cache
 hits. Fixing (b) alone should roughly close fi_dg's 11-15% gap; fixing both
 is required before fi_nvfp4 can win e2e.
 
+## knobs=auto (2026-07-16 00:30) — kernel win does not equal e2e win
+
+`FI_MOE_EP_KNOBS=auto` (in-engine autotune at first forward): winner
+ikr + mma 256x256 + flag_batch 8 + standalone_warps at **710 µs** in the
+tuner harness (default knobs 1464 µs, dg 1176 µs) — yet e2e dropped ~13%
+vs default knobs on BOTH workloads (prefill 22348 vs 25843; decode 1154 vs
+1318; native 31777/1681). The tuner metric (synchronized launches, median
+of max-across-ranks) does not model the pipelined engine — ikr cross-rank
+atomics under real skew are the leading suspect, with a possible
+shared-workspace/knob-switch interaction (correctness smoke: RUNS.md run
+15). Auto also re-tunes per encountered shape (24 cute.compiles each) —
+never enable in a serving engine; pin an **e2e-validated** dict via
+`FI_MOE_EP_KNOBS='{...}'`. Full table + run log: RUNS.md.
+
 ## Superseded: cross-engine `vllm bench throughput` cells (eager, 128 prompts)
 
 **Methodology notes discovered after the fact:** (1) these cells boot a
