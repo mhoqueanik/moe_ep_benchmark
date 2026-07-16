@@ -91,7 +91,7 @@ e2e-validated knob dict via `FI_MOE_EP_KNOBS='{...}'`.
 | 12 | nsys profile matrix | 2389111 | 3 backends, prefill | attribution chart above | results/nsys_20260715_225236_* |
 | 13 | offline fi_nvfp4 knobs=auto | 2389111 | FI_MOE_EP_KNOBS=auto | kernel 710us win, e2e 13% LOSS (see paradox note) | results/offline_20260715_231848_fi_nvfp4_*.json |
 | 14 | 4.5.2 DSL sensitivity (microbench, same day) | — | kernel-level, TUNING.md | 4.6.1 = perf floor (34-54% slower on 4.5.2) | flashinfer TUNING.md |
-| 15 | smoke fi_nvfp4 knobs=auto | 2389111 | auto+sharedws correctness | *running* | logs/smoke_nvfp4_auto.log |
+| 15 | smoke fi_nvfp4 knobs=auto | 2389111 | auto+sharedws correctness | SANE: \|dlp\| 0.03-0.15 vs native (same band as default nvfp4); auto e2e loss is a real perf effect, not corruption | results/smoke_fi_nvfp4_auto.json |
 
 ## Open items / next-run plan
 
