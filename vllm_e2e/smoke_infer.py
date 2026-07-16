@@ -60,7 +60,7 @@ def main() -> None:
         max_num_batched_tokens=args.max_num_batched_tokens,
         enforce_eager=args.enforce_eager,
         kv_cache_dtype="fp8",
-        block_size=64,
+        block_size=256,
     )
     sp = SamplingParams(temperature=0.0, max_tokens=args.max_tokens, logprobs=1)
     outputs = llm.generate(PROMPTS, sp)

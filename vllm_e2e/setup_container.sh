@@ -22,17 +22,43 @@ fi
 source "$VENV/bin/activate"
 
 set -x
+# 0) venv ships pip 24.0 whose resolver crashes (TypeError ... NoneType) on the
+#    NGC dist metadata visible through system-site-packages; upgrade first.
+python -m pip install -q --upgrade pip
+
 # 1) vLLM 0.25.1 wheel + its dep closure (torch 2.11 etc. land in the venv).
+#    vllm's compiled ops use the stable libtorch ABI (_C_stable_libtorch), so
+#    the exact torch minor doesn't have to match the container's NGC torch.
 python -m pip install vllm==0.25.1
 
-# 2) flashinfer branch (editable, JIT) — overrides the flashinfer-python pin.
-BUILD_NIXL_EP=0 python -m pip install --no-build-isolation -e "$REPO"
+# 2) flashinfer branch (editable, JIT) — replaces the flashinfer-python==0.6.13
+#    wheel vllm just pulled in. --no-deps: the dep closure is already satisfied
+#    and the full resolve trips over NGC system-site metadata.
+python -m pip uninstall -y -q flashinfer-python || true
+BUILD_NIXL_EP=0 python -m pip install --no-build-isolation --no-deps -e "$REPO"
 
-# 3) CuTe-DSL runtime >=4.6.1: vllm pins 4.5.2, which compiles the cutedsl
+# 3) CuTe-DSL runtime 4.6.1: vllm pins 4.5.2, which compiles the cutedsl
 #    mega kernels 34-54% slower (TUNING.md "CuTe-DSL runtime sensitivity").
-#    Native deep_gemm paths don't touch cutlass-dsl, so the upgrade only
-#    affects the fi cutedsl kernels (where it is required).
-python -m pip install --upgrade "nvidia-cutlass-dsl[cu13]>=4.6.1"
+#    vllm's DSV4 sparse-MLA indexer imports quack, and the quack version vllm
+#    resolves (0.3.x) breaks on dsl>=4.6 (cute.core.ThrMma removed) — upgrade
+#    quack to 0.6.1 (imports fine on 4.6.1 despite its ==4.6.0 metadata pin),
+#    then force every dsl component to 4.6.1.
+python -m pip install --upgrade "quack-kernels==0.6.1"
+python -m pip install --upgrade "nvidia-cutlass-dsl[cu13]==4.6.1"
+# dsl 4.6.1's tvm_ffi_provider needs make_kwargs_wrapper(map_dataclass_to_tuple=),
+# absent from the apache-tvm-ffi 0.1.9 wheel vllm resolves; tilelang (vllm's mhc
+# kernels) breaks on tvm-ffi 0.1.12's new registry. The intersection that keeps
+# dsl 4.6.1 AND tilelang alive: tvm-ffi 0.1.11 + tilelang 0.1.12 (vllm pins
+# tilelang==0.1.9 — resolver warning expected).
+python -m pip install --upgrade "apache-tvm-ffi==0.1.11" "tilelang==0.1.12"
+
+# 3b) vLLM's vendored CuTe kernels (vllm_flash_attn/cute, third_party/
+#     fmha_sm100) still reference cute.core.ThrMma, which 4.6 moved to
+#     cutlass.cute.ThrMma (cute/atom.py). Pure rename — patch in place.
+VLLM_DIR="$(python -c 'import vllm, os; print(os.path.dirname(vllm.__file__))')"
+grep -rl "cute\.core\.ThrMma" --include="*.py" "$VLLM_DIR" 2>/dev/null | \
+    while read -r f; do sed -i "s/cute\.core\.ThrMma/cute.ThrMma/g" "$f"; done
+find "$VLLM_DIR/vllm_flash_attn" "$VLLM_DIR/third_party" -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
 
 # 4) Patch the installed vLLM with the fi moe_ep integration.
 bash "$HERE/patch_0251/apply.sh"
@@ -52,7 +78,7 @@ import os
 check("torch", lambda: __import__("torch").__version__)
 check("torch.cuda built", lambda: __import__("torch").version.cuda)
 check("vllm", lambda: __import__("vllm").__version__)
-check("vllm._C", lambda: bool(importlib.import_module("vllm._C")) or "loaded")
+check("vllm custom ops", lambda: bool(importlib.import_module("vllm._custom_ops")) and "loaded")
 check("deep_gemm", lambda: importlib.import_module("deep_gemm").__file__)
 check("deep_gemm.fp8_fp4_mega_moe", lambda: bool(getattr(importlib.import_module("deep_gemm"), "fp8_fp4_mega_moe")) and "present")
 check("flashinfer", lambda: importlib.import_module("flashinfer").__file__)

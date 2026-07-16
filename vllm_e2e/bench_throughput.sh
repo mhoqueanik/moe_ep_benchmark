@@ -52,7 +52,7 @@ for backend in $BACKENDS; do
             --model "$MODEL" --trust-remote-code --tokenizer-mode deepseek_v4 \
             --tensor-parallel-size 4 --enable-expert-parallel \
             --moe-backend deep_gemm_mega_moe \
-            --kv-cache-dtype fp8 --block-size 64 \
+            --kv-cache-dtype fp8 --block-size 256 \
             --max-model-len 4096 --max-num-batched-tokens "$MAX_BATCHED_TOKENS" \
             --input-len "$ilen" --output-len "$olen" --num-prompts "$NUM_PROMPTS" \
             --output-json "$HERE/results/bench_${STAMP}_${backend}_${name}.json" \

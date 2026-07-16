@@ -108,7 +108,7 @@ def ensure_fi_moe_ep_runtime(vllm_config: "VllmConfig") -> None:
     if _FI_RUNTIME_HANDLE is not None:
         return
 
-    from flashinfer.moe_ep import bootstrap_moe_ep_runtime, ensure_moe_ep_cuda_device
+    from flashinfer.moe_ep import bootstrap_moe_ep_runtime
 
     if not _has_fi_moe_ep_runtime():
         raise ImportError(
@@ -118,7 +118,20 @@ def ensure_fi_moe_ep_runtime(vllm_config: "VllmConfig") -> None:
 
     bootstrap = make_fi_moe_ep_bootstrap()
     megakernel = resolve_fi_megakernel(vllm_config)
-    ensure_moe_ep_cuda_device(bootstrap)
+    # flashinfer's runtime/layer constructors bind the process to
+    # cuda:LOCAL_RANK (falling back to bootstrap.rank). vLLM has already bound
+    # this worker to its (possibly remapped) visible device, and a mismatched
+    # rebind launches the weight transforms on the wrong GPU against another
+    # device's pointers (observed as CUDA_ERROR_ILLEGAL_ADDRESS in the
+    # deep_gemm transform_sf during load). Pin LOCAL_RANK to the device vLLM
+    # chose so every internal set_device is a no-op.
+    os.environ["LOCAL_RANK"] = str(torch.cuda.current_device())
+    print(
+        f"[fi_moe_ep] ep_rank={bootstrap.rank} world={bootstrap.world_size} "
+        f"cuda.current_device={torch.cuda.current_device()} "
+        f"megakernel={megakernel}",
+        flush=True,
+    )
     _FI_RUNTIME_HANDLE = bootstrap_moe_ep_runtime(
         bootstrap,
         megakernel_runtime_requirements(megakernel),
