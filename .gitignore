@@ -1,0 +1,14 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Virtualenvs
+vllm_e2e/venv*/
+
+# Run logs and job-done markers
+*.log
+*.done
+
+# Nsight Systems profiling dumps (large binaries)
+*.nsys-rep
+*.sqlite
