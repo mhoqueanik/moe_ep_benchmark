@@ -1,0 +1,34 @@
+{
+ "tag": "lyr_fi_nvfp4",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 64,
+ "eager": true,
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl",
+ "median_total_tok_per_s": 20168.030790604258,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 10.00857984693721,
+   "total_tok_per_s": 6554.37644533302,
+   "output_tok_per_s": 6.394513605202945
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 3.2526725430507213,
+   "total_tok_per_s": 20168.030790604258,
+   "output_tok_per_s": 19.67612760058952
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 20.162026733974926,
+   "total_tok_per_s": 3253.6411574863046,
+   "output_tok_per_s": 3.1742840560841996
+  }
+ ]
+}

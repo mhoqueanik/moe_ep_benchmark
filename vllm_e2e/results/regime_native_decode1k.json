@@ -1,0 +1,42 @@
+{
+ "tag": "native_dec1k",
+ "workload": "decode",
+ "input_len": 128,
+ "output_len": 256,
+ "num_prompts": 1024,
+ "eager": false,
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-flash/hf/hf-6e76323_orig",
+ "fi_moe_ep": "0",
+ "fi_megakernel": "deep_gemm_mega",
+ "median_total_tok_per_s": 24901.820090946454,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 14.123431294996408,
+   "total_tok_per_s": 27841.392915566274,
+   "output_tok_per_s": 18560.928610377516
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 14.230038401001366,
+   "total_tok_per_s": 27632.813694468277,
+   "output_tok_per_s": 18421.875796312186
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 15.7906529949978,
+   "total_tok_per_s": 24901.820090946454,
+   "output_tok_per_s": 16601.213393964303
+  },
+  {
+   "round": 3,
+   "warmup": false,
+   "elapsed_s": 16.46251580999524,
+   "total_tok_per_s": 23885.535147748098,
+   "output_tok_per_s": 15923.690098498731
+  }
+ ]
+}

@@ -1,0 +1,56 @@
+{
+ "tag": "comm_native_dec1k",
+ "workload": "decode",
+ "input_len": 128,
+ "output_len": 256,
+ "num_prompts": 1024,
+ "eager": false,
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-flash/hf/hf-6e76323_orig",
+ "fi_moe_ep": "0",
+ "fi_megakernel": "deep_gemm_mega",
+ "median_total_tok_per_s": 28318.17971590497,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 14.496011509996606,
+   "total_tok_per_s": 27125.80627635636,
+   "output_tok_per_s": 18083.87085090424
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 13.930493644002127,
+   "total_tok_per_s": 28226.99683505487,
+   "output_tok_per_s": 18817.99789003658
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 13.885638270003255,
+   "total_tok_per_s": 28318.17971590497,
+   "output_tok_per_s": 18878.786477269983
+  }
+ ],
+ "nvlink": {
+  "span_s": 27.957923925991054,
+  "per_gpu": {
+   "0": {
+    "tx_gb": 2822.244132,
+    "rx_gb": 2780.7634
+   },
+   "1": {
+    "tx_gb": 2718.043951,
+    "rx_gb": 2757.121687
+   },
+   "2": {
+    "tx_gb": 2756.361959,
+    "rx_gb": 2765.851176
+   },
+   "3": {
+    "tx_gb": 2777.769683,
+    "rx_gb": 2770.683462
+   }
+  }
+ }
+}

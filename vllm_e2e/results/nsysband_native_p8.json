@@ -1,0 +1,35 @@
+{
+ "tag": "nsysband_native_p8",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 256,
+ "eager": false,
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-flash/hf/hf-6e76323_orig",
+ "fi_moe_ep": "0",
+ "fi_megakernel": "deep_gemm_mega",
+ "median_total_tok_per_s": 45782.273451308916,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 5.915469799016137,
+   "total_tok_per_s": 44358.26889753414,
+   "output_tok_per_s": 43.276359900033306
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 5.779397976002656,
+   "total_tok_per_s": 45402.65285234605,
+   "output_tok_per_s": 44.29527107545957
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 5.7314759669825435,
+   "total_tok_per_s": 45782.273451308916,
+   "output_tok_per_s": 44.665632635423336
+  }
+ ]
+}

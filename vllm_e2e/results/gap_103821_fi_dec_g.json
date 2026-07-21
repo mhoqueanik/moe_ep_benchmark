@@ -1,0 +1,34 @@
+{
+ "tag": "fi_dec_g",
+ "workload": "decode",
+ "input_len": 128,
+ "output_len": 256,
+ "num_prompts": 64,
+ "eager": false,
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl",
+ "median_total_tok_per_s": 5955.936498494219,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 4.43020785797853,
+   "total_tok_per_s": 5547.369511283798,
+   "output_tok_per_s": 3698.246340855865
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 4.1306291749933735,
+   "total_tok_per_s": 5949.69893419189,
+   "output_tok_per_s": 3966.465956127927
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 4.126303228083998,
+   "total_tok_per_s": 5955.936498494219,
+   "output_tok_per_s": 3970.6243323294793
+  }
+ ]
+}

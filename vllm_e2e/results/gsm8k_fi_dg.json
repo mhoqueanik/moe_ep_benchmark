@@ -1,0 +1,12 @@
+{
+ "tag": "fi_dg",
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-flash/hf/hf-6e76323_orig",
+ "num_questions": 200,
+ "accuracy": 0.965,
+ "correct": 193,
+ "invalid": 0,
+ "elapsed_s": 71.14500447400496,
+ "eager": true,
+ "fi_moe_ep": "1",
+ "fi_megakernel": "deep_gemm_mega"
+}

@@ -1,0 +1,45 @@
+{
+ "tag": "native_dp4",
+ "workload": "decode",
+ "dp": 4,
+ "tp": 1,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "seconds": 64.64669721596874,
+   "total_tok_per_s": 760.3172647133888
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "seconds": 52.26053039601538,
+   "total_tok_per_s": 940.518583097802
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "seconds": 51.70781390205957,
+   "total_tok_per_s": 950.5719985203674
+  },
+  {
+   "round": 3,
+   "warmup": false,
+   "seconds": 40.23590122302994,
+   "total_tok_per_s": 1221.5956025825694
+  },
+  {
+   "round": 4,
+   "warmup": false,
+   "seconds": 50.60543435707223,
+   "total_tok_per_s": 971.2790854275297
+  },
+  {
+   "round": 5,
+   "warmup": false,
+   "seconds": 39.05385325092357,
+   "total_tok_per_s": 1258.5697929521878
+  }
+ ],
+ "median_total_tok_per_s": 971.2790854275297
+}

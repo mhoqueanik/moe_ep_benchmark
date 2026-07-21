@@ -1,0 +1,34 @@
+{
+ "tag": "native_dec_g",
+ "workload": "decode",
+ "input_len": 128,
+ "output_len": 256,
+ "num_prompts": 64,
+ "eager": false,
+ "fi_moe_ep": "0",
+ "fi_megakernel": "deep_gemm_mega",
+ "median_total_tok_per_s": 6206.316544641519,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 4.300533940084279,
+   "total_tok_per_s": 5714.639238382195,
+   "output_tok_per_s": 3809.7594922547964
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 3.976958559011109,
+   "total_tok_per_s": 6179.596703192941,
+   "output_tok_per_s": 4119.731135461961
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 3.9598366959253326,
+   "total_tok_per_s": 6206.316544641519,
+   "output_tok_per_s": 4137.544363094346
+  }
+ ]
+}

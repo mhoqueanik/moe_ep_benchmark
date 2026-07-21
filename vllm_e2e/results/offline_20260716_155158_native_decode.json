@@ -1,0 +1,55 @@
+{
+ "tag": "native",
+ "workload": "decode",
+ "input_len": 128,
+ "output_len": 256,
+ "num_prompts": 128,
+ "eager": true,
+ "fi_moe_ep": "0",
+ "fi_megakernel": "deep_gemm_mega",
+ "median_total_tok_per_s": 1652.625008375928,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 66.680609377996,
+   "total_tok_per_s": 737.1258370086179,
+   "output_tok_per_s": 491.4172246724119
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 29.47680125899933,
+   "total_tok_per_s": 1667.480795087757,
+   "output_tok_per_s": 1111.653863391838
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 29.513558591002948,
+   "total_tok_per_s": 1665.4040497503315,
+   "output_tok_per_s": 1110.2693665002212
+  },
+  {
+   "round": 3,
+   "warmup": false,
+   "elapsed_s": 29.884973981999792,
+   "total_tok_per_s": 1644.706133242915,
+   "output_tok_per_s": 1096.4707554952768
+  },
+  {
+   "round": 4,
+   "warmup": false,
+   "elapsed_s": 29.85456285100372,
+   "total_tok_per_s": 1646.3815010557923,
+   "output_tok_per_s": 1097.5876673705282
+  },
+  {
+   "round": 5,
+   "warmup": false,
+   "elapsed_s": 29.7417742990001,
+   "total_tok_per_s": 1652.625008375928,
+   "output_tok_per_s": 1101.750005583952
+  }
+ ]
+}

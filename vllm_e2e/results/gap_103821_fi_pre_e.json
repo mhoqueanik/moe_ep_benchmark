@@ -1,0 +1,34 @@
+{
+ "tag": "fi_pre_e",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 64,
+ "eager": true,
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl",
+ "median_total_tok_per_s": 19074.68683113749,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 3.7295434279367328,
+   "total_tok_per_s": 17589.28439031246,
+   "output_tok_per_s": 17.160277453963378
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 3.4391128190327436,
+   "total_tok_per_s": 19074.68683113749,
+   "output_tok_per_s": 18.609450566963403
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 3.8759716959903017,
+   "total_tok_per_s": 16924.7881938517,
+   "output_tok_per_s": 16.511988481806533
+  }
+ ]
+}

@@ -1,0 +1,27 @@
+{
+ "tag": "glue_native",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 16,
+ "eager": true,
+ "fi_moe_ep": "0",
+ "fi_megakernel": "deep_gemm_mega",
+ "median_total_tok_per_s": 12769.29374706373,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 5.14532602194231,
+   "total_tok_per_s": 3187.3587660066605,
+   "output_tok_per_s": 3.109618308299181
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 1.284331015078351,
+   "total_tok_per_s": 12769.29374706373,
+   "output_tok_per_s": 12.457847558110956
+  }
+ ]
+}

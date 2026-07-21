@@ -1,0 +1,63 @@
+{
+ "tag": "comm_native_pre8k",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 256,
+ "eager": false,
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-flash/hf/hf-6e76323_orig",
+ "fi_moe_ep": "0",
+ "fi_megakernel": "deep_gemm_mega",
+ "median_total_tok_per_s": 45803.57490796555,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 5.821996683007455,
+   "total_tok_per_s": 45070.44821338727,
+   "output_tok_per_s": 43.97116898867051
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 5.686598402011441,
+   "total_tok_per_s": 46143.57854199532,
+   "output_tok_per_s": 45.0181254068247
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 5.761835041004815,
+   "total_tok_per_s": 45541.046929076896,
+   "output_tok_per_s": 44.43028968690429
+  },
+  {
+   "round": 3,
+   "warmup": false,
+   "elapsed_s": 5.7288104809995275,
+   "total_tok_per_s": 45803.57490796555,
+   "output_tok_per_s": 44.68641454435663
+  }
+ ],
+ "nvlink": {
+  "span_s": 17.315565040000365,
+  "per_gpu": {
+   "0": {
+    "tx_gb": 2783.75264,
+    "rx_gb": 2709.75968
+   },
+   "1": {
+    "tx_gb": 2603.531568,
+    "rx_gb": 2668.922155
+   },
+   "2": {
+    "tx_gb": 2639.221047,
+    "rx_gb": 2677.072644
+   },
+   "3": {
+    "tx_gb": 2725.953598,
+    "rx_gb": 2696.704372
+   }
+  }
+ }
+}

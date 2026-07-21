@@ -1,0 +1,34 @@
+{
+ "tag": "prof_native",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 64,
+ "eager": true,
+ "fi_moe_ep": "0",
+ "fi_megakernel": "deep_gemm_mega",
+ "median_total_tok_per_s": 23155.064321283207,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 20.307918499980588,
+   "total_tok_per_s": 3230.267050759668,
+   "output_tok_per_s": 3.1514800495216275
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 13.127371329988819,
+   "total_tok_per_s": 4997.192381550151,
+   "output_tok_per_s": 4.875309640536733
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 2.8330735380295664,
+   "total_tok_per_s": 23155.064321283207,
+   "output_tok_per_s": 22.590306654910446
+  }
+ ]
+}

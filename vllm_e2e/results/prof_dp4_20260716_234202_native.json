@@ -1,0 +1,27 @@
+{
+ "tag": "prof_native_dp4",
+ "workload": "prefill",
+ "dp": 4,
+ "tp": 1,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "seconds": 5.68669157999102,
+   "total_tok_per_s": 11535.705616745192
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "seconds": 4.411246908013709,
+   "total_tok_per_s": 14871.078714915619
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "seconds": 4.386392982909456,
+   "total_tok_per_s": 14955.340357235411
+  }
+ ],
+ "median_total_tok_per_s": 14955.340357235411
+}

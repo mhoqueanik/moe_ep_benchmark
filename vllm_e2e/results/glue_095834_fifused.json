@@ -1,0 +1,27 @@
+{
+ "tag": "glue_fifused",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 16,
+ "eager": true,
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl",
+ "median_total_tok_per_s": 906.4264686348517,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 7.7034959309967235,
+   "total_tok_per_s": 2128.9035714305974,
+   "output_tok_per_s": 2.0769790940786317
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 18.093028577044606,
+   "total_tok_per_s": 906.4264686348517,
+   "output_tok_per_s": 0.8843185059852212
+  }
+ ]
+}

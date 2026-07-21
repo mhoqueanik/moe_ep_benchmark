@@ -1,0 +1,57 @@
+{
+ "tag": "dcap_fi_dec2kknobs",
+ "workload": "decode",
+ "input_len": 128,
+ "output_len": 256,
+ "num_prompts": 1024,
+ "eager": false,
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/nvidia_deepseek-v4-flash-nvfp4/hf/hf-48bfe38_orig",
+ "cutlass_dsl_version": "4.6.1",
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl",
+ "median_total_tok_per_s": 33921.72277721284,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 12.344790521077812,
+   "total_tok_per_s": 31852.788374870594,
+   "output_tok_per_s": 21235.19224991373
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 11.616980185033754,
+   "total_tok_per_s": 33848.38346428302,
+   "output_tok_per_s": 22565.58897618868
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 11.555626554996707,
+   "total_tok_per_s": 34028.09861746281,
+   "output_tok_per_s": 22685.399078308543
+  },
+  {
+   "round": 3,
+   "warmup": false,
+   "elapsed_s": 11.60148231300991,
+   "total_tok_per_s": 33893.59992033495,
+   "output_tok_per_s": 22595.7332802233
+  },
+  {
+   "round": 4,
+   "warmup": false,
+   "elapsed_s": 11.551461758906953,
+   "total_tok_per_s": 34040.36720260135,
+   "output_tok_per_s": 22693.578135067568
+  },
+  {
+   "round": 5,
+   "warmup": false,
+   "elapsed_s": 11.591864086105488,
+   "total_tok_per_s": 33921.72277721284,
+   "output_tok_per_s": 22614.481851475226
+  }
+ ]
+}

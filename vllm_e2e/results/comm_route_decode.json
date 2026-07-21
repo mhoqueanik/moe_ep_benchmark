@@ -1,0 +1,28 @@
+{
+ "tag": "comm_route_dec",
+ "workload": "decode",
+ "input_len": 128,
+ "output_len": 32,
+ "num_prompts": 128,
+ "eager": true,
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/nvidia_deepseek-v4-flash-nvfp4/hf/hf-48bfe38_orig",
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl",
+ "median_total_tok_per_s": 3250.240870464515,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 6.825265082996339,
+   "total_tok_per_s": 3000.6160568065643,
+   "output_tok_per_s": 600.1232113613128
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 6.301071463996777,
+   "total_tok_per_s": 3250.240870464515,
+   "output_tok_per_s": 650.048174092903
+  }
+ ]
+}

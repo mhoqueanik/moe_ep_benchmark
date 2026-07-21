@@ -1,0 +1,27 @@
+{
+ "tag": "prof_fi_nvfp4_dp4",
+ "workload": "prefill",
+ "dp": 4,
+ "tp": 1,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "seconds": 6.054522247985005,
+   "total_tok_per_s": 10834.876363999194
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "seconds": 5.153871395043097,
+   "total_tok_per_s": 12728.29587154482
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "seconds": 5.963337474968284,
+   "total_tok_per_s": 11000.551331425175
+  }
+ ],
+ "median_total_tok_per_s": 12728.29587154482
+}

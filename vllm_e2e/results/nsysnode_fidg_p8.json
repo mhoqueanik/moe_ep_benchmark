@@ -1,0 +1,29 @@
+{
+ "tag": "nsysnode_fidg_p8",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 256,
+ "eager": false,
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-flash/hf/hf-6e76323_orig",
+ "cutlass_dsl_version": "4.6.1",
+ "fi_moe_ep": "1",
+ "fi_megakernel": "deep_gemm_mega",
+ "median_total_tok_per_s": 46894.18452322276,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 5.739528853999218,
+   "total_tok_per_s": 45718.03830503676,
+   "output_tok_per_s": 44.60296420003586
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 5.595576566003729,
+   "total_tok_per_s": 46894.18452322276,
+   "output_tok_per_s": 45.750423925095376
+  }
+ ]
+}

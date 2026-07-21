@@ -1,0 +1,34 @@
+{
+ "tag": "cap4k_fi",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 64,
+ "eager": false,
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl",
+ "median_total_tok_per_s": 48430.657979238196,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 1.555959235993214,
+   "total_tok_per_s": 42160.48755167137,
+   "output_tok_per_s": 41.13218297724037
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 1.3545139119960368,
+   "total_tok_per_s": 48430.657979238196,
+   "output_tok_per_s": 47.24942241876897
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 1.3787205460248515,
+   "total_tok_per_s": 47580.34555235935,
+   "output_tok_per_s": 46.419849319374975
+  }
+ ]
+}

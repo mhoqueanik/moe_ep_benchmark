@@ -1,0 +1,63 @@
+{
+ "tag": "comm_fi_pre8k",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 256,
+ "eager": false,
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/nvidia_deepseek-v4-flash-nvfp4/hf/hf-48bfe38_orig",
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl",
+ "median_total_tok_per_s": 53458.65468632667,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 4.936325392001891,
+   "total_tok_per_s": 53156.949585445705,
+   "output_tok_per_s": 51.860438619947026
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 4.914907672995469,
+   "total_tok_per_s": 53388.59190412343,
+   "output_tok_per_s": 52.08643112597408
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 4.854171295999549,
+   "total_tok_per_s": 54056.60080769106,
+   "output_tok_per_s": 52.738147129454696
+  },
+  {
+   "round": 3,
+   "warmup": false,
+   "elapsed_s": 4.908466207009042,
+   "total_tok_per_s": 53458.65468632667,
+   "output_tok_per_s": 52.1547850598309
+  }
+ ],
+ "nvlink": {
+  "span_s": 14.81734800900449,
+  "per_gpu": {
+   "0": {
+    "tx_gb": 2512.924176,
+    "rx_gb": 2402.006888
+   },
+   "1": {
+    "tx_gb": 2314.136344,
+    "rx_gb": 2412.35744
+   },
+   "2": {
+    "tx_gb": 2353.62234,
+    "rx_gb": 2410.359257
+   },
+   "3": {
+    "tx_gb": 2449.392076,
+    "rx_gb": 2405.351345
+   }
+  }
+ }
+}

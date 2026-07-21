@@ -1,0 +1,34 @@
+{
+ "tag": "prof_fi_dg",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 64,
+ "eager": true,
+ "fi_moe_ep": "1",
+ "fi_megakernel": "deep_gemm_mega",
+ "median_total_tok_per_s": 19586.377478084756,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 3.8830286960001104,
+   "total_tok_per_s": 16894.02915501867,
+   "output_tok_per_s": 16.48197966343285
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 3.84759281296283,
+   "total_tok_per_s": 17049.621201856044,
+   "output_tok_per_s": 16.63377678229858
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 3.349266604986042,
+   "total_tok_per_s": 19586.377478084756,
+   "output_tok_per_s": 19.10866095422903
+  }
+ ]
+}

@@ -1,0 +1,34 @@
+{
+ "tag": "prof_fi_nvfp4",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 64,
+ "eager": true,
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl",
+ "median_total_tok_per_s": 18451.727868262016,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 3.615234318000148,
+   "total_tok_per_s": 18145.43518614533,
+   "output_tok_per_s": 17.702863596239347
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 3.7700518669953453,
+   "total_tok_per_s": 17400.291113841326,
+   "output_tok_per_s": 16.975893769601292
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 3.55522260399448,
+   "total_tok_per_s": 18451.727868262016,
+   "output_tok_per_s": 18.001685725133676
+  }
+ ]
+}

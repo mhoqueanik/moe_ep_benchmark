@@ -455,6 +455,8 @@ class DeepseekV4MegaMoEExperts(nn.Module):
 
         symm_buffer = self.get_symm_buffer()
         num_tokens = hidden_states.shape[0]
+        from vllm.models.deepseek_v4.nvidia.fi_utils import log_step_shape
+        log_step_shape(num_tokens)
         is_padding = None
         if envs.VLLM_MOE_SKIP_PADDING and is_forward_context_available():
             is_padding = get_forward_context().is_padding

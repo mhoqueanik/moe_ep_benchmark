@@ -1,0 +1,34 @@
+{
+ "tag": "cap4k_native",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 64,
+ "eager": false,
+ "fi_moe_ep": "0",
+ "fi_megakernel": "deep_gemm_mega",
+ "median_total_tok_per_s": 42247.56404445258,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 1.6865025650185999,
+   "total_tok_per_s": 38897.06506273622,
+   "output_tok_per_s": 37.94835615876704
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 1.5527522469928954,
+   "total_tok_per_s": 42247.56404445258,
+   "output_tok_per_s": 41.21713565312447
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 1.553126421989873,
+   "total_tok_per_s": 42237.38587613039,
+   "output_tok_per_s": 41.207205732810145
+  }
+ ]
+}

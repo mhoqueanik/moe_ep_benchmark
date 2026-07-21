@@ -1,0 +1,45 @@
+{
+ "tag": "fi_nvfp4_dp4",
+ "workload": "prefill",
+ "dp": 4,
+ "tp": 1,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "seconds": 4.325947484001517,
+   "total_tok_per_s": 30328.61598186567
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "seconds": 3.996822047047317,
+   "total_tok_per_s": 32826.079934413145
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "seconds": 3.6841787110315636,
+   "total_tok_per_s": 35611.736099322996
+  },
+  {
+   "round": 3,
+   "warmup": false,
+   "seconds": 3.872913404018618,
+   "total_tok_per_s": 33876.306106886885
+  },
+  {
+   "round": 4,
+   "warmup": false,
+   "seconds": 3.703426709980704,
+   "total_tok_per_s": 35426.649499075305
+  },
+  {
+   "round": 5,
+   "warmup": false,
+   "seconds": 3.707076085964218,
+   "total_tok_per_s": 35391.77426024549
+  }
+ ],
+ "median_total_tok_per_s": 35391.77426024549
+}

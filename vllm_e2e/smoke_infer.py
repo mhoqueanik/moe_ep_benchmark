@@ -59,6 +59,11 @@ def main() -> None:
         max_model_len=args.max_model_len,
         max_num_batched_tokens=args.max_num_batched_tokens,
         enforce_eager=args.enforce_eager,
+        **(
+            {"compilation_config": {"max_cudagraph_capture_size": int(os.environ["MAX_CAPTURE"])}}
+            if os.environ.get("MAX_CAPTURE")
+            else {}
+        ),
         kv_cache_dtype="fp8",
         block_size=256,
     )

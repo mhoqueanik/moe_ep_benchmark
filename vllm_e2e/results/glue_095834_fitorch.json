@@ -1,0 +1,27 @@
+{
+ "tag": "glue_fitorch",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 16,
+ "eager": true,
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl",
+ "median_total_tok_per_s": 15187.339747621372,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 1.796568329911679,
+   "total_tok_per_s": 9128.514472258476,
+   "output_tok_per_s": 8.905867777813146
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 1.0798467850545421,
+   "total_tok_per_s": 15187.339747621372,
+   "output_tok_per_s": 14.816916826947681
+  }
+ ]
+}

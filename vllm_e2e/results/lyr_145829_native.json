@@ -1,0 +1,34 @@
+{
+ "tag": "lyr_native",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 64,
+ "eager": true,
+ "fi_moe_ep": "0",
+ "fi_megakernel": "deep_gemm_mega",
+ "median_total_tok_per_s": 21655.021301859455,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 7.075615121982992,
+   "total_tok_per_s": 9271.278732528788,
+   "output_tok_per_s": 9.045149982954916
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 3.3220102799823508,
+   "total_tok_per_s": 19747.079169287976,
+   "output_tok_per_s": 19.26544309198827
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 3.029320501955226,
+   "total_tok_per_s": 21655.021301859455,
+   "output_tok_per_s": 21.12685005059459
+  }
+ ]
+}

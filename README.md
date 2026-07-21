@@ -2,6 +2,13 @@
 
 Single-node MoE expert-parallel microbenchmarks. Each variant launches one process per GPU (`torch.multiprocessing`), mirroring DP=N + EP (TP=1).
 
+> **New here to verify fi moe_ep, or to integrate it into a serving
+> framework (SGLang, TRT-LLM, ...)?** Start with [SKILL.md](SKILL.md) — the
+> verification ladder (contracts -> oracle -> multi-rank -> microbench ->
+> e2e with the GSM8K gate) and the framework-integration contract
+> checklist, with this repo's vLLM patch (`vllm_e2e/patch_0251/`) as the
+> worked example.
+
 ## Subsections
 
 | Section | Script | Backends |

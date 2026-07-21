@@ -1,0 +1,56 @@
+{
+ "tag": "comm_fi_dec1k",
+ "workload": "decode",
+ "input_len": 128,
+ "output_len": 256,
+ "num_prompts": 1024,
+ "eager": false,
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/nvidia_deepseek-v4-flash-nvfp4/hf/hf-48bfe38_orig",
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl",
+ "median_total_tok_per_s": 27998.291722574708,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 14.398673756004428,
+   "total_tok_per_s": 27309.181849892528,
+   "output_tok_per_s": 18206.121233261685
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 14.044285411990131,
+   "total_tok_per_s": 27998.291722574708,
+   "output_tok_per_s": 18665.527815049805
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 14.060708101998898,
+   "total_tok_per_s": 27965.590150050808,
+   "output_tok_per_s": 18643.72676670054
+  }
+ ],
+ "nvlink": {
+  "span_s": 28.24222932200064,
+  "per_gpu": {
+   "0": {
+    "tx_gb": 2543.65895,
+    "rx_gb": 2480.769437
+   },
+   "1": {
+    "tx_gb": 2427.104218,
+    "rx_gb": 2486.804715
+   },
+   "2": {
+    "tx_gb": 2471.434445,
+    "rx_gb": 2484.540742
+   },
+   "3": {
+    "tx_gb": 2493.306105,
+    "rx_gb": 2483.388831
+   }
+  }
+ }
+}

@@ -1,0 +1,42 @@
+{
+ "tag": "fi_nvfp4_dec1k",
+ "workload": "decode",
+ "input_len": 128,
+ "output_len": 256,
+ "num_prompts": 1024,
+ "eager": false,
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/nvidia_deepseek-v4-flash-nvfp4/hf/hf-48bfe38_orig",
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl",
+ "median_total_tok_per_s": 28120.008634504382,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 14.353014489999623,
+   "total_tok_per_s": 27396.056784724275,
+   "output_tok_per_s": 18264.03785648285
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 14.038055099008488,
+   "total_tok_per_s": 28010.717811456158,
+   "output_tok_per_s": 18673.811874304105
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 13.982283947014366,
+   "total_tok_per_s": 28122.4441936729,
+   "output_tok_per_s": 18748.296129115268
+  },
+  {
+   "round": 3,
+   "warmup": false,
+   "elapsed_s": 13.98349499500182,
+   "total_tok_per_s": 28120.008634504382,
+   "output_tok_per_s": 18746.67242300292
+  }
+ ]
+}

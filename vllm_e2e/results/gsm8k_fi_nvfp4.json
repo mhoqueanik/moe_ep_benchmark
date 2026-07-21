@@ -1,0 +1,12 @@
+{
+ "tag": "fi_nvfp4",
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/nvidia_deepseek-v4-flash-nvfp4/hf/hf-48bfe38_orig",
+ "num_questions": 200,
+ "accuracy": 0.975,
+ "correct": 195,
+ "invalid": 0,
+ "elapsed_s": 67.27490107202902,
+ "eager": true,
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl"
+}
