@@ -52,10 +52,10 @@ def main() -> None:
     llm = LLM(
         model=args.model,
         trust_remote_code=True,
-        tokenizer_mode="deepseek_v4",
+        tokenizer_mode=os.environ.get("TOKENIZER_MODE", "deepseek_v4"),
         tensor_parallel_size=args.tp,
         enable_expert_parallel=True,
-        moe_backend="deep_gemm_mega_moe",
+        moe_backend=os.environ.get("MOE_BACKEND", "deep_gemm_mega_moe"),
         max_model_len=args.max_model_len,
         max_num_batched_tokens=args.max_num_batched_tokens,
         enforce_eager=args.enforce_eager,

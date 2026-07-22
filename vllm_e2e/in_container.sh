@@ -18,5 +18,10 @@ exec srun --overlap --jobid="$JOBID" --ntasks=1 \
     export FLASHINFER_DISABLE_VERSION_CHECK=1
     export HF_HOME=$ROOT/.cache/huggingface
     export PIP_CACHE_DIR=$ROOT/.cache/pip
+    # Container runs as root: without this the flashinfer JIT cache lands in
+    # /root/.cache (container overlay, dies with the hold job) and every new
+    # job pays the full nvcc/cute.compile cost again (~30+ min for the trtllm
+    # moe module alone, observed 2026-07-21).
+    export FLASHINFER_WORKSPACE_BASE=$ROOT/.cache/flashinfer-root-ws
     $1
   "

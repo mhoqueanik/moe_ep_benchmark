@@ -351,7 +351,14 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
     num_local = cfg.num_experts // world
 
     assert cfg.num_experts % world == 0
-    assert cfg.hidden % 128 == 0 and cfg.intermediate % 128 == 0
+    # Alignment mirrors the per-backend library validation: deep_gemm's wire
+    # format is hard %128 (SFs packed 4-per-int32 word); the cutedsl kernels
+    # are tail-safe down to %64 (gpt-oss 2880/2880 runs on fp4 variants only).
+    align = 128 if cfg.mega_backend == "deep_gemm_mega" else 64
+    assert cfg.hidden % align == 0 and cfg.intermediate % align == 0, (
+        f"{cfg.mega_backend} needs hidden/intermediate % {align} == 0, "
+        f"got {cfg.hidden}/{cfg.intermediate}"
+    )
 
     megakernel_cfg = _build_megakernel_config(cfg)
     kernel = create_mega_kernel(megakernel_cfg)
