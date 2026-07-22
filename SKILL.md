@@ -16,8 +16,9 @@ Sibling repo referenced below:
 | this repo (`moe_ep_benchmark`) | microbench + `vllm_e2e/` (RUNBOOK, RUNS, FINDINGS, COMM, integration patch) |
 
 Hardware assumptions: GB200 / sm_100a, 4 GPUs for the standard multi-rank
-suite. Software: vLLM 0.25.1 era, CuTe-DSL **4.6.1** (4.5.2 compiles the
-same kernels 34–54% slower — pin it), `nvshmem4py-cu13`.
+suite. Software: vLLM 0.25.1 era, CuTe-DSL **>=4.5.2** (4.5.2 runs at 4.6.1
+parity since the 2026-07-22 MR!27 mainloop WAR in the fi branch; older
+4.5.x is 34–54% slower or fails to compile), `nvshmem4py-cu13`.
 
 ---
 

@@ -61,9 +61,11 @@ What it does (see the script):
 1. venv (`--system-site-packages`) at `vllm_e2e/venv0251` on lustre
 2. `pip install vllm==0.25.1` (wheel; brings its pinned torch)
 3. editable flashinfer branch install (JIT, `BUILD_NIXL_EP=0`)
-4. `nvidia-cutlass-dsl >= 4.6.1` (vllm pins 4.5.2, which is a 34-54% perf
-   regression for the cutedsl mega kernels — see
-   `flashinfer/moe_ep/kernel_src/cutedsl_megamoe/TUNING.md`)
+4. keeps vllm's own `nvidia-cutlass-dsl==4.5.2` pin — at 4.6.1 parity since
+   the 2026-07-22 MR!27 mainloop WAR in the fi branch (see
+   `flashinfer/moe_ep/kernel_src/cutedsl_megamoe/TUNING.md`). `DSL_461=1`
+   restores the pre-WAR force-upgrade to 4.6.1 (+ quack/tvm-ffi/tilelang
+   compat chain) that runs 37-40 were validated on.
 5. applies `patch_0251/` to the installed vllm; sanity import checks
    (every line should print PASS)
 
@@ -127,9 +129,11 @@ See `FINDINGS.md`.
 
 ## 7. Known caveats
 
-- vLLM 0.25.1 pins `nvidia-cutlass-dsl==4.5.2`; the setup force-upgrades to
-  >=4.6.1 (pip prints a resolver warning — expected). Only the fi cutedsl
-  kernels consume it.
+- vLLM 0.25.1 pins `nvidia-cutlass-dsl==4.5.2`; since the MR!27 WAR
+  (2026-07-22) the setup keeps that pin by default (`DSL_461=1` for the old
+  force-upgrade path). A venv built pre-WAR still contains 4.6.1 — `FRESH=1`
+  to rebuild on 4.5.2; native-4.5.2 e2e not yet revalidated (runs 37-40 were
+  on 4.6.1). Only the fi cutedsl kernels consume it.
 - flashinfer branch = 0.6.15 vs vllm pin 0.6.13 (editable install overrides;
   resolver warning expected).
 - cutedsl megakernels get the checkpoint's fp4/ue8m0-32 weights via a

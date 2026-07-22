@@ -54,7 +54,8 @@ srun -A coreai_libraries_cudnn -p batch -N 1 --ntasks-per-node=1 --time=02:00:00
     export FLASHINFER_DISABLE_VERSION_CHECK=1
     # 1) editable install of the branch (runbook §2a install; no build isolation)
     PIP_CONSTRAINT="" BUILD_NIXL_EP=0 python -m pip install --no-build-isolation -e .
-    # 1b) upgrade the CuTe-DSL runtime the cutedsl mega kernels need (cu13 build)
+    # 1b) upgrade the CuTe-DSL runtime the cutedsl mega kernels need (cu13
+    #     build; >=4.5.2 — 4.5.2 is at parity since the MR!27 WAR, 2026-07-22)
     python -m pip install --upgrade nvidia-cutlass-dsl[cu13]
     # 2) sanity: flashinfer must resolve to the checkout, not the image copy
     python -c "import flashinfer; print(flashinfer.__file__)"

@@ -153,7 +153,10 @@ bandwidth problem**. Wire quant only re-enters across IB / cross-clique.
 **E. Toolchain**
 13. cutlass-dsl 4.5.x emits 34-54% slower code than 4.6.1 for these kernels
     (vLLM pins 4.5.2). Known lowering regression we can work around in
-    kernel source?
+    kernel source? **ANSWERED 2026-07-22: yes — cutedsl_megamoe MR!27 peels
+    the last k-tile out of the fc12 MMA-consumer mainloop under ==4.5.2 and
+    restores full 4.6.1 parity (mxfp8 never regressed; only the nvfp4
+    swap-AB mainloop was affected).**
 14. `cute.compile` of one mega-kernel candidate takes **~12 min at
     256-expert geometries** (measured 2026-07-20; scales with experts/rank,
     not hidden). This makes on-hardware knob tuning nearly unusable. Is the

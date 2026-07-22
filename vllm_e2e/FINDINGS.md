@@ -192,12 +192,18 @@ All encoded in `setup_container.sh`; every bullet was a real breakage:
 | package | vllm 0.25.1 pin | what we run | why |
 |---|---|---|---|
 | torch | 2.11.0 | 2.11.0+cu130 (venv) | vllm ops use stable-libtorch ABI → NGC torch 2.12 mismatch is fine |
-| nvidia-cutlass-dsl | 4.5.2 | **4.6.1** | 4.5.2 compiles fi cutedsl mega kernels 34–54% slower (TUNING.md) |
-| quack-kernels | >=0.3.3 (resolves old) | 0.6.1 | old quack breaks on dsl 4.6 (`cute.core.ThrMma` removed) |
-| (vendored) vllm cute kernels | — | sed `cute.core.ThrMma`→`cute.ThrMma` | pure rename in dsl 4.6 |
-| apache-tvm-ffi | 0.1.9 | **0.1.11** | dsl 4.6.1 needs `make_kwargs_wrapper(map_dataclass_to_tuple=)`; 0.1.12 breaks tilelang |
-| tilelang | ==0.1.9 | 0.1.12 | 0.1.9 breaks on tvm-ffi >0.1.9 registry; 0.1.12 caps tvm-ffi at 0.1.11 |
+| nvidia-cutlass-dsl | 4.5.2 | **4.6.1** † | 4.5.2 compiled fi cutedsl mega kernels 34–54% slower (TUNING.md) — fixed 2026-07-22 by the MR!27 WAR |
+| quack-kernels | >=0.3.3 (resolves old) | 0.6.1 † | old quack breaks on dsl 4.6 (`cute.core.ThrMma` removed) |
+| (vendored) vllm cute kernels | — | sed `cute.core.ThrMma`→`cute.ThrMma` † | pure rename in dsl 4.6 |
+| apache-tvm-ffi | 0.1.9 | **0.1.11** † | dsl 4.6.1 needs `make_kwargs_wrapper(map_dataclass_to_tuple=)`; 0.1.12 breaks tilelang |
+| tilelang | ==0.1.9 | 0.1.12 † | 0.1.9 breaks on tvm-ffi >0.1.9 registry; 0.1.12 caps tvm-ffi at 0.1.11 |
 | flashinfer-python | ==0.6.13 | branch 0.6.15 editable, `--no-deps` | pip 24.0 resolver also crashes on NGC dist metadata |
+
+† Obsolete since 2026-07-22: the fi branch's MR!27 mainloop WAR puts dsl
+4.5.2 at 4.6.1 parity, so `setup_container.sh` now keeps vllm's own 4.5.2
+pin by default and the whole 4.6.1 compat chain (quack, ThrMma sed,
+tvm-ffi, tilelang) only applies under `DSL_461=1`. Runs 37-40 were measured
+on the 4.6.1 stack; native-4.5.2 e2e not yet revalidated.
 
 ## Status / next steps
 
