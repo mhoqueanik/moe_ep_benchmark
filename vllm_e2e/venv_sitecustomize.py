@@ -1,11 +1,13 @@
 # CuTe-DSL 4.6 compat for vLLM 0.25.1 vendored kernels (installed by
 # setup_container.sh as <venv>/lib/python3.12/site-packages/sitecustomize.py).
 #
-# vLLM 0.25.1 pins nvidia-cutlass-dsl==4.5.2; this venv runs 4.6.1 because the
-# flashinfer cutedsl mega kernels are 34-54% slower on 4.5.2. In 4.6 ThrMma
-# moved from cutlass.cute.core to cutlass.cute (cute/atom.py); vLLM's vendored
-# vllm_flash_attn/cute + third_party/fmha_sm100 still reference the old path.
-# Alias it back on first import of cutlass.cute.core.
+# vLLM 0.25.1 pins nvidia-cutlass-dsl==4.5.2, which is the default since the
+# fi MR!27 WAR (2026-07-22) put 4.5.2 at 4.6.1 parity; DSL_461=1 venvs (and
+# pre-WAR venvs) run 4.6.1. In 4.6 ThrMma moved from cutlass.cute.core to
+# cutlass.cute (cute/atom.py); vLLM's vendored vllm_flash_attn/cute +
+# third_party/fmha_sm100 still reference the old path. Alias it back on first
+# import of cutlass.cute.core — a no-op on 4.5.2, where the old path exists
+# (the hasattr guard below).
 import importlib
 import importlib.abc
 import sys
