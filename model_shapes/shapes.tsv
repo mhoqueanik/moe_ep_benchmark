@@ -1,0 +1,13 @@
+# MoE geometries of real models for the model-shape microbenchmark sweep
+# (model list mirrors the cudnn-frontend SDPA training benchmark, MoE models only;
+#  Llama 3.1 / Wan / LTX / AR-DiT are dense or attention-only and excluded).
+# Tab-separated: name	hidden	moe_inter	routed_experts	top_k	comment
+# DeepSeek + gpt-oss rows verified against local checkpoint configs under
+# /lustre/share/coreai_dlalgo_ci/artifacts/model/ (2026-07-21); Kimi/Qwen from
+# official HF configs (via ModelScope mirror, 2026-07-21).
+deepseek_v3	7168	2048	256	8	deepseek-ai/DeepSeek-V3 (V3.1/V3.2/R1 share this MoE geometry)
+kimi_k2_6	7168	2048	384	8	moonshotai/Kimi-K2.6 text_config (same as Kimi K2)
+gpt_oss_120b	2880	2880	128	4	openai/gpt-oss-120b (num_local_experts=128, no shared expert)
+qwen3_5_397b	4096	1024	512	10	Qwen/Qwen3.5-397B-A17B text_config (512 routed, top-10)
+deepseek_v4_flash	4096	2048	256	6	deepseek-ai_deepseek-v4-flash hf-6e76323 (e2e model)
+deepseek_v4_pro	7168	3072	384	6	deepseek-ai_deepseek-v4-pro hf-0366e4e (e2e model)
