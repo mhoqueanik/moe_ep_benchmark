@@ -111,6 +111,10 @@ def main() -> int:
     )
     args = ap.parse_args()
 
+    from bench_offline import assert_expected_dsl
+
+    assert_expected_dsl()
+
     name, ilen, olen = args.workload.split(":")
     ilen, olen = int(ilen), int(olen)
     if args.dp_port == 0:

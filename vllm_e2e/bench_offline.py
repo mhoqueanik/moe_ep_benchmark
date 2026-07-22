@@ -58,6 +58,29 @@ def _pkg_version(name: str) -> str | None:
         return None
 
 
+def assert_expected_dsl() -> None:
+    """Refuse to bench on an unintended CuTe-DSL runtime.
+
+    The fi cutedsl kernels' codegen is version-sensitive; since the MR!27
+    mainloop WAR (2026-07-22) the validated production runtime is 4.5.2
+    (vllm 0.25.1's own pin), so that's the default expectation. Set
+    EXPECT_DSL=4.6.1 when benching a DSL_461=1 venv, or EXPECT_DSL="" to
+    disable the guard. Complements the cutlass_dsl_version stamp in the
+    result JSON (a stamp audits after the fact; this stops a wrong-version
+    run before it burns a node-hour)."""
+    want = os.environ.get("EXPECT_DSL", "4.5.2")
+    if not want:
+        return
+    got = _pkg_version("nvidia-cutlass-dsl")
+    if got != want:
+        raise RuntimeError(
+            f"nvidia-cutlass-dsl {got!r} != EXPECT_DSL {want!r} — rebuild the "
+            "venv (FRESH=1 setup_container.sh) or set EXPECT_DSL to match "
+            "(empty string disables)"
+        )
+    print(f"[bench_offline] DSL guard: nvidia-cutlass-dsl == {got}", flush=True)
+
+
 def _read_nvlink_counters() -> dict | None:
     """Cumulative NVLink data counters (KiB) per GPU, summed over links.
 
@@ -116,6 +139,7 @@ def main() -> None:
     ap.add_argument("--enforce-eager", action="store_true",
                     default=os.environ.get("ENFORCE_EAGER", "1") == "1")
     args = ap.parse_args()
+    assert_expected_dsl()
     args.model = resolve_model(args.model)
     print(f"[bench_offline] {args.tag}: model = {args.model}", flush=True)
 
@@ -129,11 +153,13 @@ def main() -> None:
     llm = LLM(
         model=args.model,
         trust_remote_code=True,
-        tokenizer_mode="deepseek_v4",
+        # V4 models need the deepseek_v4 tokenizer; "auto" resolves V3.2 to
+        # its own mode (TOKENIZER_MODE=auto for deepseek_v32 checkpoints).
+        tokenizer_mode=os.environ.get("TOKENIZER_MODE", "deepseek_v4"),
         tensor_parallel_size=args.tp,
         data_parallel_size=args.dp,
         enable_expert_parallel=True,
-        moe_backend="deep_gemm_mega_moe",
+        moe_backend=os.environ.get("MOE_BACKEND", "deep_gemm_mega_moe"),
         max_model_len=4096,
         max_num_batched_tokens=args.max_num_batched_tokens,
         **({"max_num_seqs": args.max_num_seqs} if args.max_num_seqs else {}),
@@ -254,8 +280,9 @@ def main() -> None:
         "num_prompts": args.num_prompts,
         "eager": args.enforce_eager,
         "model": args.model,
-        # Provenance: DSL 4.5.x compiles the cutedsl kernels 34-54% slower
-        # (perf floor 4.6.1); stamp so every result is auditable.
+        # Provenance: DSL <4.5.2 compiles the cutedsl kernels 34-54% slower
+        # (perf floor 4.5.2 since the 2026-07-22 MR!27 WAR; 4.5.2 == 4.6.1
+        # parity); stamp so every result is auditable.
         "cutlass_dsl_version": _pkg_version("nvidia-cutlass-dsl"),
         "fi_moe_ep": os.environ.get("FI_MOE_EP", "0"),
         "fi_megakernel": os.environ.get("FI_MOE_EP_MEGAKERNEL", "deep_gemm_mega"),

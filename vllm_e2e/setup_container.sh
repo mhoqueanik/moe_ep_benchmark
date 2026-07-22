@@ -99,4 +99,19 @@ check("cutlass dsl", lambda: importlib.import_module("cutlass").__version__)
 check("nvshmem4py", lambda: importlib.import_module("nvshmem.core").__name__)
 check("vllm fi patch", lambda: importlib.import_module("vllm.models.deepseek_v4.nvidia.fi_utils").__name__)
 PY
+
+# Hard DSL-version guard (the sanity block above only prints): perf results
+# from this venv must be attributable to the intended CuTe-DSL runtime —
+# 4.5.2 by default (vllm's pin, at parity since the MR!27 WAR), 4.6.1 under
+# DSL_461=1. Fails the setup on mismatch (e.g. a pre-WAR venv rerun without
+# FRESH=1 still carrying 4.6.1). bench_offline.py re-checks at run time via
+# EXPECT_DSL.
+EXPECTED_DSL=$([[ "${DSL_461:-0}" == "1" ]] && echo 4.6.1 || echo 4.5.2)
+python - "$EXPECTED_DSL" <<'PY' || { echo "==== setup FAILED (DSL guard) ===="; exit 1; }
+import sys
+from importlib.metadata import version
+want, got = sys.argv[1], version("nvidia-cutlass-dsl")
+assert got == want, f"nvidia-cutlass-dsl {got} != expected {want} (FRESH=1 to rebuild; DSL_461=1 expects 4.6.1)"
+print(f"GUARD PASS: nvidia-cutlass-dsl == {got}")
+PY
 echo "==== setup done ===="
