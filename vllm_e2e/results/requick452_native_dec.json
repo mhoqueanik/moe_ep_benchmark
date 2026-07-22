@@ -1,0 +1,43 @@
+{
+ "tag": "requick452_native_dec",
+ "workload": "decode",
+ "input_len": 128,
+ "output_len": 256,
+ "num_prompts": 1024,
+ "eager": false,
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-flash/hf/hf-6e76323_orig",
+ "cutlass_dsl_version": "4.5.2",
+ "fi_moe_ep": "0",
+ "fi_megakernel": "deep_gemm_mega",
+ "median_total_tok_per_s": 32085.7173385464,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 12.73486090899678,
+   "total_tok_per_s": 30877.13346929492,
+   "output_tok_per_s": 20584.755646196612
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 12.255172475997824,
+   "total_tok_per_s": 32085.7173385464,
+   "output_tok_per_s": 21390.4782256976
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 12.307947588997195,
+   "total_tok_per_s": 31948.137344322065,
+   "output_tok_per_s": 21298.758229548042
+  },
+  {
+   "round": 3,
+   "warmup": false,
+   "elapsed_s": 12.242336855008034,
+   "total_tok_per_s": 32119.357983451107,
+   "output_tok_per_s": 21412.905322300736
+  }
+ ]
+}
