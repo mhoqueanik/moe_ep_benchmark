@@ -203,7 +203,10 @@ All encoded in `setup_container.sh`; every bullet was a real breakage:
 4.5.2 at 4.6.1 parity, so `setup_container.sh` now keeps vllm's own 4.5.2
 pin by default and the whole 4.6.1 compat chain (quack, ThrMma sed,
 tvm-ffi, tilelang) only applies under `DSL_461=1`. Runs 37-40 were measured
-on the 4.6.1 stack; native-4.5.2 e2e not yet revalidated.
+on the 4.6.1 stack; native-4.5.2 REVALIDATED by run 41 (FRESH rebuild,
+decode-1k fi_nvfp4 34262.8 total tok/s = 1.068x native, inside the
+37-40 band; hard DSL guards in setup + bench_offline now enforce version
+attribution).
 
 ## Status / next steps
 

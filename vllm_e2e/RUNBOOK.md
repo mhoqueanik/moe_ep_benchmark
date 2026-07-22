@@ -132,8 +132,14 @@ See `FINDINGS.md`.
 - vLLM 0.25.1 pins `nvidia-cutlass-dsl==4.5.2`; since the MR!27 WAR
   (2026-07-22) the setup keeps that pin by default (`DSL_461=1` for the old
   force-upgrade path). A venv built pre-WAR still contains 4.6.1 — `FRESH=1`
-  to rebuild on 4.5.2; native-4.5.2 e2e not yet revalidated (runs 37-40 were
-  on 4.6.1). Only the fi cutedsl kernels consume it.
+  to rebuild on 4.5.2 (the setup's DSL guard hard-fails otherwise).
+  Native-4.5.2 e2e REVALIDATED (run 41: decode-1k fi_nvfp4 1.068x native,
+  inside the runs-37-40 band). Only the fi cutedsl kernels consume it.
+- Teardown-only cosmetic tracebacks on native 4.5.2: vLLM's
+  `worker.shutdown()` imports CuMemAllocator, which trips over tilelang
+  0.1.9's `libcudart_stub.so` (no `cudaDeviceReset`). Post-round,
+  engine-exit path only — results unaffected (run 41). The 4.6.1 chain's
+  tilelang 0.1.12 didn't have the stub issue.
 - flashinfer branch = 0.6.15 vs vllm pin 0.6.13 (editable install overrides;
   resolver warning expected).
 - cutedsl megakernels get the checkpoint's fp4/ue8m0-32 weights via a
