@@ -19,9 +19,47 @@ cp "$HERE/fi_utils.py" "$DST/fi_utils.py"
 # any moe_backend outside the MoEBackend Literal before the model ever sees
 # it -- so the three flashinfer_moe_ep_mega_* names have to be registered in
 # the installed config too, not just handled in the model.
+#
+# Done as an in-place insertion rather than shipping a whole kernel.py: that
+# file is core config and changes between vLLM releases, so a full-file copy
+# would silently roll the rest of it back to whatever version this patch was
+# snapshotted from. The only thing needed here is three lines in one Literal.
 CFG="$VLLM_DIR/config"
 [[ -f "$CFG/kernel.py.orig" ]] || cp "$CFG/kernel.py" "$CFG/kernel.py.orig"
-cp "$HERE/kernel.py" "$CFG/kernel.py"
+python3 - "$CFG/kernel.py" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+src = path.read_text()
+backends = (
+    "flashinfer_moe_ep_mega_deep_gemm_sm100",
+    "flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4",
+    "flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8",
+)
+missing = [b for b in backends if f'"{b}"' not in src]
+if not missing:
+    print("kernel.py: backends already registered (no-op)")
+    raise SystemExit(0)
+
+# Insert at the end of the MoEBackend literal specifically. Anchoring on a
+# member name is not enough -- e.g. "flashinfer_b12x" appears in both
+# MoEBackend and LinearBackend, so a member-based anchor is ambiguous.
+marker = "MoEBackend = Literal["
+start = src.find(marker)
+if start == -1:
+    sys.exit(f"kernel.py: {marker!r} not found -- update patch_0251/apply.sh")
+end = src.find("\n]", start)
+if end == -1:
+    sys.exit(f"kernel.py: unterminated {marker!r} -- update patch_0251/apply.sh")
+if '"auto"' not in src[start:end]:
+    sys.exit("kernel.py: MoEBackend literal looks wrong (no 'auto' member)")
+
+path.write_text(
+    src[: end + 1] + "".join(f'    "{b}",\n' for b in missing) + src[end + 1 :]
+)
+print("kernel.py: registered " + ", ".join(missing))
+PY
 
 # Drop stale bytecode so the patched sources are what actually imports.
 find "$DST" "$CFG" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
