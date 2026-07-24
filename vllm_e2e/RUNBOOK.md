@@ -15,6 +15,11 @@ Model: DeepSeek-V4-Flash (hidden 4096, moe_inter 2048, 256 experts, top-6,
 `/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-flash/hf/hf-6e76323_orig`.
 4x GB200 (SM100), TP=4 + expert parallel (EP=4).
 
+> Reproducing the vLLM PR specifically (the `flashinfer_moe_ep_mega_*`
+> backend strings that replaced the `FI_MOE_EP=1` opt-in)? Start from
+> **`RUNBOOK_VLLM_PR.md`** — patch, tier-1/tier-2 validation, expected
+> outputs, and the known coverage gaps.
+
 ## 0. Layout
 
 ```
