@@ -30,6 +30,18 @@ dequantized to bf16 at load, requantized nvfp4).
 > run-32 zero-copy fix holds under eager) and fi_nvfp4 1/8 exact with |dlp|
 > 0.016-0.13 against the recorded 1/8 / 0.02-0.20 double-quant band. The
 > selection mechanism changed; the compute path did not.
+>
+> **Headline re-measured through the backend strings, job 2440327 (07-24,
+> one session, 3 rounds/cell, median total tok/s).** decode-1k (capture 4096,
+> dec2k knobs): native 32258 / fi_dg 32896 (1.020x) / fi_nvfp4 34522
+> (**1.070x**). prefill-8k (capture 8192, 8k knobs): native 45779 / fi_dg
+> 47452 (1.037x) / fi_nvfp4 53806 (**1.175x**). Every cell within 2.2% of its
+> pre-switch value, so **1.18x prefill / 1.07x decode still stands**. Same
+> job also closed three smoke gaps: NVFP4 *prequant* path (2/8 exact, |dlp|
+> 0.013-0.077, cross-checkpoint), first fi_mxfp8 e2e (1/8, |dlp|
+> 0.021-0.062), and the negative case — NVFP4 checkpoint with a deep_gemm
+> backend is rejected at startup naming the nvfp4 backend. GSM8K has NOT been
+> re-run since the switch.
 
 ## Where the GPU time goes (nsys, prefill 1024-tok prompts, per-backend 100%)
 

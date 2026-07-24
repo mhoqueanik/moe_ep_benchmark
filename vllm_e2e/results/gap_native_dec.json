@@ -1,0 +1,42 @@
+{
+ "tag": "gap_native_dec",
+ "workload": "decode",
+ "input_len": 128,
+ "output_len": 256,
+ "num_prompts": 1024,
+ "eager": false,
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-flash/hf/hf-6e76323_orig",
+ "cutlass_dsl_version": "4.5.2",
+ "moe_backend": "deep_gemm_mega_moe",
+ "median_total_tok_per_s": 32257.90578431978,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 12.554381370951887,
+   "total_tok_per_s": 31321.017609821574,
+   "output_tok_per_s": 20880.67840654772
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 12.145782086998224,
+   "total_tok_per_s": 32374.695773681673,
+   "output_tok_per_s": 21583.130515787783
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 12.198376226995606,
+   "total_tok_per_s": 32235.11004110479,
+   "output_tok_per_s": 21490.073360736526
+  },
+  {
+   "round": 3,
+   "warmup": false,
+   "elapsed_s": 12.189755981962662,
+   "total_tok_per_s": 32257.90578431978,
+   "output_tok_per_s": 21505.270522879855
+  }
+ ]
+}

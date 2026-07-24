@@ -225,6 +225,39 @@ For headline numbers, follow `RUNBOOK.md` §5 and RUNS.md runs 37-40: capture
 **all** recurring step shapes (`MAX_CAPTURE=4096`), or fi decode looks
 falsely slow because eager prefill chunks leak into decode rounds.
 
+Both headline regimes were re-measured through the backend strings in one
+session (job 2440327), median total tok/s over 3 rounds:
+
+| regime | native | fi_dg | fi_nvfp4 | prior |
+|---|---|---|---|---|
+| decode-1k (capture 4096, `dec2k` knobs) | 32258 | 32896 (1.020x) | **34522 (1.070x)** | 1.074x |
+| prefill-8k (capture 8192, `8k` knobs) | 45779 | 47452 (1.037x) | **53806 (1.175x)** | 1.181x |
+
+Every cell is within 2.2% of its pre-switch value, so the **1.18x prefill /
+1.07x decode** headline holds on the backend-string path. Exact cells:
+
+```bash
+# decode-1k
+ENFORCE_EAGER=0 MAX_CAPTURE=4096 MAX_NUM_SEQS=1024 \
+MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 \
+FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_dsv4_dec2k.json \
+python bench_offline.py --tag fi_dec --workload decode:128:256 \
+  --num-prompts 1024 --rounds 3 --out results/fi_dec.json
+
+# prefill-8k -- the sparse CAPTURE_SIZES list is mandatory here: the dense
+# default made vllm estimate 310 GiB of graph pool and drove KV negative.
+ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 \
+CAPTURE_SIZES=256,2048,4096,8192 \
+MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 \
+FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_dsv4_8k.json \
+python bench_offline.py --tag fi_pre --workload prefill:1024:1 \
+  --num-prompts 256 --rounds 3 --out results/fi_pre.json
+```
+
+Run the three backends of a regime in **one session**. Run 34 found native's
+decode-1k drifts round-over-round within a session, so cross-session ratios
+are not trustworthy.
+
 ## 8. Things that will bite you
 
 **`FI_MOE_EP` is now a hard error.** Any non-empty `FI_MOE_EP` or
@@ -266,33 +299,37 @@ so V3.2 gates inside its own patched model and names its megakernel directly.
 imports `CuMemAllocator`, which trips over tilelang's `libcudart_stub.so`
 missing `cudaDeviceReset`. They appear after results are written. Harmless.
 
-## 9. Coverage gaps — what has *not* been checked
+## 9. Coverage
 
-Be honest about these when reporting.
+### Checked
 
-* **The NVFP4 prequant path is untested here.** `smoke_infer.py` has no
-  per-backend checkpoint selection, so §6 ran `fi_nvfp4` against the default
-  mx checkpoint, i.e. the dequantize-then-requantize path. The prequant path
-  (`ckpt_uses_nvfp4_experts` -> `_realloc_nvfp4_params` ->
-  `nvfp4_prequant_pack_and_alphas`) is a different branch whose guard message
-  this PR touched. `bench_offline.py` *does* select it automatically. To
-  exercise it by hand:
+Jobs 2439803 / 2439811 (registration + eager smokes) and 2440327 (prequant,
+mxfp8, graph-mode throughput), all 4xGB200, vLLM 0.25.1, cutlass-dsl 4.5.2.
 
-  ```bash
-  MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 \
-  MODEL=/lustre/share/coreai_dlalgo_ci/artifacts/model/nvidia_deepseek-v4-flash-nvfp4/hf/hf-48bfe38_orig \
-  python smoke_infer.py --tag fi_nvfp4_prequant --out results/pr_fi_nvfp4_prequant.json
-  ```
+| what | result |
+|---|---|
+| config registration + guards | 14/14 (§5) |
+| per-rank kernel resolution | every EP rank bootstraps the named megakernel; native bootstraps none |
+| fi_dg vs native, eager | 8/8 bit-exact, \|dlp\| 0.0000 |
+| fi_nvfp4 (mx ckpt, dequant path) vs native | 1/8 exact, \|dlp\| 0.016-0.13 |
+| fi_nvfp4 (NVFP4 ckpt, **prequant** path) vs native | 2/8 exact, \|dlp\| 0.013-0.077 — cross-checkpoint |
+| **fi_mxfp8** vs native | 1/8 exact, \|dlp\| 0.021-0.062 |
+| NVFP4 ckpt + a deep_gemm backend | rejected at startup, naming the nvfp4 backend |
+| graph-mode throughput, both regimes | within 2.2% of pre-switch (§7) |
 
-  Also worth checking the negative: that checkpoint with
-  `..._mega_deep_gemm_sm100` should raise, naming the nvfp4 backend.
-* **`fi_mxfp8` was never run.** It is registered and passes tier 1, but no
-  smoke or benchmark has exercised the `mxfp8_cutedsl` kernel through a
-  backend string.
-* **Graph mode was not re-validated.** §6 is eager-only
-  (`ENFORCE_EAGER=1`). The headline numbers depend on CUDA graphs with full
-  shape capture; nothing in this PR touches capture, but it has not been
-  re-measured since the switch.
+The prequant comparison is **cross-checkpoint** (NVFP4 cast vs mx original),
+so a wider band than the same-checkpoint rows is expected and is not evidence
+of a bug — `eval_gsm8k.py` is the cross-checkpoint fairness gate, and it has
+not been re-run since the switch.
+
+Note `bench_offline.py`'s two-checkpoint policy routes `fi_nvfp4` to the
+NVFP4 cast automatically, so every historical `fi_nvfp4` *throughput* number
+(including the 1.18x) was always measured on the prequant path. Only the
+smoke path needed `MODEL=` set by hand.
+
+### Still open
+
 * **No multi-node run.** Single node, TP4+EP4 only.
+* **GSM8K not re-run** since the switch (the cross-checkpoint accuracy gate).
 * **Option (b) — building the real PR branch from source — is unverified.**
   Everything above patches a 0.25.1 wheel instead.
