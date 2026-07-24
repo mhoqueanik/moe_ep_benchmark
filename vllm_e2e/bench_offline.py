@@ -136,15 +136,20 @@ def _pct(xs: list[float]) -> dict | None:
     }
 
 
-def _latency_stats(outs) -> dict | None:
-    """Per-request TTFT and inter-token latency, for interactivity cells.
+def _raw_latencies(outs) -> dict | None:
+    """Raw per-request TTFT / inter-token latency lists.
 
     vLLM attaches `RequestStateStats` to every `RequestOutput` while log_stats
-    is on (the default offline). `first_token_latency` is vLLM's own
+    is on -- which the offline LLM entrypoint disables unless the caller passes
+    disable_log_stats=False. `first_token_latency` is vLLM's own
     arrival->first-token figure; ITL is derived only from the engine-core
     *monotonic* timestamps, which must not be mixed with the wall-clock
-    `arrival_time` on the same clock. Returns None when stats are absent so
-    the caller reports "unavailable" instead of a silent zero.
+    `arrival_time`. Returns None when stats are absent so the caller reports
+    "unavailable" instead of a silent zero.
+
+    Raw lists rather than percentiles so the DP harness can pool every rank's
+    requests before taking percentiles -- percentiles of per-rank percentiles
+    would not be the percentiles of the population.
     """
     ttft, itl = [], []
     for o in outs:
@@ -161,7 +166,14 @@ def _latency_stats(outs) -> dict | None:
             itl.append((last - first) / (n - 1))
     if not ttft and not itl:
         return None
-    return {"ttft_s": _pct(ttft), "itl_s": _pct(itl)}
+    return {"ttft": ttft, "itl": itl}
+
+
+def _latency_stats(outs) -> dict | None:
+    raw = _raw_latencies(outs)
+    if raw is None:
+        return None
+    return {"ttft_s": _pct(raw["ttft"]), "itl_s": _pct(raw["itl"])}
 
 
 def main() -> None:
