@@ -11,7 +11,7 @@ W=$ROOT/moe_ep_benchmark/vllm_e2e
 JOBID=$1
 STAMP=$(date +%H%M%S)
 CACHE_W=$W/results/knob_cache_dsv4_wire_nvfp4.json
-FIENV="FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=nvfp4_cutedsl FI_MOE_EP_IKR=0 FI_MOE_EP_COMBINE=nvfp4"
+FIENV="MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 FI_MOE_EP_IKR=0 FI_MOE_EP_COMBINE=nvfp4"
 run() { JOBID=$JOBID bash "$W/in_container.sh" "$1"; }
 
 until [ "$(squeue -j "$JOBID" -h -o %t 2>/dev/null)" = "R" ]; do sleep 30; done

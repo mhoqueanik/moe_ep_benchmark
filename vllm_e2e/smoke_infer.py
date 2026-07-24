@@ -2,9 +2,11 @@
 dump greedy generations + per-token logprobs for offline comparison.
 
 The MoE path is selected by env (so runs differ only by env):
-  FI_MOE_EP=0                     -> native vLLM deep_gemm_mega_moe
-  FI_MOE_EP=1                     -> flashinfer moe_ep, kernel from
-  FI_MOE_EP_MEGAKERNEL=deep_gemm_mega|nvfp4_cutedsl|mxfp8_cutedsl
+  MOE_BACKEND=deep_gemm_mega_moe  -> native vLLM mega MoE
+  MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm_sm100
+  MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4
+  MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8
+                                  -> flashinfer moe_ep, kernel per backend
 
 Usage:
     python smoke_infer.py --tag native --out results/smoke_native.json
@@ -92,8 +94,7 @@ def main() -> None:
 
     payload = {
         "tag": args.tag,
-        "fi_moe_ep": os.environ.get("FI_MOE_EP", "0"),
-        "fi_megakernel": os.environ.get("FI_MOE_EP_MEGAKERNEL", "deep_gemm_mega"),
+        "moe_backend": os.environ.get("MOE_BACKEND", "deep_gemm_mega_moe"),
         "enforce_eager": args.enforce_eager,
         "model": args.model,
         "records": records,

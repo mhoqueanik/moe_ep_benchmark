@@ -55,16 +55,19 @@ from vllm.model_executor.layers.fused_moe.routed_experts import RoutedExperts
 class FiRoutedExpertsV32(RoutedExperts):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        from vllm.models.deepseek_v4.nvidia.fi_utils import resolve_fi_megakernel
-
         self._vllm_config = get_current_vllm_config()
-        megakernel = resolve_fi_megakernel(self._vllm_config)
+        # V4 selects its megakernel from the moe_backend string, but V3.2 keeps
+        # the stock FusedMoE factory (whose oracles would reject a
+        # flashinfer_moe_ep_* backend) and gates on FI_MOE_EP=1 in its patched
+        # model instead -- so name the kernel directly here.
+        megakernel = os.environ.get("FI_MOE_EP_MEGAKERNEL", "nvfp4_cutedsl")
         if megakernel != "nvfp4_cutedsl":
             raise ValueError(
                 "DeepSeek V3.2 fi path only supports the NVFP4-quantized "
                 "checkpoint (FI_MOE_EP_MEGAKERNEL=nvfp4_cutedsl); the fp8 "
                 f"checkpoint does not fit one node. Got {megakernel!r}."
             )
+        self._megakernel = megakernel
         self._mega_layer = None
         self._epilogue_alphas: tuple[torch.Tensor, torch.Tensor] | None = None
         self._fast_ctx = None
@@ -94,7 +97,7 @@ class FiRoutedExpertsV32(RoutedExperts):
             nvfp4_prequant_pack_and_alphas,
         )
 
-        ensure_fi_moe_ep_runtime(self._vllm_config)
+        ensure_fi_moe_ep_runtime(self._vllm_config, megakernel=self._megakernel)
 
         weights, fc1_alpha, fc2_alpha = nvfp4_prequant_pack_and_alphas(
             self.w13_weight.data,
@@ -118,6 +121,7 @@ class FiRoutedExpertsV32(RoutedExperts):
             top_k=self.top_k,
             activation_clamp=None,  # V3.2 has no swiglu_limit
             weights=weights,
+            megakernel=self._megakernel,
         )
         del weights
         self._mega_layer._ensure_workspace()

@@ -16,8 +16,8 @@ echo "node up: $(squeue -j "$JOBID" -h -o %N)"
 rc=0
 for backend in native fi_nvfp4; do
   case $backend in
-    native)   ENVS="FI_MOE_EP=0" ;;
-    fi_nvfp4) ENVS="FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=nvfp4_cutedsl" ;;
+    native)   ENVS="MOE_BACKEND=deep_gemm_mega_moe" ;;
+    fi_nvfp4) ENVS="MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4" ;;
   esac
   for wl in prefill:1024:1 decode:128:256; do
     name=${wl%%:*}

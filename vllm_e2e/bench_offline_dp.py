@@ -52,7 +52,7 @@ def _rank_main(
         tokenizer_mode="deepseek_v4",
         tensor_parallel_size=1,
         enable_expert_parallel=True,
-        moe_backend="deep_gemm_mega_moe",
+        moe_backend=os.environ.get("MOE_BACKEND", "deep_gemm_mega_moe"),
         max_model_len=4096,
         max_num_batched_tokens=args.max_num_batched_tokens,
         enforce_eager=args.enforce_eager,

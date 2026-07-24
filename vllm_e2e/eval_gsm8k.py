@@ -12,7 +12,7 @@ a perf number is an apples-to-apples claim.
     python eval_gsm8k.py --tag native --out results/gsm8k_native.json
 
     # fi_nvfp4 (NVFP4 checkpoint, resolved automatically):
-    FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=nvfp4_cutedsl \
+    MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 \
     python eval_gsm8k.py --tag fi_nvfp4 --out results/gsm8k_fi_nvfp4.json
 
     # gate a CI-style run (exit 2 below threshold):
@@ -164,7 +164,7 @@ def main() -> int:
         tensor_parallel_size=args.tp,
         data_parallel_size=args.dp,
         enable_expert_parallel=True,
-        moe_backend="deep_gemm_mega_moe",
+        moe_backend=os.environ.get("MOE_BACKEND", "deep_gemm_mega_moe"),
         max_model_len=4096,
         enforce_eager=args.enforce_eager,
         kv_cache_dtype="fp8",
@@ -195,8 +195,7 @@ def main() -> int:
         "invalid": invalid,
         "elapsed_s": dt,
         "eager": args.enforce_eager,
-        "fi_moe_ep": os.environ.get("FI_MOE_EP", "0"),
-        "fi_megakernel": os.environ.get("FI_MOE_EP_MEGAKERNEL", "deep_gemm_mega"),
+        "moe_backend": os.environ.get("MOE_BACKEND", "deep_gemm_mega_moe"),
     }
     if args.dump_preds:
         payload["preds"] = [

@@ -5,7 +5,7 @@ N timed rounds of the same fixed workload — repeats without engine-restart
 variance (prefill cells showed +-35% across restarts with `vllm bench
 throughput`, which boots a fresh engine per run).
 
-    FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=deep_gemm_mega \
+    MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm_sm100 \
     python bench_offline.py --tag fi_dg --workload prefill:1024:1 \
         --rounds 5 --out results/offline_fi_dg_prefill.json
 """
@@ -41,10 +41,7 @@ def resolve_model(explicit: str | None) -> str:
         return explicit
     if os.environ.get("MODEL"):
         return os.environ["MODEL"]
-    if (
-        os.environ.get("FI_MOE_EP") == "1"
-        and os.environ.get("FI_MOE_EP_MEGAKERNEL") == "nvfp4_cutedsl"
-    ):
+    if os.environ.get("MOE_BACKEND") == "flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4":
         return os.environ.get("MODEL_NVFP4", DEFAULT_MODEL_NVFP4)
     return DEFAULT_MODEL
 
@@ -284,8 +281,7 @@ def main() -> None:
         # (perf floor 4.5.2 since the 2026-07-22 MR!27 WAR; 4.5.2 == 4.6.1
         # parity); stamp so every result is auditable.
         "cutlass_dsl_version": _pkg_version("nvidia-cutlass-dsl"),
-        "fi_moe_ep": os.environ.get("FI_MOE_EP", "0"),
-        "fi_megakernel": os.environ.get("FI_MOE_EP_MEGAKERNEL", "deep_gemm_mega"),
+        "moe_backend": os.environ.get("MOE_BACKEND", "deep_gemm_mega_moe"),
         "median_total_tok_per_s": median,
         "rounds": rounds,
         **({"nvlink": nvlink} if nvlink else {}),

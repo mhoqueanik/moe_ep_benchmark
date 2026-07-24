@@ -30,28 +30,30 @@ LOG_DIR=$HERE/logs
 mkdir -p "$(dirname "$OUT_CSV")" "$LOG_DIR"
 echo "backend,workload,input_len,output_len,num_prompts,eager,requests_per_s,total_tok_per_s,output_tok_per_s" >> "$OUT_CSV"
 
-backend_env() {
+# `vllm bench throughput` takes the backend on the command line, so this
+# emits the bare moe_backend string rather than an env assignment.
+backend_moe() {
     case "$1" in
-        native)   echo "FI_MOE_EP=0" ;;
-        fi_dg)    echo "FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=deep_gemm_mega" ;;
-        fi_nvfp4) echo "FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=nvfp4_cutedsl" ;;
-        fi_mxfp8) echo "FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=mxfp8_cutedsl" ;;
+        native)   echo "deep_gemm_mega_moe" ;;
+        fi_dg)    echo "flashinfer_moe_ep_mega_deep_gemm_sm100" ;;
+        fi_nvfp4) echo "flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4" ;;
+        fi_mxfp8) echo "flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8" ;;
         *) echo "unknown backend $1" >&2; return 1 ;;
     esac
 }
 
 for backend in $BACKENDS; do
-    envs=$(backend_env "$backend") || exit 1
+    moe_backend=$(backend_moe "$backend") || exit 1
     for wl in $WORKLOADS; do
         IFS=: read -r name ilen olen <<<"$wl"
         log="$LOG_DIR/bench_${STAMP}_${backend}_${name}.log"
         echo "=== $backend / $name (in=$ilen out=$olen n=$NUM_PROMPTS) -> $log"
         extra=()
         [[ "$EAGER" == "1" ]] && extra+=(--enforce-eager)
-        env $envs vllm bench throughput \
+        vllm bench throughput \
             --model "$MODEL" --trust-remote-code --tokenizer-mode deepseek_v4 \
             --tensor-parallel-size 4 --enable-expert-parallel \
-            --moe-backend deep_gemm_mega_moe \
+            --moe-backend "$moe_backend" \
             --kv-cache-dtype fp8 --block-size 256 \
             --max-model-len 4096 --max-num-batched-tokens "$MAX_BATCHED_TOKENS" \
             --input-len "$ilen" --output-len "$olen" --num-prompts "$NUM_PROMPTS" \

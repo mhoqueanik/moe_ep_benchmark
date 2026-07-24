@@ -13,8 +13,15 @@ def main() -> None:
     a_path, b_path = sys.argv[1], sys.argv[2]
     a = json.load(open(a_path))
     b = json.load(open(b_path))
-    print(f"A: {a['tag']} (fi={a['fi_moe_ep']}/{a['fi_megakernel']})")
-    print(f"B: {b['tag']} (fi={b['fi_moe_ep']}/{b['fi_megakernel']})")
+    def backend(d: dict) -> str:
+        # Results from before the backend-string switch stamped the env pair
+        # instead; keep reading those so old runs stay comparable.
+        if "moe_backend" in d:
+            return d["moe_backend"]
+        return f"fi={d.get('fi_moe_ep')}/{d.get('fi_megakernel')}"
+
+    print(f"A: {a['tag']} ({backend(a)})")
+    print(f"B: {b['tag']} ({backend(b)})")
 
     n_exact = 0
     for i, (ra, rb) in enumerate(zip(a["records"], b["records"])):

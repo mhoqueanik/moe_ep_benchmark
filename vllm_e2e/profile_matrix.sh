@@ -16,9 +16,9 @@ STAMP=$(date +%Y%m%d_%H%M%S)
 
 backend_env() {
     case "$1" in
-        native)   echo "FI_MOE_EP=0" ;;
-        fi_dg)    echo "FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=deep_gemm_mega" ;;
-        fi_nvfp4) echo "FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=nvfp4_cutedsl" ;;
+        native)   echo "MOE_BACKEND=deep_gemm_mega_moe" ;;
+        fi_dg)    echo "MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm_sm100" ;;
+        fi_nvfp4) echo "MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4" ;;
         *) echo "unknown backend $1" >&2; return 1 ;;
     esac
 }

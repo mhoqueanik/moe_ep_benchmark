@@ -13,6 +13,15 @@ unmodified; **fi_dg** = flashinfer moe_ep, `deep_gemm_mega` kernel;
 **fi_nvfp4** = flashinfer moe_ep, `nvfp4_cutedsl` kernel (checkpoint fp4
 dequantized to bf16 at load, requantized nvfp4).
 
+> **Activation changed 2026-07-24.** Every run below selected the fi path with
+> `FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=<kernel>` on top of `--moe-backend
+> deep_gemm_mega_moe`. Those env vars are retired in favour of one
+> `moe_backend` string per config (RUNBOOK.md §3), so repro commands recorded
+> here need translating: fi_dg -> `flashinfer_moe_ep_mega_deep_gemm_sm100`,
+> fi_nvfp4 -> `flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4`, fi_mxfp8 ->
+> `flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8`. Only the selection mechanism
+> changed; the measured numbers are unaffected.
+
 ## Where the GPU time goes (nsys, prefill 1024-tok prompts, per-backend 100%)
 
 Buckets from `results/nsys_20260715_225236_*_cuda_gpu_kern_sum.csv` (GPU

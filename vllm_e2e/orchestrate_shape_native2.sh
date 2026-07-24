@@ -14,7 +14,7 @@ rc=0
 for r in a b; do
   echo "=== smoke native run $r (line-buffered logs) ==="
   run "source venv0251/bin/activate && bash patch_0251/apply.sh >/dev/null && \
-    env FI_MOE_EP=0 FI_MOE_EP_SHAPE_LOG=$OUT/shapes_native_${r} \
+    env MOE_BACKEND=deep_gemm_mega_moe FI_MOE_EP_SHAPE_LOG=$OUT/shapes_native_${r} \
     python smoke_infer.py --tag native2_${r} --out $OUT/smoke_native_${r}.json" \
     > "$W/logs/shape_det2_native_${r}.log" 2>&1 || rc=1
 done

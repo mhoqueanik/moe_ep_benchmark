@@ -16,9 +16,9 @@ echo "node up: $(squeue -j "$JOBID" -h -o %N)"
 
 rc=0
 for cell in \
-  "fi_nvfp4:FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=nvfp4_cutedsl FI_MOE_EP_IKR=0" \
-  "native:FI_MOE_EP=0" \
-  "fi_dg:FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=deep_gemm_mega"; do
+  "fi_nvfp4:MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 FI_MOE_EP_IKR=0" \
+  "native:MOE_BACKEND=deep_gemm_mega_moe" \
+  "fi_dg:MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm_sm100"; do
   name=${cell%%:*}; envs=${cell#*:}
   rep="$W/results/nsys_layer_${STAMP}_${name}"
   echo "=== nsys $name (prefill eager) ==="

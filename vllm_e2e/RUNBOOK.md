@@ -69,17 +69,28 @@ What it does (see the script):
 5. applies `patch_0251/` to the installed vllm; sanity import checks
    (every line should print PASS)
 
-## 3. Backend selection (env-only A/B)
+## 3. Backend selection (one moe_backend string per config)
 
-All runs use `--moe-backend deep_gemm_mega_moe`; the fi path is opted in
-per-run with env:
+Each config is a distinct `moe_backend`. The python entry points read it from
+`MOE_BACKEND`; `vllm bench throughput` takes it as `--moe-backend`:
 
-| config   | env |
-|----------|-----|
-| native   | `FI_MOE_EP=0` (or unset) |
-| fi_dg    | `FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=deep_gemm_mega` |
-| fi_nvfp4 | `FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=nvfp4_cutedsl` |
-| fi_mxfp8 | `FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=mxfp8_cutedsl` |
+| config   | moe_backend |
+|----------|-------------|
+| native   | `deep_gemm_mega_moe` |
+| fi_dg    | `flashinfer_moe_ep_mega_deep_gemm_sm100` |
+| fi_nvfp4 | `flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4` |
+| fi_mxfp8 | `flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8` |
+
+`FI_MOE_EP` / `FI_MOE_EP_MEGAKERNEL` are retired (runs up to 2026-07-23 used
+them; see RUNS.md). The patched model now *errors* if either is still
+exported, because a stale export would otherwise quietly produce native
+numbers under an fi label. `patch_0251/apply.sh` also patches
+`vllm/config/kernel.py`, since 0.25.1's `MoEBackend` literal would reject the
+new strings before the model sees them.
+
+DeepSeek-V3.2 (`orchestrate_v32.sh`, `patch_v32/`) is the exception: it keeps
+the stock FusedMoE factory, whose oracles reject a `flashinfer_moe_ep_*`
+backend, so it still gates on `FI_MOE_EP=1` inside its own patched model.
 
 Optional: `FI_MOE_EP_KNOBS=auto` (online autotune of cutedsl kernel knobs at
 first forward) or a JSON dict of explicit knobs.
@@ -88,9 +99,9 @@ first forward) or a JSON dict of explicit knobs.
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh \
-  'source venv0251/bin/activate && FI_MOE_EP=0 python smoke_infer.py --tag native --out results/smoke_native.json'
+  'source venv0251/bin/activate && MOE_BACKEND=deep_gemm_mega_moe python smoke_infer.py --tag native --out results/smoke_native.json'
 JOBID=$JOBID bash $W/in_container.sh \
-  'source venv0251/bin/activate && FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=deep_gemm_mega python smoke_infer.py --tag fi_dg --out results/smoke_fi_dg.json'
+  'source venv0251/bin/activate && MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm_sm100 python smoke_infer.py --tag fi_dg --out results/smoke_fi_dg.json'
 JOBID=$JOBID bash $W/in_container.sh \
   'source venv0251/bin/activate && python compare_outputs.py results/smoke_native.json results/smoke_fi_dg.json'
 ```

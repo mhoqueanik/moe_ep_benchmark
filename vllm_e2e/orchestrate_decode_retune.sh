@@ -31,7 +31,7 @@ cat "$CACHE_DEC" 2>/dev/null | head -5 || true
 for ikr in 0 1; do
   echo "=== bench decode-graphs, decode-tuned cache, FI_MOE_EP_IKR=$ikr ==="
   run "source venv0251/bin/activate && bash patch_0251/apply.sh >/dev/null && \
-    env FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=nvfp4_cutedsl FI_MOE_EP_IKR=$ikr \
+    env MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 FI_MOE_EP_IKR=$ikr \
     FLASHINFER_MOE_EP_KNOB_CACHE=$CACHE_DEC ENFORCE_EAGER=0 \
     python bench_offline.py --tag fi_dectune_ikr$ikr --workload decode:128:256 \
       --rounds 5 --out results/dectune_${STAMP}_ikr$ikr.json" \
