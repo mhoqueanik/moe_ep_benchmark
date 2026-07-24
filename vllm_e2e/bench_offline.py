@@ -223,6 +223,12 @@ def main() -> None:
         data_parallel_size=args.dp,
         enable_expert_parallel=True,
         moe_backend=os.environ.get("MOE_BACKEND", "deep_gemm_mega_moe"),
+        # The offline LLM entrypoint forces disable_log_stats=True unless the
+        # caller passes it (entrypoints/llm.py), and with stats off vLLM
+        # attaches metrics=None to every RequestOutput -- so TTFT/ITL come back
+        # empty. Pass it explicitly; the entrypoint's guard is
+        # `if "disable_log_stats" not in kwargs`, so this wins.
+        disable_log_stats=False,
         max_model_len=args.max_model_len,
         max_num_batched_tokens=args.max_num_batched_tokens,
         **({"max_num_seqs": args.max_num_seqs} if args.max_num_seqs else {}),
@@ -309,6 +315,14 @@ def main() -> None:
         lat = _latency_stats(outs)
         if lat:
             rec["latency"] = lat
+        elif r > 0 and os.environ.get("REQUIRE_LATENCY") == "1":
+            # An interactivity cell that silently reports no latency is worse
+            # than a failed one: it looks like a completed run. Fail loudly.
+            raise SystemExit(
+                "[bench_offline] REQUIRE_LATENCY=1 but RequestOutput.metrics "
+                "is empty -- the engine was built with stats disabled, so no "
+                "TTFT/ITL was captured. Check disable_log_stats."
+            )
         if os.environ.get("NSYS_GATE") == "1" and r == 1:
             import torch
 
