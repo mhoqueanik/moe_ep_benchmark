@@ -19,8 +19,17 @@ dequantized to bf16 at load, requantized nvfp4).
 > `moe_backend` string per config (RUNBOOK.md §3), so repro commands recorded
 > here need translating: fi_dg -> `flashinfer_moe_ep_mega_deep_gemm_sm100`,
 > fi_nvfp4 -> `flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4`, fi_mxfp8 ->
-> `flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8`. Only the selection mechanism
-> changed; the measured numbers are unaffected.
+> `flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8`.
+>
+> **Validated equivalent, job 2439811 (07-24, 4xGB200, eager, TP4+EP4).**
+> Tier 1: 14/14 config checks (`test_backend_registration.py`, job 2439803).
+> Tier 2: all four EP ranks bootstrapped the megakernel named by the backend
+> string (`[fi_moe_ep] ... megakernel=deep_gemm_mega` / `=nvfp4_cutedsl`),
+> native stayed off the fi path entirely, and greedy output matched the
+> historical bands — **fi_dg 8/8 bit-exact vs native** (|dlp| 0.0000; the
+> run-32 zero-copy fix holds under eager) and fi_nvfp4 1/8 exact with |dlp|
+> 0.016-0.13 against the recorded 1/8 / 0.02-0.20 double-quant band. The
+> selection mechanism changed; the compute path did not.
 
 ## Where the GPU time goes (nsys, prefill 1024-tok prompts, per-backend 100%)
 
