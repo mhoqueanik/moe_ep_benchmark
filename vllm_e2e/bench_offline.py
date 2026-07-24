@@ -109,6 +109,61 @@ def _read_nvlink_counters() -> dict | None:
     return gpus or None
 
 
+def _pct(xs: list[float]) -> dict | None:
+    if not xs:
+        return None
+    xs = sorted(xs)
+
+    def q(p: float) -> float:
+        # Linear interpolation between order statistics (numpy's default, and
+        # what `vllm bench serve` reports) so these percentiles are comparable
+        # to the usual serving numbers. Nearest-index rounding puts the p50 of
+        # an even-sized sample on the upper element, which reads as a bias.
+        if len(xs) == 1:
+            return xs[0]
+        f = p * (len(xs) - 1)
+        lo = int(f)
+        hi = min(lo + 1, len(xs) - 1)
+        return xs[lo] + (xs[hi] - xs[lo]) * (f - lo)
+
+    return {
+        "n": len(xs),
+        "p50": q(0.50),
+        "p90": q(0.90),
+        "p99": q(0.99),
+        "mean": sum(xs) / len(xs),
+        "max": xs[-1],
+    }
+
+
+def _latency_stats(outs) -> dict | None:
+    """Per-request TTFT and inter-token latency, for interactivity cells.
+
+    vLLM attaches `RequestStateStats` to every `RequestOutput` while log_stats
+    is on (the default offline). `first_token_latency` is vLLM's own
+    arrival->first-token figure; ITL is derived only from the engine-core
+    *monotonic* timestamps, which must not be mixed with the wall-clock
+    `arrival_time` on the same clock. Returns None when stats are absent so
+    the caller reports "unavailable" instead of a silent zero.
+    """
+    ttft, itl = [], []
+    for o in outs:
+        m = getattr(o, "metrics", None)
+        if m is None:
+            return None
+        t = getattr(m, "first_token_latency", 0.0) or 0.0
+        if t > 0:
+            ttft.append(t)
+        n = getattr(m, "num_generation_tokens", 0) or 0
+        first = getattr(m, "first_token_ts", 0.0) or 0.0
+        last = getattr(m, "last_token_ts", 0.0) or 0.0
+        if n > 1 and last > first:
+            itl.append((last - first) / (n - 1))
+    if not ttft and not itl:
+        return None
+    return {"ttft_s": _pct(ttft), "itl_s": _pct(itl)}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", required=True)
@@ -133,6 +188,11 @@ def main() -> None:
                     help="decode concurrency cap (engine default when unset); "
                          "raise together with --num-prompts to bench "
                          "large-batch decode steps")
+    ap.add_argument("--max-model-len", type=int,
+                    default=int(os.environ.get("MAX_MODEL_LEN", "4096")),
+                    help="must cover input_len + output_len; the KV budget "
+                         "scales as max_num_seqs * max_model_len, so raise "
+                         "this and --max-num-seqs together deliberately")
     ap.add_argument("--enforce-eager", action="store_true",
                     default=os.environ.get("ENFORCE_EAGER", "1") == "1")
     args = ap.parse_args()
@@ -142,6 +202,12 @@ def main() -> None:
 
     name, ilen, olen = args.workload.split(":")
     ilen, olen = int(ilen), int(olen)
+    if ilen + olen > args.max_model_len:
+        raise SystemExit(
+            f"[bench_offline] workload {args.workload} needs {ilen + olen} "
+            f"tokens but max_model_len={args.max_model_len}; pass "
+            f"--max-model-len (KV scales as max_num_seqs * max_model_len)"
+        )
 
     import random
 
@@ -157,7 +223,7 @@ def main() -> None:
         data_parallel_size=args.dp,
         enable_expert_parallel=True,
         moe_backend=os.environ.get("MOE_BACKEND", "deep_gemm_mega_moe"),
-        max_model_len=4096,
+        max_model_len=args.max_model_len,
         max_num_batched_tokens=args.max_num_batched_tokens,
         **({"max_num_seqs": args.max_num_seqs} if args.max_num_seqs else {}),
         **(
@@ -240,15 +306,27 @@ def main() -> None:
             "total_tok_per_s": n_total / dt,
             "output_tok_per_s": n_out / dt,
         }
+        lat = _latency_stats(outs)
+        if lat:
+            rec["latency"] = lat
         if os.environ.get("NSYS_GATE") == "1" and r == 1:
             import torch
 
             torch.cuda.synchronize()
             torch.cuda.profiler.stop()
         rounds.append(rec)
+        lat_txt = ""
+        if lat:
+            t, i = lat.get("ttft_s"), lat.get("itl_s")
+            if t:
+                lat_txt += f" | TTFT p50 {t['p50']:.2f}s p99 {t['p99']:.2f}s"
+            if i:
+                lat_txt += f" | ITL p50 {1e3 * i['p50']:.1f}ms p99 {1e3 * i['p99']:.1f}ms"
+        elif r == 1:
+            lat_txt = " | (per-request latency unavailable: no RequestOutput.metrics)"
         print(f"[bench_offline] {args.tag}/{name} round {r}"
               f"{' (warmup)' if r == 0 else ''}: "
-              f"{rec['total_tok_per_s']:.1f} total tok/s", flush=True)
+              f"{rec['total_tok_per_s']:.1f} total tok/s{lat_txt}", flush=True)
 
     nvlink = None
     if sample_nvlink and nvlink_before is not None:
@@ -269,12 +347,26 @@ def main() -> None:
 
     timed = sorted(r["total_tok_per_s"] for r in rounds if not r["warmup"])
     median = timed[len(timed) // 2]
+    # Median-across-rounds of each per-round percentile, so an interactivity
+    # cell has one headline TTFT/ITL the way it has one headline tok/s.
+    med_lat = {}
+    for key in ("ttft_s", "itl_s"):
+        for stat in ("p50", "p90", "p99"):
+            vals = sorted(
+                r["latency"][key][stat]
+                for r in rounds
+                if not r["warmup"] and r.get("latency", {}).get(key)
+            )
+            if vals:
+                med_lat[f"{key}_{stat}"] = vals[len(vals) // 2]
     payload = {
         "tag": args.tag,
         "workload": name,
         "input_len": ilen,
         "output_len": olen,
         "num_prompts": args.num_prompts,
+        "max_num_seqs": args.max_num_seqs,
+        "max_model_len": args.max_model_len,
         "eager": args.enforce_eager,
         "model": args.model,
         # Provenance: DSL <4.5.2 compiles the cutedsl kernels 34-54% slower
@@ -283,13 +375,18 @@ def main() -> None:
         "cutlass_dsl_version": _pkg_version("nvidia-cutlass-dsl"),
         "moe_backend": os.environ.get("MOE_BACKEND", "deep_gemm_mega_moe"),
         "median_total_tok_per_s": median,
+        **({"median_latency": med_lat} if med_lat else {}),
         "rounds": rounds,
         **({"nvlink": nvlink} if nvlink else {}),
     }
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, "w") as f:
         json.dump(payload, f, indent=1)
-    print(f"[bench_offline] median {median:.1f} tok/s -> {args.out}")
+    tail = ""
+    if med_lat:
+        tail = (f", TTFT p50 {med_lat.get('ttft_s_p50', 0):.2f}s"
+                f", ITL p50 {1e3 * med_lat.get('itl_s_p50', 0):.1f}ms")
+    print(f"[bench_offline] median {median:.1f} tok/s{tail} -> {args.out}")
 
 
 if __name__ == "__main__":
