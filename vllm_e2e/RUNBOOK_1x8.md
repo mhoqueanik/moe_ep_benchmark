@@ -2,7 +2,7 @@
 
 Self-contained setup + validation for the FlashInfer `moe_ep` expert path on a
 **single node with 8 SM100 GPUs**. This is the executed, numbers-carrying
-companion to `RUNBOOK_8GPU_SM100.md` (which was written but not run). Every
+executed 8-GPU procedure for this branch. Every
 number below was measured from scratch on **1x8 B200** on 2026-07-25.
 
 > **Provenance.** Fresh clone → self-built container → venv → EP8 sweep. Jobs:

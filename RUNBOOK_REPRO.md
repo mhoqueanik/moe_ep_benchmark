@@ -8,12 +8,19 @@ Provenance of every expected number below: jobs **2441404** (microbenchmark)
 and **2441711** (e2e sweep), 2026-07-24, one 4xGB200 node, vLLM 0.25.1,
 cutlass-dsl 4.5.2.
 
+> **On this branch (`vllm_repro_8_gpu`) the measured configuration is 1x8, not
+> the 1x4 this document was originally written against.** §1–§3 (build,
+> container, venv, patch, checkpoints) are world-size independent and are what
+> `vllm_e2e/RUNBOOK_1x8.md` defers to. For the runs themselves follow that
+> document, and check yourself against `expected_results.md` — the EP4 sweep
+> script and the EP4 numbers are not carried here.
+
 Companions, paths relative to this repo unless noted:
-`vllm_e2e/RUNBOOK_VLLM_PR.md` (the PR in detail), `RUNBOOK.md` (microbenchmark),
-`vllm_e2e/RUNBOOK_8GPU_SM100.md` (the 8-GPU e2e procedure — written, not yet
-executed), `vllm_e2e/RUNS.md` (chronological log), and — in the flashinfer
-checkout — `docs/design_docs/moe_ep_runbook.md`, which owns the container recipe
-(§1c) and the guide to adding a new mega-kernel backend.
+`vllm_e2e/RUNBOOK_1x8.md` (the executed 8-GPU procedure),
+`expected_results.md` (the numbers), `RUNBOOK.md` (microbenchmark), and — in
+the flashinfer checkout — `docs/design_docs/moe_ep_runbook.md`, which owns the
+container recipe (§1c) and the guide to adding a new mega-kernel backend.
+The chronological run log (`vllm_e2e/RUNS.md`) lives on the `vllm-pr` branch.
 
 ---
 
@@ -765,7 +772,7 @@ DG=flashinfer_moe_ep_mega_deep_gemm
 CUTEDSL=flashinfer_moe_ep_mega_cutedsl
 
 # One cell = one workload against all three backends, in one session.
-# Verbatim from job_vllm_pr_runbook_sweep.sh. The knob cache is fi_cutedsl-only.
+# Verbatim from job_vllm_pr_runbook_sweep_ep8.sh. The knob cache is fi_cutedsl-only.
 cell() {
     local name=$1; shift
     local envs=$1; shift
@@ -835,7 +842,7 @@ All twelve at once (~1 h, submits its own exclusive node, prints a summary table
 and re-applies the patch itself):
 
 ```bash
-cd $W && sbatch job_vllm_pr_runbook_sweep.sh          # %j log lands here
+cd $W && sbatch job_vllm_pr_runbook_sweep_ep8.sh          # %j log lands here
 ```
 
 This is the script that produced job 2441711 — every number in §5d. It lived in
@@ -848,7 +855,7 @@ environment, so a different checkout needs no edit:
 # Pass MODEL_NVFP4 but NOT MODEL (see the resolve_model warning above): with
 # MODEL set, the sweep forwards it and fi_cutedsl loads the mx dequant path.
 cd $W && ROOT=$ROOT MODEL_NVFP4=$MODEL_NVFP4 \
-    sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep.sh
+    sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_ep8.sh
 ```
 
 `--rounds N` runs **N+1** passes: round 0 is a warmup, kept in the JSON as
@@ -925,7 +932,7 @@ sed -i "s#$OLD#$ROOT#g" $ROOT/moe_ep_benchmark/model_shapes/submit_jobs.sh \
 
 Also swap `-A coreai_libraries_cudnn` / `-p batch` for your account and
 partition in `submit_jobs.sh`, `job_payload.sh`, and the §3a hold job.
-`job_vllm_pr_runbook_sweep.sh` needs no edit for either — it takes `ROOT` from
+`job_vllm_pr_runbook_sweep_ep8.sh` needs no edit for either — it takes `ROOT` from
 the environment, and `sbatch -A … -p …` on the command line overrides its
 `#SBATCH` lines.
 
