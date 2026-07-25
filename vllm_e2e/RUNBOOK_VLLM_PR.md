@@ -131,13 +131,13 @@ JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && python tes
 
 Covers the `MoEBackend` registration, `KernelConfig` accept/reject/normalise,
 the `FI_MOE_EP_BACKENDS` table (spec round-trip, NVSHMEM only for cutedsl,
-mega-vs-fi predicates), and the three rejections in
-`validate_fi_moe_ep_config` — retired env vars, EPLB, arch floor.
+mega-vs-fi predicates), the three rejections in `validate_fi_moe_ep_config`
+— retired env vars, EPLB, arch floor — and the flashinfer version gate.
 
 Expected tail:
 
 ```
-14/14 checks passed
+15/15 checks passed
 ALL CHECKS PASSED
 ```
 
@@ -374,7 +374,7 @@ vLLM 0.25.1, cutlass-dsl 4.5.2.
 
 | what | result |
 |---|---|
-| config registration + guards | 14/14 (§5) |
+| config registration + guards | 15/15 (§5) |
 | per-rank kernel resolution | every EP rank bootstraps the named megakernel; native bootstraps none |
 | fi_dg vs native, eager | 8/8 bit-exact, \|dlp\| 0.0000 |
 | fi_nvfp4 (mx ckpt, dequant path) vs native | 1/8 exact, \|dlp\| 0.016-0.13 |

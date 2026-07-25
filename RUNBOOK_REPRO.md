@@ -584,9 +584,9 @@ JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
   python test_backend_registration.py'
 ```
 
-Expected tail: `15/15 checks passed` / `ALL CHECKS PASSED`.
-(`RUNBOOK_VLLM_PR.md` §5 still says 14/14 — stale; a flashinfer-version-gate
-check was added since.) Two `Failed to import Triton kernels ...
+Expected tail: `15/15 checks passed` / `ALL CHECKS PASSED`. The 15th is a
+flashinfer-version gate, added after the 14-check runs logged in `RUNS.md`.
+Two `Failed to import Triton kernels ...
 triton_kernels.matmul_ogs` ERROR lines are pre-existing container noise.
 `VERBOSE=1` prints tracebacks for real failures.
 
