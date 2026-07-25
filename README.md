@@ -8,6 +8,30 @@ lives on `vllm-pr`.
 **Start with [expected_results.md](expected_results.md)** — the numbers, the
 tolerances, and the two failure modes that produce plausible-but-wrong results.
 
+## Can you run this?
+
+Not from a public checkout. Three of the inputs are not obtainable outside
+NVIDIA, so be honest with yourself about this list before budgeting time:
+
+| you need | where it comes from | outside NVIDIA? |
+|---|---|---|
+| 8x SM100 GPUs, one node, SLURM + pyxis/enroot | your cluster | yes, if you have the hardware |
+| `flashinfer-moe_ep` @ `4_5_2-perf-fix` | a fork, see RUNBOOK_REPRO §1a | access-dependent |
+| mx checkpoints (V4-Flash, V4-Pro) | `/lustre/share/coreai_dlalgo_ci/artifacts/model/` | **no — internal mirror** |
+| NVFP4 casts | HF `nvidia/DeepSeek-V4-*-NVFP4`, via `vllm_e2e/setup/` | yes |
+| GSM8K | internal parquet, else auto-downloads from the OpenAI jsonl | yes (fallback) |
+
+The mx checkpoints are the hard blocker: they are the baseline every ratio is
+measured against, and `bench_offline.py` compiles their mirror path in as
+`DEFAULT_MODEL`. With your own copy of the same weights, point `MODEL` /
+`MODEL_NVFP4` (or `--model`) at it and everything else works — but read
+expected_results.md §5.2 first, because setting `MODEL` is exactly what
+disarms the accuracy gate.
+
+Also cluster-specific and worth overriding: the `#SBATCH --account` /
+`--partition` lines in `vllm_e2e/job_*.sh` (pass `sbatch -A <acct> -p <part>`),
+and `ROOT`, which every script takes from the environment.
+
 ## What reproduces
 
 | | what | how | ~time |

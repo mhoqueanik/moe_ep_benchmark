@@ -26,7 +26,10 @@ The chronological run log (`vllm_e2e/RUNS.md`) lives on the `vllm-pr` branch.
 
 ## 0. Prerequisites
 
-* One node with 4x GB200 (sm_100). Nothing here is multi-node — TP4+EP4 only.
+* One node with 8x SM100 (B200 or GB200 NVL8). Nothing here is multi-node.
+  On this branch the measured configuration is TP8+EP8; §4a and §5d below
+  are the older EP4 measurements and are kept only as the historical
+  baseline — `expected_results.md` is what you check against.
 * SLURM with pyxis/enroot, account `coreai_libraries_cudnn`.
 * Container image: `$ROOT/flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh`.
   Ships torch 2.12, deep_gemm, triton, nvshmem, cutlass. Does **not** ship vLLM.
@@ -496,7 +499,11 @@ Do **not** unpin the DSL. The CuteDSL codegen is version-sensitive enough
 (34-54% slower pre-4.5.2) that an unpinned `--upgrade` makes a sweep
 unattributable. `DSL_VERSION` overrides.
 
-### 4a. Expected numbers — EP4, 4x GB200
+### 4a. Expected numbers — EP4, 4x GB200 (HISTORICAL — not this branch's config)
+
+> Superseded on `vllm_repro_8_gpu`. The EP8 microbenchmark numbers you should
+> reproduce are in [expected_results.md](expected_results.md) §3, from job
+> 2337199. This EP4 table is retained because §4b's porting notes refer to it.
 
 Expected — `e2e_pipelined` p50 us at the DeepSeek-V4-Flash MoE geometry (4096
 hidden / 2048 inter / 256 experts / top-6), EP4, job 2441404:
@@ -590,7 +597,9 @@ render command globs the whole directory, so the default path walks straight
 into it:
 
 ```bash
-python model_shapes/make_tables.py model_shapes/results/model_shapes_*.csv   # <-- merges EP4 + EP8
+python model_shapes/make_tables.py model_shapes/results_ep8/model_shapes_*.csv
+# This branch ships only results_ep8/. The hazard above is why: pointing this
+# at a directory holding two world sizes silently overwrites cells.
 ```
 
 The output would look like §4a and contain EP8 numbers, with nothing in
@@ -866,7 +875,12 @@ that cell is measuring. Prefix caching is off for the same reason: rounds reuse
 prompts, so with it on every post-warmup round is a 100% cache hit and prefill
 measures nothing (once produced a fake 91k tok/s).
 
-### 5d. Expected numbers
+### 5d. Expected numbers (HISTORICAL — EP4, 4x GB200)
+
+> Superseded on `vllm_repro_8_gpu`: these are the 2026-07-24 EP4 numbers, and
+> the dec1k row among them predates the CAPTURE_SIZES fix, so it is not
+> comparable with anything measured after 2026-07-25. Check yourself against
+> [expected_results.md](expected_results.md) §1-2.
 
 Median total tok/s, job 2441711:
 
@@ -970,7 +984,8 @@ which the new code rejects. For a full revert, copy `kernel.py.orig` back.
 
 ## 8. Not covered
 
-* No multi-node run. Single node, TP4+EP4 only.
+* No multi-node run. Single node, TP8+EP8 (this branch); the EP4 numbers in
+  §4a/§5d predate it.
 * ~~GSM8K not re-run since the backend-string switch~~ **DONE 2026-07-25, job
   2337476** — and it caught that the gate had been disarmed by an exported
   `MODEL` (§5b). Flash: native 0.960 / fi_dg 0.960 / fi_cutedsl 0.970 on the
