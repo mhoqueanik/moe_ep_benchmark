@@ -103,6 +103,10 @@ gcell() {
     fi
 }
 
+# The Flash cells run TP4 even on an 8-GPU node: this is an accuracy gate, not
+# a throughput measurement, and TP4 is what produced the recorded 0.960/0.960/
+# 0.970. That is why an EP4 knob cache (knob_cache_dsv4_8k.json) ships on an
+# otherwise 8-GPU-only branch.
 echo; echo '########## DSV4-FLASH  (EP4/TP4)'
 gcell flash_native     native     4 \"\$MODEL_MX_FLASH\"    gsm8k2_flash_native
 gcell flash_fi_dg      fi_dg      4 \"\$MODEL_MX_FLASH\"    gsm8k2_flash_fi_dg
