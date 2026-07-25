@@ -92,10 +92,6 @@ numbers under an fi label. `patch_0251/apply.sh` also patches
 `vllm/config/kernel.py`, since 0.25.1's `MoEBackend` literal would reject the
 new strings before the model sees them.
 
-DeepSeek-V3.2 (`orchestrate_v32.sh`, `patch_v32/`) is the exception: it keeps
-the stock FusedMoE factory, whose oracles reject a `flashinfer_moe_ep_*`
-backend, so it still gates on `FI_MOE_EP=1` inside its own patched model.
-
 Optional: `FI_MOE_EP_KNOBS=auto` (online autotune of cutedsl kernel knobs at
 first forward) or a JSON dict of explicit knobs.
 

@@ -18,9 +18,10 @@ dequantized to bf16 at load, requantized nvfp4).
 > deep_gemm_mega_moe`. Those env vars are retired in favour of one
 > `moe_backend` string per config (RUNBOOK.md §3), so repro commands recorded
 > here need translating: fi_dg -> `flashinfer_moe_ep_mega_deep_gemm`,
-> fi_nvfp4 -> `flashinfer_moe_ep_mega_cutedsl`. fi_mxfp8 has no successor:
-> the backend set collapsed to two on 2026-07-24 and `mxfp8_cutedsl` is no
-> longer selectable, so those cells are not reproducible as recorded.
+> fi_nvfp4 -> `flashinfer_moe_ep_mega_cutedsl`. fi_mxfp8 has no backend
+> string of its own: the set collapsed to two on 2026-07-24 and the CuteDSL
+> kernel is derived from the checkpoint, so reproduce those cells with
+> `FI_MOE_EP_CUTEDSL_KERNEL=mxfp8_cutedsl` on the cutedsl backend.
 >
 > **Validated equivalent, job 2439811 (07-24, 4xGB200, eager, TP4+EP4).**
 > Tier 1: 14/14 config checks (`test_backend_registration.py`, job 2439803).

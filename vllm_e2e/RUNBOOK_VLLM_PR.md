@@ -289,11 +289,6 @@ entries stay behind and are harmless — `main` never selects them. For a full
 revert, copy `kernel.py.orig` back. Forgetting the re-apply is loud, not
 silent: `main`'s scripts set `FI_MOE_EP=1`, which the new code rejects.
 
-**DeepSeek-V3.2 still uses `FI_MOE_EP=1`.** `patch_v32/` keeps the stock
-FusedMoE factory, whose quant oracles reject a `flashinfer_moe_ep_*` backend,
-so V3.2 gates inside its own patched model and names its megakernel directly.
-`orchestrate_v32.sh` is intentionally unconverted.
-
 **Teardown tracebacks are cosmetic.** On DSL 4.5.2, `worker.shutdown()`
 imports `CuMemAllocator`, which trips over tilelang's `libcudart_stub.so`
 missing `cudaDeviceReset`. They appear after results are written. Harmless.
@@ -312,7 +307,7 @@ mxfp8, graph-mode throughput), all 4xGB200, vLLM 0.25.1, cutlass-dsl 4.5.2.
 | fi_dg vs native, eager | 8/8 bit-exact, \|dlp\| 0.0000 |
 | fi_nvfp4 (mx ckpt, dequant path) vs native | 1/8 exact, \|dlp\| 0.016-0.13 |
 | fi_nvfp4 (NVFP4 ckpt, **prequant** path) vs native | 2/8 exact, \|dlp\| 0.013-0.077 — cross-checkpoint |
-| **fi_mxfp8** vs native | 1/8 exact, \|dlp\| 0.021-0.062 (backend since retired) |
+| **fi_mxfp8** vs native | 1/8 exact, \|dlp\| 0.021-0.062 (via the kernel override) |
 | NVFP4 ckpt + a deep_gemm backend | rejected at startup, naming the nvfp4 backend |
 | graph-mode throughput, both regimes | within 2.2% of pre-switch (§7) |
 

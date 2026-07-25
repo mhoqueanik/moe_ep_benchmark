@@ -72,6 +72,16 @@ def expect_raises(exc_types, fn, *, contains: str | None = None) -> None:
         raise AssertionError(f"expected {exc_types}, nothing raised")
 
 
+def _stub_config(backend: str, *, enable_eplb: bool = False):
+    """Minimal stand-in: validate_fi_moe_ep_config reads only these two fields."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        kernel_config=SimpleNamespace(moe_backend=backend),
+        parallel_config=SimpleNamespace(enable_eplb=enable_eplb),
+    )
+
+
 # --------------------------------------------------------------------------
 # Prerequisites
 # --------------------------------------------------------------------------
@@ -98,7 +108,7 @@ def _vllm():
 # --------------------------------------------------------------------------
 
 
-@check("MoEBackend literal contains all three backends")
+@check("MoEBackend literal contains both backends")
 def _literal():
     from typing import get_args
 
@@ -155,7 +165,6 @@ def _table():
             f"{name}: needs_nvshmem={spec.needs_nvshmem}"
         )
         assert fi_utils.fi_moe_ep_backend_spec(name) is spec
-        assert fi_utils.fi_spec_for_megakernel(spec.megakernel) is spec
 
 
 @check("runtime requirements: NVSHMEM only for the cutedsl kernels")
@@ -183,27 +192,34 @@ def _predicates():
         assert not fi_utils.is_fi_moe_ep_backend(other)
 
 
-@check("unknown megakernel name is rejected")
-def _unknown_megakernel():
+@check("unknown backend / CuteDSL kernel override is rejected")
+def _unknown_selection():
     from vllm.utils import flashinfer_moe_ep as fi_utils
 
-    expect_raises(ValueError, lambda: fi_utils.fi_spec_for_megakernel("nope_cutedsl"))
     expect_raises(ValueError, lambda: fi_utils.fi_moe_ep_backend_spec(NATIVE))
+
+    # The CuteDSL kernel is derived from the checkpoint; the override exists
+    # for an MXFP8 checkpoint that does not exist yet, and must validate.
+    cfg = _stub_config("flashinfer_moe_ep_mega_cutedsl")
+    os.environ["FI_MOE_EP_CUTEDSL_KERNEL"] = "not_a_kernel"
+    try:
+        expect_raises(
+            ValueError,
+            lambda: fi_utils.fi_megakernel(cfg),
+            contains="FI_MOE_EP_CUTEDSL_KERNEL",
+        )
+        for k in fi_utils.CUTEDSL_MEGAKERNELS:
+            os.environ["FI_MOE_EP_CUTEDSL_KERNEL"] = k
+            assert fi_utils.fi_megakernel(cfg) == k, f"override {k} ignored"
+    finally:
+        os.environ.pop("FI_MOE_EP_CUTEDSL_KERNEL", None)
+    # Default derivation: both checkpoints in circulation resolve to nvfp4.
+    assert fi_utils.fi_megakernel(cfg) == "nvfp4_cutedsl"
 
 
 # --------------------------------------------------------------------------
 # validate_fi_moe_ep_config
 # --------------------------------------------------------------------------
-
-
-def _stub_config(backend: str, *, enable_eplb: bool = False):
-    """Minimal stand-in: validate_fi_moe_ep_config reads only these two fields."""
-    from types import SimpleNamespace
-
-    return SimpleNamespace(
-        kernel_config=SimpleNamespace(moe_backend=backend),
-        parallel_config=SimpleNamespace(enable_eplb=enable_eplb),
-    )
 
 
 @check("a valid fi config passes validation on this device")
