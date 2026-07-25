@@ -32,7 +32,7 @@ Geometries verified against local checkpoint configs
 
 Timed region defaults to `MEGA_TIMING=e2e_pipelined` (methodology of the
 2026-07-15 corrected tables in `kernel_src/cutedsl_megamoe/TUNING.md`).
-Default token points: 8 64 512 2048 8192 tokens/rank, 4 GPUs (DP=EP=4).
+Default token points: 8 64 512 2048 8192 tokens/rank, 8 GPUs (DP=EP=8).
 
 ## Run
 

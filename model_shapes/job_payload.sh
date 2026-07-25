@@ -1,6 +1,6 @@
 #!/bin/bash
 # In-container payload for one model-shape sweep job (see submit_jobs.sh).
-# Mirrors RUNBOOK.md §2: editable-install the branch, upgrade CuTe-DSL,
+# Mirrors RUNBOOK_REPRO.md §4: editable-install the branch, upgrade CuTe-DSL,
 # sanity-check the import path, then run the shape sweep.
 set -uo pipefail
 
@@ -28,5 +28,5 @@ for m in (flashinfer, flashinfer.moe_ep):
     assert m.__file__.startswith("/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/flashinfer-2"), m.__file__
 PY
 
-GPUS="${GPUS:-4}" CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3}" \
+GPUS="${GPUS:-8}" CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}" \
     bash "$BENCH/model_shapes/run_model_shapes.sh"

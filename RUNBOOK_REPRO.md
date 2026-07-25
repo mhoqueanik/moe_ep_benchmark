@@ -4,16 +4,17 @@ Manual steps for the FlashInfer `moe_ep` mega-MoE work on DeepSeek-V4-Flash:
 clone, fetch checkpoints, build, kernel microbenchmark, vLLM e2e. Commands are
 copied verbatim from the scripts that produced the recorded numbers.
 
-Provenance of every expected number below: jobs **2441404** (microbenchmark)
-and **2441711** (e2e sweep), 2026-07-24, one 4xGB200 node, vLLM 0.25.1,
-cutlass-dsl 4.5.2.
+Provenance of every expected number on this branch: jobs **2337199**
+(microbenchmark), **2337204** / **2337549** (Flash e2e), **2337438** /
+**2337487** (V4-Pro e2e) and **2337476** / **2337550** (GSM8K), 2026-07-25,
+one 1x8 B200 node, vLLM 0.25.1, cutlass-dsl 4.5.2. The numbers themselves live
+in [expected_results.md](expected_results.md).
 
-> **On this branch (`vllm_repro_8_gpu`) the measured configuration is 1x8, not
-> the 1x4 this document was originally written against.** §1–§3 (build,
-> container, venv, patch, checkpoints) are world-size independent and are what
-> `vllm_e2e/RUNBOOK_1x8.md` defers to. For the runs themselves follow that
-> document, and check yourself against `expected_results.md` — the EP4 sweep
-> script and the EP4 numbers are not carried here.
+> **This document was originally written against 1x4; on this branch it is
+> 1x8 throughout.** §1–§3 (build, container, venv, patch, checkpoints) are
+> world-size independent and are what `vllm_e2e/RUNBOOK_1x8.md` defers to. For
+> the runs themselves follow that document, and check yourself against
+> `expected_results.md`.
 
 Companions, paths relative to this repo unless noted:
 `vllm_e2e/RUNBOOK_1x8.md` (the executed 8-GPU procedure),
@@ -27,9 +28,8 @@ The chronological run log (`vllm_e2e/RUNS.md`) lives on the `vllm-pr` branch.
 ## 0. Prerequisites
 
 * One node with 8x SM100 (B200 or GB200 NVL8). Nothing here is multi-node.
-  On this branch the measured configuration is TP8+EP8; §4a and §5d below
-  are the older EP4 measurements and are kept only as the historical
-  baseline — `expected_results.md` is what you check against.
+  The measured configuration is TP8+EP8 throughout; `expected_results.md`
+  is what you check against.
 * SLURM with pyxis/enroot, account `coreai_libraries_cudnn`.
 * Container image: `$ROOT/flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh`.
   Ships torch 2.12, deep_gemm, triton, nvshmem, cutlass. Does **not** ship vLLM.
@@ -466,16 +466,15 @@ cd $ROOT/moe_ep_benchmark
 SHAPE_LIST="deepseek_v4_flash" SEQ_LENS="8 64 512 1024 2048 4096 8192" \
     bash model_shapes/submit_jobs.sh
 
-# NOTE: model_shapes/results/ is TRACKED and a fresh clone already contains
-# committed CSVs from prior runs. The glob below merges them all (make_tables
-# keys on (geometry, tokens/rank, variant) and later files win), so on a
-# from-scratch checkout render ONLY your run's CSV to compare against §4a:
+# Output lands in model_shapes/results_ep8/, which already holds the committed
+# CSV from job 2337199. make_tables keys on (geometry, tokens/rank, variant)
+# and IGNORES the gpus column, so later files win and a glob silently mixes
+# runs -- render only your own CSV to compare against expected_results.md §3:
 python model_shapes/make_tables.py \
-    model_shapes/results/model_shapes_<your_stamp>_deepseek_v4_flash.csv \
+    model_shapes/results_ep8/model_shapes_<your_stamp>_deepseek_v4_flash.csv \
     -o /tmp/micro_scratch_RESULTS.md
-# (the glob form is for accumulating cells at a FIXED world size once the dir is
-#  yours; it silently mixes runs otherwise.)
-python model_shapes/make_tables.py model_shapes/results/model_shapes_*.csv
+# (the glob form is for accumulating cells at a FIXED world size, once the
+#  directory holds only your runs.)
 ```
 
 Its in-container payload (`model_shapes/job_payload.sh`) — note the defaults are
@@ -488,7 +487,7 @@ DSL_VERSION="${DSL_VERSION:-4.5.2}"
 python -m pip install "nvidia-cutlass-dsl[cu13]==${DSL_VERSION}"
 python -c "from importlib.metadata import version; v=version('nvidia-cutlass-dsl'); \
 assert v=='${DSL_VERSION}', f'DSL {v} != ${DSL_VERSION}'; print(f'GUARD PASS: cutlass-dsl {v}')"
-GPUS="${GPUS:-4}" CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3}" \
+GPUS="${GPUS:-8}" CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}" \
     bash "$BENCH/model_shapes/run_model_shapes.sh"
 ```
 
@@ -499,29 +498,16 @@ Do **not** unpin the DSL. The CuteDSL codegen is version-sensitive enough
 (34-54% slower pre-4.5.2) that an unpinned `--upgrade` makes a sweep
 unattributable. `DSL_VERSION` overrides.
 
-### 4a. Expected numbers — EP4, 4x GB200 (HISTORICAL — not this branch's config)
+### 4a. Expected numbers
 
-> Superseded on `vllm_repro_8_gpu`. The EP8 microbenchmark numbers you should
-> reproduce are in [expected_results.md](expected_results.md) §3, from job
-> 2337199. This EP4 table is retained because §4b's porting notes refer to it.
+EP8, DeepSeek-V4-Flash MoE geometry (4096 hidden / 2048 inter / 256 experts /
+top-6), job 2337199 — see [expected_results.md](expected_results.md) §3 for the
+full table and `model_shapes/results_ep8/` for the CSV it came from.
 
-Expected — `e2e_pipelined` p50 us at the DeepSeek-V4-Flash MoE geometry (4096
-hidden / 2048 inter / 256 experts / top-6), EP4, job 2441404:
-
-| tokens/rank | 8 | 64 | 512 | 1024 | 2048 | 4096 | 8192 |
-|---|---|---|---|---|---|---|---|
-| `deep_gemm_mega` | 128.0 | 175.1 | 201.7 | 240.6 | 389.7 | 718.4 | 1246.2 |
-| `nvfp4_cutedsl` | 141.3 | 188.6 | 229.4 | 257.0 | 341.0 | 564.2 | 1037.6 |
-| `+ikr` | 148.6 | 202.8 | 228.4 | 260.1 | 339.4 | 558.1 | 1024.7 |
-| `+combine_mxfp8` | 150.1 | 196.1 | 218.9 | 246.8 | 310.2 | 480.2 | 858.0 |
-| `+combine_nvfp4` | 145.4 | 194.6 | 214.6 | 236.5 | 293.8 | 447.5 | 769.0 |
-| **nvfp4 vs dg** | 0.91x | 0.93x | 0.88x | 0.94x | 1.14x | 1.27x | 1.20x |
-
-DeepGEMM wins below ~1024 tokens/rank, CuteDSL above — which is why the e2e
-decode cells gain less than the prefill ones. The quantized combine wires look
-strong here (`combine_nvfp4` is 1.62x DeepGEMM at 8192) but did **not** transfer
-e2e at this geometry, so they stay off by default; read RUNS.md run 24 before
-enabling them.
+The DeepGEMM↔CuteDSL crossover sits at ~1024 tokens/rank: below it
+`deep_gemm_mega` wins, above it `nvfp4_cutedsl` pulls away to 1.20x at 8192,
+and `+combine_nvfp4` to 1.70x. That crossover is why the e2e decode cells gain
+less than the prefill ones.
 
 ### 4b. Porting to another system, and to EP8
 
@@ -550,8 +536,9 @@ works only because `-p batch` here hands out whole nodes. Elsewhere that lands
 you a 0-GPU allocation. Add the flag alongside the §6 account/partition swap.
 
 **4. Set the world size by environment, not by editing.** `job_payload.sh`
-defaults are `${GPUS:-4}` and `${CUDA_VISIBLE_DEVICES:-0,1,2,3}`, and
-`submit_jobs.sh` submits with `--export=ALL`, so both ride through:
+defaults to `${GPUS:-8}` and `${CUDA_VISIBLE_DEVICES:-0,1,...,7}` on this
+branch, and `submit_jobs.sh` submits with `--export=ALL`, so an override rides
+through. To reproduce §4a you need nothing; to run a different world size:
 
 ```bash
 cd $ROOT/moe_ep_benchmark
@@ -560,7 +547,7 @@ SHAPE_LIST="deepseek_v4_flash" SEQ_LENS="8 64 512 1024 2048 4096 8192" \
     bash model_shapes/submit_jobs.sh
 ```
 
-Set **both**. `GPUS` alone leaves the device list at the 4-GPU default on any
+Set **both**. `GPUS` alone leaves the device list at the 8-GPU default on any
 cluster that does not populate `CUDA_VISIBLE_DEVICES` itself; conversely, if you
 do request `--gres`, SLURM sets `CUDA_VISIBLE_DEVICES` in the job environment
 and that wins over the exported value — harmless when it lists all 8, wrong if
@@ -576,7 +563,7 @@ fine for every row of `shapes.tsv` at 8-way (`num_experts % world == 0` is
 asserted at `bench_moe_ep_mega.py:353`; 128/256/384/512 all divide by 8).
 
 **6. Leave `MEGA_KNOBS` unset.** Empty means the shim's token-count heuristic,
-which is what job 2441404 used; `MEGA_KNOBS=auto` instead runs an online
+which is what job 2337199 used; `MEGA_KNOBS=auto` instead runs an online
 autotune sweep and keeps the winner for the session. Turning that on in the same
 run that changes EP size moves two variables at once. Tune as a follow-up, not
 as part of the port.
@@ -590,7 +577,7 @@ rather than a broken run.
 **8. Write EP8 results to a separate directory — this one silently corrupts
 §4a.** The CSVs do record a `gpus` column, but `make_tables.py` keys each cell
 on `(geometry, tokens_per_rank, variant)` only and never reads it
-(`make_tables.py:68`). Merging an EP8 CSV with the EP4 ones therefore overwrites
+(`make_tables.py:68`). Merging CSVs from two world sizes therefore overwrites
 matching cells rather than separating them — later file wins, exactly as
 `submit_jobs.sh` advertises for filling gaps at a *fixed* world size. §4's own
 render command globs the whole directory, so the default path walks straight
@@ -614,7 +601,7 @@ SHAPE_LIST="deepseek_v4_flash" SEQ_LENS="8 64 512 1024 2048 4096 8192" \
     bash model_shapes/submit_jobs.sh
 
 python model_shapes/make_tables.py model_shapes/results_ep8/model_shapes_*.csv \
-    -o model_shapes/RESULTS_EP8.md
+    -o /tmp/micro_ep8_RESULTS.md      # expected_results.md §3 is the reference
 ```
 
 Sanity-check before rendering — the column is there, so use it:
@@ -625,7 +612,68 @@ cut -d, -f10 model_shapes/results_ep8/model_shapes_*.csv | sort -u   # expect: g
 
 ---
 
+### 4c. The ad-hoc launcher (`run.sh`)
+
+`model_shapes/submit_jobs.sh` above sweeps the shapes in `shapes.tsv` under
+SLURM. `run.sh` is the interactive alternative: one process per GPU via
+`torch.multiprocessing`, mirroring DP=N + EP with TP=1, for poking at a single
+geometry. It defaults to `GPUS=8` / all eight devices on this branch.
+
+```bash
+# subset of fi_mega backends
+MEGA_LIST="mxfp8_cutedsl nvfp4_cutedsl" SECTION=fi_mega bash run.sh
+# a single backend
+MEGA_LIST=deep_gemm_mega SECTION=fi_mega bash run.sh
+# problem size
+TOKENS=64 SECTION=fi_mega bash run.sh
+# token sweep
+SECTION=fi_mega bash run_sweep.sh          # or: SEQ_LENS="1 8 64 512 4096"
+# cutedsl kernel knobs: online autotune, vs the pinned cache
+MEGA_KNOBS=auto SECTION=fi_mega bash run.sh
+# timed region: bare kernel launch vs full FI forward (default e2e)
+MEGA_TIMING=kernel SECTION=fi_mega bash run.sh
+```
+
+fi_mega backends: `deep_gemm_mega | mxfp8_cutedsl | nvfp4_cutedsl`. The two
+`vllm_*` sections (`bench_moe_ep_vllm_mega.py`, `bench_moe_ep_nonmega.py`) are
+comparison baselines needing `vllm==0.20.0`, which the image does not ship —
+skip them unless you want the split-path comparison.
+
+> **Comparing against the kernel repo's tester** (`cutedsl_megamoe -m
+> tester.tester --mode Perf`): match BOTH the geometry and the timed region.
+> The tester's problems use (hidden, inter, experts, topk) = (4096, 2048, 256,
+> 6) or (7168, 3072, 384, 6), neither of which is `run.sh`'s default, and its
+> timed region is a bare prebuilt kernel launch — no arg rebuild, reset, sync
+> or output copy. Use `HIDDEN/INTER/NUM_EXPERTS/TOPK` plus `MEGA_TIMING=kernel`
+> for an apples-to-apples run.
+
 ## 5. vLLM e2e
+
+### Before §5a: the fi_cutedsl knob cache
+
+The cutedsl kernel picks its tile/cluster schedule from a knob cache keyed by
+geometry and world size. This branch ships both caches the sweeps use, so you
+can go straight to §5a:
+
+| cache | geometry | used by |
+|---|---|---|
+| `results/knob_cache_ep8.json` | 4096/2048/256/top-6 | Flash EP8 sweep |
+| `results/knob_cache_pro_ep8.json` | 7168/3072/384/top-6 | V4-Pro EP8 sweep |
+| `results/knob_cache_dsv4_8k.json` | 4096/2048/256/top-6, world 4 | the GSM8K Flash cells, which run TP4 |
+
+Retune only if your geometry or world size differs — the winning tile moves
+with tokens-per-expert, and at EP8 each rank holds 32 of 256 experts rather
+than 64. Synthetic weights, ~10 min per geometry, via
+`vllm_e2e/setup/tune_knobs_{flash,pro}_ep8.sh`, which wrap:
+
+```bash
+FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_ep8.json \
+torchrun --nproc_per_node=8 -m flashinfer.moe_ep.tune --dtype nvfp4 \
+    --hidden 4096 --intermediate 2048 --num-experts 256 --topk 6 --max-tokens 8192
+```
+
+It is not cosmetic: on the EP8 cache fi_cutedsl prefill-8k reaches 1.199x; on a
+cache tuned for another world size it is understated.
 
 ### 5a. Tier 1 — config checks (~1 min, no model)
 
@@ -644,7 +692,7 @@ Run this whenever you touch backend selection — it catches the likeliest rot, 
 backend registered in one file but not the other, in a minute instead of the
 ~10 a smoke costs.
 
-### 5b. Tier 2 — correctness smoke (~12 min, 4 GPUs)
+### 5b. Tier 2 — correctness smoke (~12 min)
 
 Tier 1 is **not** sufficient: it passes even if `use_fi_mega_moe` silently stays
 false and the run quietly executes the native path.
@@ -854,7 +902,7 @@ and re-applies the patch itself):
 cd $W && sbatch job_vllm_pr_runbook_sweep_ep8.sh          # %j log lands here
 ```
 
-This is the script that produced job 2441711 — every number in §5d. It lived in
+This is the script the Flash e2e numbers come from (job 2337204). It lived in
 a scratch dir until 2026-07-25; it now ships in the repo alongside
 `bench_offline.py`, with the cells byte-identical to that job. It reads `ROOT`,
 `IMG`, `ROUNDS`, `MODEL`, `MODEL_NVFP4`, and `EXTRA_MOUNTS` from the
@@ -869,61 +917,58 @@ cd $W && ROOT=$ROOT MODEL_NVFP4=$MODEL_NVFP4 \
 
 `--rounds N` runs **N+1** passes: round 0 is a warmup, kept in the JSON as
 `"warmup": true` and excluded from the median. Do not remove it — the warmup
-round came in slower than the median in all twelve cells of job 2441711, by up
+round came in slower than the median in all twelve cells of job 2337204, by up
 to 3.1% on decode-1k, which is *larger* than the 2.2% fi_dg-vs-native effect
 that cell is measuring. Prefix caching is off for the same reason: rounds reuse
 prompts, so with it on every post-warmup round is a 100% cache hit and prefill
 measures nothing (once produced a fake 91k tok/s).
 
-### 5d. Expected numbers (HISTORICAL — EP4, 4x GB200)
+### 5d. Expected numbers
 
-> Superseded on `vllm_repro_8_gpu`: these are the 2026-07-24 EP4 numbers, and
-> the dec1k row among them predates the CAPTURE_SIZES fix, so it is not
-> comparable with anything measured after 2026-07-25. Check yourself against
-> [expected_results.md](expected_results.md) §1-2.
+TP8+EP8, both models, in [expected_results.md](expected_results.md) §1-2 —
+kept in one place so there is a single set of numbers to check against, with
+tolerances and the two known failure modes.
 
-Median total tok/s, job 2441711:
+Treat them as a band, not a target: ratios are stable to about ±0.02x between
+sessions, absolute throughput moves more with node and thermal state, and the
+native decode-1k baseline drifts round-over-round — which is why all three
+backends of a cell must run in one session.
 
-| cell | native | fi_dg | fi_cutedsl |
-|---|---|---|---|
-| prefill-8k `prefill:1024:1` x256 | 45816 | 47593 (1.039x) | **54132 (1.182x)** |
-| decode-1k `decode:128:256` x1024 | 32191 | 32893 (1.022x) | **34435 (1.070x)** |
-| 100K ISL / 1K OSL, 32 conc | 34553 | 35322 (1.022x) | **37491 (1.085x)** |
-| 32K ISL / 32 OSL, 32 conc | 42235 | 43425 (1.028x) | **48430 (1.147x)** |
+> **The recorded numbers are on B200.** Jobs 2337204 / 2337438 / 2337549 /
+> 2337487 all ran on 1x8 B200 nodes. A GB200 node (Grace CPU + NVLink-C2C)
+> lands slightly differently because the dispatch/attention host work sits on
+> the Grace side rather than a discrete host. Both are Blackwell sm_100 and
+> valid; just don't compare cell-for-cell across the two.
 
-Latency, TTFT in seconds and ITL in milliseconds:
+### 5e. The other two jobs — V4-Pro, and the accuracy gate
 
-| cell | | native | fi_dg | fi_cutedsl |
-|---|---|---|---|---|
-| 100K / 1K | TTFT p50 | 41.7 | 40.6 | 36.6 |
-| | ITL p50 / p99 | 48.5 / 83.7 | 47.5 / 81.8 | 45.8 / 76.0 |
-| 32K / 32 | TTFT p50 | 12.8 | 12.4 | 11.1 |
-| | ITL p50 / p99 | 190.9 / 191.1 | 185.6 / 185.9 | 165.5 / 165.6 |
+Everything above is DeepSeek-V4-Flash. Two more jobs complete the branch's
+results, both submitting their own exclusive 8-GPU node:
 
-Treat these as a band, not a target — rounds land within ~1%, but the native
-decode-1k baseline drifts between sessions.
+```bash
+# V4-Pro, same four cells, ~2 h. native/fi_dg on the Pro mx checkpoint,
+# fi_cutedsl on the pinned Pro NVFP4; knob cache knob_cache_pro_ep8.json.
+cd $W && MODEL_MX_PRO=... MODEL_NVFP4_PRO=... sbatch job_vllm_pr_runbook_sweep_pro.sh
 
-> **These numbers are on GB200; B200 lands slightly lower.** §5d is 1x4 **GB200**
-> (Grace CPU + NVLink-C2C). A from-scratch rerun on 1x4 **B200** (2026-07-25,
-> job 2337172) reproduced the *shape* — fi_cutedsl 1.151x prefill-8k, 1.051x
-> decode-1k, 1.080x at 100K, 1.137x at 32K, with the same "advantage shrinks
-> with context" trend — but absolute tok/s and ratios each sit a hair under the
-> GB200 table (native prefill 44656 vs 45816; fi_cutedsl 1.151x vs 1.182x),
-> because the Grace-side dispatch/attention work is on a discrete host instead.
-> Both are Blackwell sm_100 and valid; just don't compare a B200 run cell-for-
-> cell against the GB200 targets.
+# GSM8K across both models AND both checkpoints, ~35 min.
+cd $W && MODEL_MX_FLASH=... MODEL_NVFP4_FLASH=... \
+         MODEL_MX_PRO=...   MODEL_NVFP4_PRO=...   sbatch job_gsm8k_flash_pro.sh
+```
 
-**The advantage shrinks as context grows**: 1.182x at prefill-8k, 1.147x at 32K,
-1.085x at 100K. Attention takes a larger share of every step at long context, so
-a fixed MoE-kernel win buys proportionally less end to end. The microbenchmark
-shows the same crossover at ~1024 tokens/rank. Expect the trend, not a single
-number.
+Both take their checkpoints from the environment and fail at submit time with a
+readable message if one is unset or is not a directory — they do not discover it
+an hour into the allocation. Outputs are `results/sweep_pro_*.json` and
+`results/gsm8k2_*.json`.
 
-**32K/32 is not a decode measurement.** With 32 output tokens its ITL p50 and
-p99 match to one decimal (190.9 / 191.1) — the cell is prefill bound and ITL is
-just the steady rate. Raise OSL if you want it to say something about decode.
+The Pro sweep's V4-Pro NVFP4 checkpoint is 45 GiB *larger* than its mx one
+(850.4 vs 805.3 GiB), which is why fi_cutedsl is the first thing to run out of
+KV cache if a cell is misconfigured — see §7.
 
----
+The GSM8K job runs its Flash cells at **TP4** and its Pro cells at TP8. That is
+deliberate: it is an accuracy gate rather than a throughput measurement, and TP4
+is the configuration the recorded Flash accuracies were measured at. It is the
+one place on this branch that is not TP8, and it is why `knob_cache_dsv4_8k.json`
+(world 4) ships.
 
 ## 6. Running with a different ROOT
 
@@ -984,8 +1029,7 @@ which the new code rejects. For a full revert, copy `kernel.py.orig` back.
 
 ## 8. Not covered
 
-* No multi-node run. Single node, TP8+EP8 (this branch); the EP4 numbers in
-  §4a/§5d predate it.
+* No multi-node run. Single node, TP8+EP8.
 * ~~GSM8K not re-run since the backend-string switch~~ **DONE 2026-07-25, job
   2337476** — and it caught that the gate had been disarmed by an exported
   `MODEL` (§5b). Flash: native 0.960 / fi_dg 0.960 / fi_cutedsl 0.970 on the

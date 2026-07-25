@@ -60,7 +60,7 @@ def main():
     ap.add_argument(
         "--subtitle",
         default=(
-            "4x GB200 (EP=4), 7168 hidden / 2048 inter / 256 experts / top-8, "
+            "1x8 B200 (EP=8), 4096 hidden / 2048 inter / 256 experts / top-6, "
             "corrected K-major weight layout (2026-07-15) · per-group "
             "y-scale · italic = best speedup vs deep_gemm in the group"
         ),

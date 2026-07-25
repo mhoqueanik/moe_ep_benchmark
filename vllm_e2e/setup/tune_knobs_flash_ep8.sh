@@ -1,5 +1,8 @@
 #!/bin/bash
-# EP8 knob retune (RUNBOOK_8GPU_SM100 §7). The shipped knob cache is EP4-tuned;
+# EP8 knob retune (RUNBOOK_REPRO.md §5, knob-cache preamble). The branch
+# already ships the result as
+# results/knob_cache_ep8.json, so this only needs rerunning if your geometry or
+# world size differs;
 # at EP8 each rank holds 32/256 experts, changing the winning tiles. Writes
 # knob_cache_ep8.json. NB: the 8gpu doc's `torchrun -np 8` is wrong; tune.py's
 # own docstring uses --nproc_per_node.

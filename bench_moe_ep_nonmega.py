@@ -18,7 +18,7 @@ Non-mega path = vLLM's FusedMoEKernel (a "modular kernel") =
 The mega path (--moe-backend deep_gemm_mega_moe -> deep_gemm.fp8_fp4_mega_moe)
 fuses dispatch+GEMM+combine into one kernel and is NOT simulated here.
 
-Launch (single node, 4 GPUs -- matches CUDA_VISIBLE_DEVICES=0,1,2,3, DP=4):
+Launch (single node, 8 GPUs -- matches CUDA_VISIBLE_DEVICES=0,1,...,7, DP=8):
 
     CUDA_VISIBLE_DEVICES=0,1,2,3 python bench_moe_ep_nonmega.py \
         --world-size 4 --algorithm ll --experts-backend deepgemm \

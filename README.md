@@ -12,21 +12,20 @@ tolerances, and the two failure modes that produce plausible-but-wrong results.
 
 | | what | how | ~time |
 |---|---|---|---|
-| Kernel microbenchmark | cutedsl vs deep_gemm_mega at DSV4 shapes. No vLLM, no checkpoints. | [RUNBOOK.md](RUNBOOK.md), `GPUS=8 ./run.sh` | 20 min |
+| Kernel microbenchmark | cutedsl vs deep_gemm_mega at DSV4 shapes. No vLLM, no checkpoints. | [RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) §4 | 20 min |
 | vLLM e2e, Flash | 4 cells x 3 backends, EP8 | `vllm_e2e/job_vllm_pr_runbook_sweep_ep8.sh` | 1 h |
 | vLLM e2e, Pro | same cells, V4-Pro | `vllm_e2e/job_vllm_pr_runbook_sweep_pro.sh` | 2 h |
 | Accuracy gate | GSM8K, both models, both checkpoints | `vllm_e2e/job_gsm8k_flash_pro.sh` | 35 min |
 
 Setup — container, venv, patch, checkpoints — is
-[vllm_e2e/RUNBOOK_1x8.md](vllm_e2e/RUNBOOK_1x8.md), which defers to
-[RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) §1-3 for the from-scratch build.
+[RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) §1-3; it is the single runbook and covers
+the microbenchmark (§4) and the e2e sweeps (§5) too.
 
 ## Layout
 
 ```
 expected_results.md        the numbers, tolerances, failure modes
-RUNBOOK.md                 microbenchmark runbook
-RUNBOOK_REPRO.md           from-scratch e2e build + run (setup is §1-3)
+RUNBOOK_REPRO.md           the runbook: build (§1-3), microbenchmark (§4), e2e (§5)
 run.sh, run_sweep.sh       microbenchmark launchers   (GPUS=8 => EP8)
 bench_moe_ep_*.py          microbenchmark bodies
 model_shapes/              per-shape kernel table + its EP8 result

@@ -14,7 +14,7 @@
 # All rows land in ONE csv (geometry columns + compute_kernel suffix identify
 # each cell); model_shapes/make_tables.py turns it into RESULTS.md.
 #
-# Usage (inside the flashinfer-ep container on a 4-GPU node):
+# Usage (inside the flashinfer-ep container on an 8-GPU node):
 #   bash model_shapes/run_model_shapes.sh
 #   SHAPES="deepseek_v3 gpt_oss_120b" VARIANTS="fi_dg fi_fp4" \
 #       SEQ_LENS="8 2048" bash model_shapes/run_model_shapes.sh
@@ -24,7 +24,9 @@
 set -uo pipefail
 
 MS_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT_DIR="${OUT_DIR:-$MS_HERE/results}"
+# results_ep8/ on this branch: make_tables keys on (geometry, tokens/rank,
+# variant) and ignores the gpus column, so one directory per world size.
+OUT_DIR="${OUT_DIR:-$MS_HERE/results_ep8}"
 
 # Definitions only (run.sh is guarded by a BASH_SOURCE check).
 # shellcheck source=../run.sh

@@ -4,7 +4,7 @@ Mirrors ``bench_moe_ep_mega.py``: shared inputs/weights/routing from
 ``bench_common``, input staging and weight finalize outside the timed region,
 timed loop calls only ``deep_gemm.fp8_fp4_mega_moe``.
 
-Launch (4 GPUs, Blackwell sm_100+):
+Launch (8 GPUs, Blackwell sm_100+):
 
     CUDA_VISIBLE_DEVICES=0,1,2,3 python bench_moe_ep_vllm_mega.py \\
         --world-size 4 --tokens-per-rank 8 --num-experts 256 --top-k 8 \\

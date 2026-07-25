@@ -7,7 +7,7 @@ Input staging (bf16 -> fp8/MXFP8/NVFP4) and weight preprocessing are lifted OUT
 of the timed region.  Activations are pre-quantized once; the timed loop calls
 only ``kernel.compute()``.
 
-Launch (4 GPUs, Blackwell sm_100+):
+Launch (8 GPUs, Blackwell sm_100+):
 
     CUDA_VISIBLE_DEVICES=0,1,2,3 python bench_moe_ep_mega.py \\
         --world-size 4 --mega-backend mxfp8_cutedsl \\

@@ -22,7 +22,7 @@ for shape in $SHAPE_LIST; do
     jobid=$(sbatch --parsable -A coreai_libraries_cudnn -p batch -N1 \
         --ntasks-per-node=1 --time=04:00:00 \
         -J "coreai_libraries_cudnn-fi.mshape.${shape}" \
-        --output="$MS/results/slurm_${shape}_%j.log" \
+        --output="${OUT_DIR:-$MS/results_ep8}/slurm_${shape}_%j.log" \
         --export=ALL,SHAPES="$shape",STAMP="$stamp",VARIANTS="${VARIANTS:-}",SEQ_LENS="${SEQ_LENS:-}" \
         --wrap "srun --container-image='$IMG' \
             --container-mounts='$ROOT:$ROOT' \

@@ -8,9 +8,9 @@
 #SBATCH --partition=batch
 #SBATCH --output=vllm_pr_sweep_ep8_%j.log
 #
-# Full e2e rerun of RUNBOOK_VLLM_PR.md on 1x4 GB200, against the reshaped API
-# (two backends, module at vllm/utils/flashinfer_moe_ep.py). Also the first
-# run of the new decode cells, so the runbook can carry expected numbers.
+# DeepSeek-V4-Flash at EP8/TP8 on one 8-GPU SM100 node, against the reshaped
+# API (two backends, module at vllm/utils/flashinfer_moe_ep.py). Same four
+# cells as the V4-Pro sweep, so the two models' rows are directly comparable.
 #
 #   tier 1        config checks (no model)
 #   prefill-8k    prefill:1024:1  x256, capture 8192   [headline]
@@ -21,12 +21,11 @@
 # The 0.6.15 venv is below the new flashinfer floor, so the version gate is
 # explicitly skipped -- that is the documented pre-release escape hatch.
 #
-# Provenance: this is the script that produced job 2441711, i.e. every number
-# in the "Expected numbers" tables of moe_ep_repro_runbook.md §5d and
-# RUNBOOK_VLLM_PR.md. It lived in a scratch dir until 2026-07-25; the only
-# changes on the way in were the portability knobs documented below. Keep the
-# cells byte-identical to that job or the recorded numbers stop being a
-# baseline.
+# Provenance: this is the script that produced job 2337204 -- the Flash rows of
+# expected_results.md §1 and RUNBOOK_REPRO.md §5c. Its decode-1k cell was
+# re-measured as job 2337549 after CAPTURE_SIZES was pinned (see the comment on
+# that cell below). Keep the cells byte-identical to those jobs or the recorded
+# numbers stop being a baseline.
 #
 # Usage:
 #   cd <repo>/vllm_e2e && sbatch job_vllm_pr_runbook_sweep.sh
