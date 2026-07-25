@@ -224,25 +224,45 @@ For headline numbers, follow `RUNBOOK.md` §5 and RUNS.md runs 37-40: capture
 **all** recurring step shapes (`MAX_CAPTURE=4096`), or fi decode looks
 falsely slow because eager prefill chunks leak into decode rounds.
 
-Both headline regimes were re-measured through the backend strings in one
-session (job 2440327), median total tok/s over 3 rounds:
+### Expected numbers
 
-| regime | native | fi_dg | fi_nvfp4 | prior |
+Full sweep, one session, 1x4 GB200, vLLM 0.25.1, cutlass-dsl 4.5.2, CUDA
+graphs on (job 2441711). Median total tok/s; TTFT in seconds, ITL in
+milliseconds. `fi_cutedsl` used the `8k` knob cache.
+
+| cell | native | fi_dg | fi_cutedsl |
+|---|---|---|---|
+| prefill-8k `prefill:1024:1` x256 | 45816 | 47593 (1.039x) | **54132 (1.182x)** |
+| decode-1k `decode:128:256` x1024 | 32191 | 32893 (1.022x) | **34435 (1.070x)** |
+| 100K ISL / 1K OSL, 32 conc | 34553 | 35322 (1.022x) | **37491 (1.085x)** |
+| 32K ISL / 32 OSL, 32 conc | 42235 | 43425 (1.028x) | **48430 (1.147x)** |
+
+Latency on the two interactivity cells:
+
+| cell | | native | fi_dg | fi_cutedsl |
 |---|---|---|---|---|
-| decode-1k (capture 4096, `dec2k` knobs) | 32258 | 32896 (1.020x) | **34522 (1.070x)** | 1.074x |
-| prefill-8k (capture 8192, `8k` knobs) | 45779 | 47452 (1.037x) | **53806 (1.175x)** | 1.181x |
+| 100K / 1K | TTFT p50 | 41.7 | 40.6 | 36.6 |
+| | ITL p50 / p99 | 48.5 / 83.7 | 47.5 / 81.8 | 45.8 / 76.0 |
+| 32K / 32 | TTFT p50 | 12.8 | 12.4 | 11.1 |
+| | ITL p50 / p99 | 190.9 / 191.1 | 185.6 / 185.9 | 165.5 / 165.6 |
 
-Every cell is within 2.2% of its pre-switch value, so the **1.18x prefill /
-1.07x decode** headline holds on the backend-string path. Exact cells:
+Treat these as a band, not a target: rounds are within ~1% but the native
+decode-1k baseline drifts across sessions. The two headline cells reproduce
+their pre-rename values (1.175-1.182x prefill, 1.070-1.074x decode).
+
+**The advantage shrinks as context grows** — 1.182x at prefill-8k, 1.147x at
+32K, 1.085x at 100K. Attention takes a larger share of every step at long
+context, so a fixed MoE-kernel win buys proportionally less end to end. Expect
+this trend rather than a single number.
+
+**32K/32 is not a decode measurement.** With 32 output tokens its ITL p50 and
+p99 are identical to one decimal (190.9 / 191.1), i.e. the cell is prefill
+bound and ITL is just the steady rate, not interactivity. Raise OSL if you
+want that cell to say something about decode.
+
+Exact cells:
 
 ```bash
-# decode-1k
-ENFORCE_EAGER=0 MAX_CAPTURE=4096 MAX_NUM_SEQS=1024 \
-MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
-FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_dsv4_dec2k.json \
-python bench_offline.py --tag fi_dec --workload decode:128:256 \
-  --num-prompts 1024 --rounds 3 --out results/fi_dec.json
-
 # prefill-8k -- the sparse CAPTURE_SIZES list is mandatory here: the dense
 # default made vllm estimate 310 GiB of graph pool and drove KV negative.
 ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 \
@@ -251,11 +271,61 @@ MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
 FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_dsv4_8k.json \
 python bench_offline.py --tag fi_pre --workload prefill:1024:1 \
   --num-prompts 256 --rounds 3 --out results/fi_pre.json
+
+# decode-1k
+ENFORCE_EAGER=0 MAX_CAPTURE=4096 MAX_NUM_SEQS=1024 \
+MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
+FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_dsv4_dec2k.json \
+python bench_offline.py --tag fi_dec --workload decode:128:256 \
+  --num-prompts 1024 --rounds 3 --out results/fi_dec.json
+
+# interactivity: 100K/1K and 32K/32, both at 32 concurrent. REQUIRE_LATENCY
+# makes the run fail rather than quietly complete without TTFT/ITL.
+ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 \
+CAPTURE_SIZES=32,256,2048,8192 MAX_NUM_SEQS=32 GPU_MEM_UTIL=0.93 \
+REQUIRE_LATENCY=1 MAX_MODEL_LEN=102400 \
+MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
+python bench_offline.py --tag fi_lc --workload longctx:100000:1024 \
+  --num-prompts 32 --rounds 2 --out results/fi_lc.json
+# 32K variant: MAX_MODEL_LEN=33792 and --workload longctx:32768:32
 ```
 
 Run the three backends of a regime in **one session**. Run 34 found native's
 decode-1k drifts round-over-round within a session, so cross-session ratios
-are not trustworthy.
+are not trustworthy. Whole sweep in one job:
+`logs_fi/job_vllm_pr_runbook_sweep.sh` (~1 h).
+
+### Kernel-level microbenchmark
+
+Independent of vLLM — it drives the FlashInfer kernels directly, so it
+isolates kernel work from integration overhead. `e2e_pipelined` p50 us at the
+DeepSeek-V4-Flash MoE geometry (4096 hidden / 2048 inter / 256 experts /
+top-6), EP4, cutlass-dsl 4.5.2 (job 2441404):
+
+| tokens/rank | 8 | 64 | 512 | 1024 | 2048 | 4096 | 8192 |
+|---|---|---|---|---|---|---|---|
+| `deep_gemm_mega` | 128.0 | 175.1 | 201.7 | 240.6 | 389.7 | 718.4 | 1246.2 |
+| `nvfp4_cutedsl` | 141.3 | 188.6 | 229.4 | 257.0 | 341.0 | 564.2 | 1037.6 |
+| `+ikr` | 148.6 | 202.8 | 228.4 | 260.1 | 339.4 | 558.1 | 1024.7 |
+| `+combine_mxfp8` | 150.1 | 196.1 | 218.9 | 246.8 | 310.2 | 480.2 | 858.0 |
+| `+combine_nvfp4` | 145.4 | 194.6 | 214.6 | 236.5 | 293.8 | 447.5 | 769.0 |
+| **nvfp4 vs dg** | 0.91x | 0.93x | 0.88x | 0.94x | 1.14x | 1.27x | 1.20x |
+
+DeepGEMM wins below roughly 1024 tokens/rank and the CuteDSL kernel wins above
+— which is why the e2e decode cells gain less than the prefill ones. The
+quantized combine wires look strong here (`combine_nvfp4` is 1.62x DeepGEMM at
+8192) but did **not** transfer e2e at this geometry, so they stay off by
+default; see RUNS.md run 24 before enabling them.
+
+```bash
+SHAPE_LIST="deepseek_v4_flash" SEQ_LENS="8 64 512 1024 2048 4096 8192" \
+  bash model_shapes/submit_jobs.sh      # from moe_ep_benchmark/, ~16 min
+python model_shapes/make_tables.py model_shapes/results/model_shapes_*.csv
+```
+
+The payload pins `nvidia-cutlass-dsl` (default 4.5.2, `DSL_VERSION` to
+override). Do not unpin it: the CuteDSL codegen is version-sensitive enough
+(34-54% on pre-4.5.2) that an unpinned sweep is unattributable.
 
 ## 8. Things that will bite you
 
@@ -297,8 +367,10 @@ missing `cudaDeviceReset`. They appear after results are written. Harmless.
 
 ### Checked
 
-Jobs 2439803 / 2439811 (registration + eager smokes) and 2440327 (prequant,
-mxfp8, graph-mode throughput), all 4xGB200, vLLM 0.25.1, cutlass-dsl 4.5.2.
+Jobs 2439803 / 2439811 (registration + eager smokes), 2440327 (prequant,
+mxfp8, graph-mode throughput), 2441404 (kernel microbenchmark) and 2441711
+(full sweep against the two-backend API, 15/15 tier 1), all 1x4 GB200,
+vLLM 0.25.1, cutlass-dsl 4.5.2.
 
 | what | result |
 |---|---|
