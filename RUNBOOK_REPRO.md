@@ -101,9 +101,16 @@ RW=$ROOT/flashinfer-2/flashinfer-moe_ep
 srun --overlap --jobid="$JOBID" -N1 \
   --container-image=nvcr.io/nvidia/pytorch:26.05-py3 \
   --container-save=$IMG \
-  --container-mounts=$RW:/host \
+  --container-mounts=$RW:/host/flashinfer \
   bash -lc 'bash /host/flashinfer/docker/install/build_flashinfer_ep_pytorch.sh'
 ```
+
+**Mount at `/host/flashinfer`, not `/host`.** The build script defaults
+`FI_SRC=/host/flashinfer` and does `cd "$FI_SRC"; pip install -e .`, so the repo
+*root* (which holds `pyproject.toml`) must land at `/host/flashinfer`. Mounting
+`$RW:/host` instead makes `FI_SRC` resolve to `$RW/flashinfer` — the package
+directory, which has no `pyproject.toml` — and the editable install fails.
+(Verified 2026-07-25 on a from-scratch build.)
 
 (Upstream writes `--jobid="$SLURM_JOB_ID"` without `--overlap`, which is right
 only from *inside* a batch script. From a login shell against the §3a hold job
@@ -157,13 +164,19 @@ export HF_HOME=$ROOT/.cache/huggingface
 mkdir -p $CKPT
 
 python -m pip install -U "huggingface_hub[cli,hf_transfer]"
-export HF_HUB_ENABLE_HF_TRANSFER=1     # saturates the link; drop it if it flakes
+
+# HF_HUB_ENABLE_HF_TRANSFER is DEPRECATED and ignored on huggingface_hub >=1.x:
+# the client now defaults to the Xet high-performance transfer, which is
+# CPU-heavy. On a shared login node with an arbiter/cgroup reaper that got the
+# process SIGKILLed (exit 137) at ~18GB with 300+GB RAM free -- i.e. NOT an OOM.
+# Disable Xet so the pull uses low-CPU plain-HTTPS range downloads (resumable):
+export HF_HUB_DISABLE_XET=1
 
 # Both repos are public and ungated as of 2026-07-25, so no licence click.
-# Log in anyway: this cluster's egress IP is shared and Hub-wide rate-limited,
-# and anonymous requests get 429 ("We had to rate limit your IP") within a
-# handful of calls -- nowhere near enough for a 46-shard pull.
-hf auth login
+# hf auth login raises rate limits, but is NOT strictly required: verified
+# 2026-07-25 that an anonymous, Xet-disabled pull of the 46-shard NVFP4 repo
+# completed without a 429. Log in if you do hit "We had to rate limit your IP".
+hf auth login   # optional; skip to try anonymous first
 
 # Full 40-char commits pin the exact trees §5d was measured on. Do NOT drop
 # --revision and do NOT resolve to main -- see the warning below.
@@ -247,11 +260,23 @@ print('both checkpoints are at the pinned revisions')
 > catch.
 
 Both repo IDs were confirmed against huggingface.co on 2026-07-25: public,
-ungated, 46 shards, 156.7 GiB (NVFP4) and 148.6 GiB (mx) — matching the table
-above and the internal CI mirror
-`nvidia_deepseek-v4-flash-nvfp4/hf/hf-48bfe38_orig`, the same commit
-`bench_offline.py:29` points at. The lowercase spellings redirect to the
-canonical casing, so either form downloads the same tree.
+ungated, 46 shards, 156.7 GiB (NVFP4) and 148.6 GiB (mx). The lowercase
+spellings redirect to the canonical casing, so either form downloads the same
+tree.
+
+> **The CI mirror's NVFP4 copy is now off-pin — do not use it for fi_cutedsl.**
+> `bench_offline.py:29`'s `DEFAULT_MODEL_NVFP4` points at
+> `nvidia_deepseek-v4-flash-nvfp4/hf/hf-48bfe38_orig`, but as of 2026-07-25 that
+> path no longer exists on `/lustre/share/coreai_dlalgo_ci`; the mirror advanced
+> to `hf-e3cd60e_orig`, whose `hf_quant_config.json` is the **post-rewrite
+> schema** (`quant_algo: "MIXED_PRECISION"`, per-layer keys, `group_size`) — the
+> exact silent-dequant-fallback case above. So the "unset MODEL_NVFP4 falls back
+> to the compiled-in mirror default" path is broken: you must download the
+> pinned `48bfe38` NVFP4 (above) and pass `MODEL_NVFP4` explicitly. The **mx**
+> mirror, by contrast, IS still at the pin (`deepseek-ai_deepseek-v4-flash/hf/
+> hf-6e76323_orig`, 46 shards), so `DEFAULT_MODEL` for native/fi_dg is fine. The
+> same is true of the V4-Pro mirror: mx `hf-0366e4e_orig` is pinned, but both
+> NVFP4-Pro revisions (`hf-1449d1e`, `hf-d6acf0c`) are post-rewrite.
 
 If you cannot reach the Hub, the fallback is to copy the 157 GB directory from
 a cluster that has it. Regenerating the cast is not an option here — no repo in
@@ -431,6 +456,15 @@ cd $ROOT/moe_ep_benchmark
 SHAPE_LIST="deepseek_v4_flash" SEQ_LENS="8 64 512 1024 2048 4096 8192" \
     bash model_shapes/submit_jobs.sh
 
+# NOTE: model_shapes/results/ is TRACKED and a fresh clone already contains
+# committed CSVs from prior runs. The glob below merges them all (make_tables
+# keys on (geometry, tokens/rank, variant) and later files win), so on a
+# from-scratch checkout render ONLY your run's CSV to compare against §4a:
+python model_shapes/make_tables.py \
+    model_shapes/results/model_shapes_<your_stamp>_deepseek_v4_flash.csv \
+    -o /tmp/micro_scratch_RESULTS.md
+# (the glob form is for accumulating cells at a FIXED world size once the dir is
+#  yours; it silently mixes runs otherwise.)
 python model_shapes/make_tables.py model_shapes/results/model_shapes_*.csv
 ```
 
@@ -629,6 +663,16 @@ fi_cutedsl vs native 1/8 exact, 0.016-0.13 — it diverges by construction
 (double quantization), and that comparison is cross-checkpoint, so a wider band
 is expected and is not a bug.
 
+> **The fi_dg 8/8-exact figure is build-specific — do not treat it as a gate.**
+> On a from-scratch build 2026-07-25 (B200, DSL 4.5.2), fi_dg vs native came in
+> at **1/8 exact, mean |dlogprob| ≈ 0.02–0.06**: near-identical, but one flipped
+> logit early in a greedy decode diverges the rest of that sequence. native and
+> fi_dg are separate kernel implementations, so bit-exactness is not guaranteed
+> across builds/hardware. The real correctness gate is GSM8K (below), where the
+> same run scored native **0.960**, fi_dg **0.960** (identical), fi_cutedsl
+> **0.955** — all in band. Use the logprob smoke to confirm *routing* (the
+> `[fi_moe_ep]` banner), not to demand bit-exact generations.
+
 To produce that fi_cutedsl row, add a third smoke. **`smoke_infer.py` does not
 resolve the checkpoint per backend** the way `bench_offline.py` and
 `eval_gsm8k.py` do — its `--model` defaults to `$MODEL` regardless of
@@ -683,7 +727,14 @@ Common setup:
 cd $W
 source venv0251/bin/activate
 bash patch_0251/apply.sh
-export MODEL=$CKPT/deepseek-v4-flash                 # from §2
+# DO NOT export MODEL. resolve_model() (bench_offline.py:42) returns $MODEL for
+# EVERY backend when it is set, so `export MODEL=$CKPT/deepseek-v4-flash` forces
+# fi_cutedsl onto the mx checkpoint too — the dequant→requant path — and the
+# fi_cutedsl column silently STOPS reproducing §5d (measured ~1.15x instead of
+# ~1.18x at prefill-8k; verified 2026-07-25). Leave MODEL unset so native/fi_dg
+# use DEFAULT_MODEL (the pinned mx mirror) and only fi_cutedsl consults
+# MODEL_NVFP4. Set MODEL_NVFP4 explicitly (the compiled-in default is off-pin,
+# see §2):
 export MODEL_NVFP4=$CKPT/deepseek-v4-flash-nvfp4
 export FI_MOE_EP_SKIP_VERSION_CHECK=1   # the 0.6.15 venv is below the new
                                         # flashinfer floor: documented
@@ -749,7 +800,9 @@ a scratch dir until 2026-07-25; it now ships in the repo alongside
 environment, so a different checkout needs no edit:
 
 ```bash
-cd $W && ROOT=$ROOT MODEL=$MODEL MODEL_NVFP4=$MODEL_NVFP4 \
+# Pass MODEL_NVFP4 but NOT MODEL (see the resolve_model warning above): with
+# MODEL set, the sweep forwards it and fi_cutedsl loads the mx dequant path.
+cd $W && ROOT=$ROOT MODEL_NVFP4=$MODEL_NVFP4 \
     sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep.sh
 ```
 
@@ -783,6 +836,16 @@ Latency, TTFT in seconds and ITL in milliseconds:
 
 Treat these as a band, not a target — rounds land within ~1%, but the native
 decode-1k baseline drifts between sessions.
+
+> **These numbers are on GB200; B200 lands slightly lower.** §5d is 1x4 **GB200**
+> (Grace CPU + NVLink-C2C). A from-scratch rerun on 1x4 **B200** (2026-07-25,
+> job 2337172) reproduced the *shape* — fi_cutedsl 1.151x prefill-8k, 1.051x
+> decode-1k, 1.080x at 100K, 1.137x at 32K, with the same "advantage shrinks
+> with context" trend — but absolute tok/s and ratios each sit a hair under the
+> GB200 table (native prefill 44656 vs 45816; fi_cutedsl 1.151x vs 1.182x),
+> because the Grace-side dispatch/attention work is on a discrete host instead.
+> Both are Blackwell sm_100 and valid; just don't compare a B200 run cell-for-
+> cell against the GB200 targets.
 
 **The advantage shrinks as context grows**: 1.182x at prefill-8k, 1.147x at 32K,
 1.085x at 100K. Attention takes a larger share of every step at long context, so
