@@ -65,5 +65,15 @@ PY
 
 # Drop stale bytecode so the patched sources are what actually imports.
 find "$DST" "$CFG" "$VLLM_DIR/utils" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+# Post-patch guard: nothing may still import the pre-move module path. A
+# function-local `from ...nvidia.fi_utils import log_step_shape` survived the
+# move once and, because it sits in the NATIVE experts' forward(), only
+# surfaced 45 min into a sweep as a missing baseline -- the fi cells passed.
+if stale=$(grep -rln "deepseek_v4\.nvidia\.fi_utils" "$VLLM_DIR" --include=*.py 2>/dev/null); then
+    echo "ERROR: still importing the pre-move fi_utils path:" >&2
+    echo "$stale" | sed 's/^/  /' >&2
+    exit 1
+fi
+
 echo "patched: $DST (backup: model.py.orig)"
 echo "patched: $CFG/kernel.py (backup: kernel.py.orig)"
