@@ -136,11 +136,11 @@ was *better* than native (42.6 vs 94.4 ms) precisely because its batches were
 `Available KV cache memory` and the scheduler's `Running:`/`Waiting:` counts
 before blaming a kernel.
 
-Severity scales with how little headroom you have: Pro EP8 held 189 sequences,
-Flash EP8 520, Flash EP4 the full 1280 — at EP4 the bug was latent, not absent.
-All shipped cells now pin `CAPTURE_SIZES`; pinning costs native ~3% to batch
-padding, so **decode-1k numbers from before 2026-07-25 are not comparable with
-these.**
+Severity scales with how little KV headroom the model leaves: Pro EP8 held 189
+of 1024 requested sequences, Flash EP8 520 — the bigger the weights, the harder
+it bites, and on a small enough model it hides entirely. All shipped cells now
+pin `CAPTURE_SIZES`; pinning costs native ~3% to batch padding, so **decode-1k
+numbers from before 2026-07-25 are not comparable with these.**
 
 ### 5.2 Exporting `MODEL` around the GSM8K gate
 

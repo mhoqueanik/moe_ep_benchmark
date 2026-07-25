@@ -25,10 +25,11 @@ sections: prep (§1), microbenchmark (§2), e2e throughput (§3), accuracy (§4)
 
 ```
 expected_results.md        the numbers, tolerances, failure modes
-RUNBOOK_REPRO.md           the runbook: build (§1-3), microbenchmark (§4), e2e (§5)
+RUNBOOK_REPRO.md           the runbook: §1 prep, §2 micro, §3 e2e, §4 accuracy
 run.sh, run_sweep.sh       microbenchmark launchers   (GPUS=8 => EP8)
 bench_moe_ep_*.py          microbenchmark bodies
-model_shapes/              per-shape kernel table + its EP8 result
+plot*.py, tests/          chart rendering, dense-reference correctness test
+model_shapes/              per-shape kernel sweep + results_ep8/ (the CSV §2 cites)
 vllm_e2e/
   patch_0251/              the vLLM patch (apply.sh / reset.sh)
   bench_offline.py         the e2e throughput harness
@@ -37,7 +38,7 @@ vllm_e2e/
   compare_outputs.py       logprob diff between two smoke runs
   test_backend_registration.py   tier-1 config checks, no model
   job_*.sh                 the three SLURM jobs above
-  setup/                   checkpoint download + knob tuning
+  setup/                   checkpoint downloads (4) + knob retune (2)
   results/                 only the JSONs expected_results.md cites
 ```
 

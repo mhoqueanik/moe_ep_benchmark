@@ -45,8 +45,10 @@ Expected numbers for §2–§4 live in [expected_results.md](expected_results.md
   Ships torch 2.12, deep_gemm, triton, nvshmem, cutlass. Does **not** ship vLLM.
   You build it yourself in §1.2c — the recipe lives in repo (2), so it cannot be
   built before the clone, and it needs a SLURM allocation.
-* ~350 GB of disk for the two checkpoints (149 GB + 157 GB), plus room for the
-  venv and the JIT cache.
+* Disk for the checkpoints (§1.3), plus room for the venv and the JIT cache:
+  **~2.0 TB for all four**, or ~325 GB if you only run the Flash half — Flash
+  mx 149 GB + NVFP4 174 GB, Pro mx 806 GB + NVFP4 851 GB. §2 (the kernel
+  microbenchmark) needs none of them.
 
 ```bash
 export ROOT=/lustre/fsw/coreai_libraries_cudnn/mhoqueanik
@@ -68,9 +70,9 @@ differs.
 ```bash
 mkdir -p $ROOT/flashinfer-2
 
-# (1) harness, runbooks, and the vLLM patch          -- branch vllm-pr
+# (1) harness, runbook, and the vLLM patch     -- branch vllm_repro_8_gpu
 git clone https://github.com/mhoqueanik/moe_ep_benchmark.git $ROOT/moe_ep_benchmark
-git -C $ROOT/moe_ep_benchmark switch vllm-pr
+git -C $ROOT/moe_ep_benchmark switch vllm_repro_8_gpu
 
 # (2) flashinfer kernels + moe_ep runtime            -- branch 4_5_2-perf-fix
 git clone https://github.com/mhoqueanik/flashinfer-moe_ep.git \
@@ -82,9 +84,11 @@ git -C $ROOT/flashinfer-2/flashinfer-moe_ep submodule update --init --recursive
 Flashinfer's 4 submodules (cccl, cutlass, nixl, spdlog) are required — both the
 image build and the editable install compile against them.
 
-Branch discipline: `moe_ep_benchmark` `main` deliberately still uses the old
-`FI_MOE_EP=1` opt-in, because no released vLLM knows the new backend strings.
-Use `vllm-pr` for everything in this file.
+Branch discipline: `main` deliberately still uses the old `FI_MOE_EP=1`
+opt-in, because no released vLLM knows the new backend strings. `vllm-pr` is
+the full working branch (analysis history, EP4 material, one-off drivers).
+**`vllm_repro_8_gpu` — this branch — is the reproduction path and is what this
+file documents:** 1x8 only, latest results only.
 
 #### 1.2b. Optional third repo — the PR, for reading only
 
@@ -106,7 +110,7 @@ Commits the recorded numbers were taken at:
 
 | repo | branch | commit |
 |---|---|---|
-| `moe_ep_benchmark` | `vllm-pr` | `36d3add` |
+| `moe_ep_benchmark` | `vllm_repro_8_gpu` | the branch tip |
 | `flashinfer-2/flashinfer-moe_ep` | `4_5_2-perf-fix` | `1ee41bcd` |
 | `vllm-fi-moe-ep` (optional) | `fi-moe-ep-v4` | `c019433` |
 
@@ -163,15 +167,22 @@ error, `BUILD_NVEP=0` turns both backends off.
 
 ---
 
-### 1.3. Fetch the two checkpoints
+### 1.3. Fetch the checkpoints
 
-Two checkpoints, same base weights. Each backend runs the format its kernel
+Two per model, same base weights. Each backend runs the format its kernel
 consumes natively, so fi_cutedsl skips a dequant/requant:
 
-| backend | checkpoint | size |
-|---|---|---|
-| native, fi_dg | mx-format original | 149 GB |
-| fi_cutedsl | NVFP4 cast | 157 GB |
+| model | backend | repo | revision | size |
+|---|---|---|---|---|
+| Flash | native, fi_dg | `deepseek-ai/DeepSeek-V4-Flash` | `6e763230…` | 149 GB |
+| Flash | fi_cutedsl | `nvidia/DeepSeek-V4-Flash-NVFP4` | `48bfe38c…` | 174 GB |
+| Pro | native, fi_dg | `deepseek-ai/DeepSeek-V4-Pro` | `0366e4e` | 806 GB |
+| Pro | fi_cutedsl | `nvidia/DeepSeek-V4-Pro-NVFP4` | `9e7e88ee…` | 851 GB |
+
+All four are public and ungated (verified 2026-07-25). `vllm_e2e/setup/` wraps
+the pulls — `dl_mx_originals.sh [flash|pro|both]`, `dl_nvfp4_flash.sh`,
+`dl_nvfp4_pro.sh`, all taking `ROOT` from the environment. Flash alone is
+enough for §3 and §4's Flash rows; Pro adds ~1.7 TB.
 
 Run this **on a host with outbound network**, not inside the container and not
 on a compute node — nothing here needs a GPU, and compute nodes are commonly
@@ -216,23 +227,30 @@ On huggingface_hub older than 0.34 the command is `huggingface-cli download`
 with the same arguments. `hf download` resumes, so re-run it after an
 interruption rather than starting over.
 
-Point the harness at them — otherwise it uses the cluster-local mirror paths
-compiled into `bench_offline.py`, which will not exist on another machine:
+Point the harness at them with the **per-model** variables the job scripts
+consume. Otherwise it falls back to the cluster-local mirror paths compiled
+into `bench_offline.py`, which do not exist on another machine:
 
 ```bash
-export MODEL=$CKPT/deepseek-v4-flash                  # native, fi_dg
-export MODEL_NVFP4=$CKPT/deepseek-v4-flash-nvfp4      # fi_cutedsl
+export MODEL_MX_FLASH=$CKPT/deepseek-v4-flash
+export MODEL_NVFP4_FLASH=$CKPT/deepseek-v4-flash-nvfp4
+export MODEL_MX_PRO=$CKPT/deepseek-v4-pro                  # only for §3e / §4
+export MODEL_NVFP4_PRO=$CKPT/deepseek-v4-pro-nvfp4
 ```
 
-`bench_offline.py` picks between them from `MOE_BACKEND` automatically, so you
-never pass `--model`. Priority is `--model` > `MODEL` env > per-backend default.
+> **Do not export `MODEL`.** `resolve_model` ranks `--model` > `$MODEL` >
+> per-backend default, so a `MODEL=` in the environment sends *every* backend
+> to that one checkpoint — including fi_cutedsl, which then silently runs the
+> mx dequant path and reports meaningless numbers. All three job scripts pass
+> `--model` per cell for exactly this reason, and unset `MODEL` inside the
+> container. The same mistake disarmed the accuracy gate once; see §4b.
 
 Sanity-check before spending a node on it:
 
 ```bash
 python -c "
 import json, pathlib
-for p in ('$MODEL', '$MODEL_NVFP4'):
+for p in ('$MODEL_MX_FLASH', '$MODEL_NVFP4_FLASH'):
     d = pathlib.Path(p)
     cfg = json.load(open(d / 'config.json'))
     n = len(list(d.glob('model-*.safetensors')))
@@ -347,12 +365,12 @@ If your checkpoints live outside `$ROOT`, add them to `--container-mounts` or
 `in_container.sh` will not see them.
 
 Those four are the **only** variables the wrapper sets. Everything else —
-`CKPT`, `MODEL`, `MODEL_NVFP4` — reaches the container solely through srun's
-default `--export=ALL`, i.e. from whatever shell you type the command in. So
-re-export §1.3's block in any new shell before using the hold job. Skipping it is
-not silent-but-wrong, it just fails to find the model: §3c's
-`export MODEL=$CKPT/deepseek-v4-flash` expands to `/deepseek-v4-flash` when
-`CKPT` is unset. This bites most often the day *after* setup, when the 4h hold
+`CKPT` and the four `MODEL_*` paths — reaches the container solely through
+srun's default `--export=ALL`, i.e. from whatever shell you type the command
+in. So re-export §1.3's block in any new shell before using the hold job.
+Skipping it is not silent-but-wrong, it just fails to find the model:
+`MODEL_MX_FLASH=$CKPT/deepseek-v4-flash` expands to `/deepseek-v4-flash` when
+`CKPT` is unset, and the job scripts' guards reject it at submit time. This bites most often the day *after* setup, when the 4h hold
 job is still alive but your terminal is not.
 
 #### 1.4c. One command
@@ -540,6 +558,21 @@ This is the step that needs §1.5 if `ROOT` differs — both `submit_jobs.sh` an
 Do **not** unpin the DSL. The CuteDSL codegen is version-sensitive enough
 (34-54% slower pre-4.5.2) that an unpinned `--upgrade` makes a sweep
 unattributable. `DSL_VERSION` overrides.
+
+The geometries come from `model_shapes/shapes.tsv`, whose MoE shapes mirror the
+cudnn-frontend SDPA training benchmark's model list (MoE-capable models only):
+
+| name | hidden | moe_inter | experts | top-k |
+|---|---|---|---|---|
+| deepseek_v3 | 7168 | 2048 | 256 | 8 |
+| kimi_k2_6 | 7168 | 2048 | 384 | 8 |
+| gpt_oss_120b | 2880 | 2880 | 128 | 4 |
+| qwen3_5_397b | 4096 | 1024 | 512 | 10 |
+| **deepseek_v4_flash** | 4096 | 2048 | 256 | 6 |
+| deepseek_v4_pro | 7168 | 3072 | 384 | 6 |
+
+`SHAPE_LIST` selects rows; the recorded numbers are `deepseek_v4_flash`. Weights
+are synthetic, so no checkpoint is read.
 
 ### 2a. Expected numbers
 

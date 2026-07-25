@@ -78,8 +78,8 @@ DG=flashinfer_moe_ep_mega_deep_gemm
 CUTEDSL=flashinfer_moe_ep_mega_cutedsl
 
 # gcell <label> <backend-short> <tp> <model-path> <out-stem> [knob-cache]
-# The knob cache is per (model, EP size) -- Flash EP4 and Pro EP8 tuned
-# different geometries -- so it is a parameter, not a constant.
+# The knob cache is per (model, geometry) -- Flash is 4096/2048/256/top-6 and
+# Pro is 7168/3072/384/top-6 -- so it is a parameter, not a constant.
 gcell() {
     local label=\$1 short=\$2 tp=\$3 model=\$4 stem=\$5 knob=\${6:-}
     local be=deep_gemm_mega_moe cache=''

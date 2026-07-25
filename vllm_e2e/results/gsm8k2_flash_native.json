@@ -2,10 +2,12 @@
  "tag": "flash_native",
  "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-flash/hf/hf-6e76323_orig",
  "num_questions": 200,
- "accuracy": 0.96,
- "correct": 192,
+ "accuracy": 0.965,
+ "correct": 193,
  "invalid": 0,
- "elapsed_s": 97.48969960800605,
+ "truncated": 2,
+ "max_tokens": 512,
+ "elapsed_s": 106.18800436798483,
  "eager": true,
  "moe_backend": "deep_gemm_mega_moe"
 }

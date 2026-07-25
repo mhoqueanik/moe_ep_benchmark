@@ -36,8 +36,7 @@
 #   ROOT=/my/scratch          checkout root; default below
 #   IMG=/path/to.sqsh         container image
 #   ROUNDS=3                  timed rounds per cell (plus round 0 warmup)
-#   MODEL=... MODEL_NVFP4=... checkpoints; unset falls back to the mirror
-#                             paths compiled into bench_offline.py
+#   MODEL_MX_FLASH=... MODEL_NVFP4_FLASH=...   required; see §1.3
 #   EXTRA_MOUNTS=a:a,b:b      appended to --container-mounts, e.g. when the
 #                             checkpoints live outside $ROOT
 #   sbatch -A <acct> -p <part> ...   CLI flags override the #SBATCH lines above
@@ -56,8 +55,13 @@ MOUNTS="$ROOT:$ROOT,/lustre/share:/lustre/share:ro"
 # inside the container rather than becoming "" (which bench_offline.py would
 # treat as an explicit empty path instead of falling back to its default).
 FWD=""
-[[ -n "${MODEL:-}" ]]       && FWD+="export MODEL='$MODEL'; "
-[[ -n "${MODEL_NVFP4:-}" ]] && FWD+="export MODEL_NVFP4='$MODEL_NVFP4'; "
+# Required, not optional: the cells pass --model, so these must reach the
+# container. Fail here rather than an hour into the allocation.
+for v in MODEL_MX_FLASH MODEL_NVFP4_FLASH; do
+    [[ -n "${!v:-}" ]] || { echo "$v is unset -- see RUNBOOK_REPRO.md §1.3"; exit 2; }
+    [[ -d "${!v}" ]]   || { echo "$v=${!v} is not a directory"; exit 2; }
+    FWD+="export $v='${!v}'; "
+done
 
 srun --ntasks=1 \
   --container-image="$IMG" \
@@ -96,11 +100,19 @@ cell() {
         local short=native
         [[ \$be == \$DG ]] && short=fi_dg
         [[ \$be == \$CUTEDSL ]] && short=fi_cutedsl
+        # --model per backend, not the MODEL env: resolve_model ranks MODEL
+        # above the per-backend NVFP4 default, so exporting it to point native
+        # at a local checkpoint would drag fi_cutedsl onto the mx dequant path
+        # too. Explicit is the only form that survives an off-cluster run.
+        local model=\$MODEL_MX_FLASH
         local cache=''
-        [[ \$short == fi_cutedsl ]] && cache=FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_ep8.json
-        echo; echo \"--- \$name / \$short ---\"
+        if [[ \$short == fi_cutedsl ]]; then
+            model=\$MODEL_NVFP4_FLASH
+            cache=FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_ep8.json
+        fi
+        echo; echo \"--- \$name / \$short (model=\$(basename \$model)) ---\"
         env \$envs MOE_BACKEND=\$be \$cache \
-            python bench_offline.py --tag sw_ep8_\${name}_\${short} \"\$@\" \
+            python bench_offline.py --model \"\$model\" --tag sw_ep8_\${name}_\${short} \"\$@\" \
             --out results/sweep_ep8_\${name}_\${short}.json 2>&1 \
             | grep -E '^\\[bench_offline\\]|Error|Traceback' | tail -8
     done
