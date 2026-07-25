@@ -90,7 +90,7 @@ class FiRoutedExpertsV32(RoutedExperts):
     def _fi_finalize_weights(self) -> None:
         if self._mega_layer is not None:
             return
-        from vllm.models.deepseek_v4.nvidia.fi_utils import (
+        from vllm.utils.flashinfer_moe_ep import (
             build_fi_mega_layer,
             ensure_fi_moe_ep_runtime,
             make_fi_moe_ep_bootstrap,
@@ -142,7 +142,7 @@ class FiRoutedExpertsV32(RoutedExperts):
         input_ids: torch.Tensor | None = None,
     ) -> torch.Tensor:
         from flashinfer.moe_ep import MoEEpTensors
-        from vllm.models.deepseek_v4.nvidia.fi_utils import (
+        from vllm.utils.flashinfer_moe_ep import (
             apply_mega_moe_routing_preprocess,
             resolve_mega_moe_is_padding,
         )

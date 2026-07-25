@@ -17,9 +17,10 @@ dequantized to bf16 at load, requantized nvfp4).
 > `FI_MOE_EP=1 FI_MOE_EP_MEGAKERNEL=<kernel>` on top of `--moe-backend
 > deep_gemm_mega_moe`. Those env vars are retired in favour of one
 > `moe_backend` string per config (RUNBOOK.md §3), so repro commands recorded
-> here need translating: fi_dg -> `flashinfer_moe_ep_mega_deep_gemm_sm100`,
-> fi_nvfp4 -> `flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4`, fi_mxfp8 ->
-> `flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8`.
+> here need translating: fi_dg -> `flashinfer_moe_ep_mega_deep_gemm`,
+> fi_nvfp4 -> `flashinfer_moe_ep_mega_cutedsl`. fi_mxfp8 has no successor:
+> the backend set collapsed to two on 2026-07-24 and `mxfp8_cutedsl` is no
+> longer selectable, so those cells are not reproducible as recorded.
 >
 > **Validated equivalent, job 2439811 (07-24, 4xGB200, eager, TP4+EP4).**
 > Tier 1: 14/14 config checks (`test_backend_registration.py`, job 2439803).
@@ -42,6 +43,17 @@ dequantized to bf16 at load, requantized nvfp4).
 > 0.021-0.062), and the negative case — NVFP4 checkpoint with a deep_gemm
 > backend is rejected at startup naming the nvfp4 backend. GSM8K has NOT been
 > re-run since the switch.
+>
+> **DP4 long-context, job 2441095 (07-24, 100K ISL / 1K OSL, 32 per rank =
+> 128 in flight, TP1+EP4, capture 8192).** native 120516 / fi_dg 122311
+> (1.015x) / fi_nvfp4 128396 (**1.065x**) median total tok/s; ITL p50 55.3 /
+> 54.5 / 53.1 ms. **Run 18's 1.38x DP advantage does NOT reproduce at long
+> context** -- it was measured on a short-context decode workload. The fi
+> ratio is now essentially topology-independent at 100K (TP4 1.087x vs DP4
+> 1.065x), consistent with attention taking a growing share of each step as
+> context grows: 1.175x at prefill-8k -> 1.087x at 100K TP4 -> 1.065x at 100K
+> DP4. DP4 carries 4x the requests for 3.5x the throughput at ~13% worse ITL,
+> so the topology scales well; it just does not change the FlashInfer ratio.
 
 ## Where the GPU time goes (nsys, prefill 1024-tok prompts, per-backend 100%)
 

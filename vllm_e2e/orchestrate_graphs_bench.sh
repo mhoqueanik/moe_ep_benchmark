@@ -17,7 +17,7 @@ rc=0
 for backend in native fi_nvfp4; do
   case $backend in
     native)   ENVS="MOE_BACKEND=deep_gemm_mega_moe" ;;
-    fi_nvfp4) ENVS="MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4" ;;
+    fi_nvfp4) ENVS="MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl" ;;
   esac
   for wl in prefill:1024:1 decode:128:256; do
     name=${wl%%:*}

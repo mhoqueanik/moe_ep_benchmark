@@ -3,9 +3,8 @@ dump greedy generations + per-token logprobs for offline comparison.
 
 The MoE path is selected by env (so runs differ only by env):
   MOE_BACKEND=deep_gemm_mega_moe  -> native vLLM mega MoE
-  MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm_sm100
-  MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4
-  MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8
+  MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm
+  MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl
                                   -> flashinfer moe_ep, kernel per backend
 
 Usage:

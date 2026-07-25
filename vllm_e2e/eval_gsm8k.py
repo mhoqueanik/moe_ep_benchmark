@@ -12,7 +12,7 @@ a perf number is an apples-to-apples claim.
     python eval_gsm8k.py --tag native --out results/gsm8k_native.json
 
     # fi_nvfp4 (NVFP4 checkpoint, resolved automatically):
-    MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 \
+    MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
     python eval_gsm8k.py --tag fi_nvfp4 --out results/gsm8k_fi_nvfp4.json
 
     # gate a CI-style run (exit 2 below threshold):

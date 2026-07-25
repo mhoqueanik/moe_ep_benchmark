@@ -13,7 +13,7 @@ run() { JOBID=$JOBID bash "$W/in_container.sh" "$1"; }
 
 until [ "$(squeue -j "$JOBID" -h -o %t 2>/dev/null)" = "R" ]; do sleep 30; done
 echo "node up: $(squeue -j "$JOBID" -h -o %N)"
-FIENV="MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_dsv4.json"
+FIENV="MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_dsv4.json"
 
 rc=0
 echo "=== 1: simplified-patch smoke (eager) ==="

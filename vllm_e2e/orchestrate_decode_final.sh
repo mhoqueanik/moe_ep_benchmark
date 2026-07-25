@@ -4,7 +4,7 @@ ROOT=/lustre/fsw/coreai_libraries_cudnn/mhoqueanik
 W=$ROOT/moe_ep_benchmark/vllm_e2e
 JOBID=$1
 STAMP=$(date +%H%M%S)
-FIENV="MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 FI_MOE_EP_IKR=0 ENFORCE_EAGER=0"
+FIENV="MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl FI_MOE_EP_IKR=0 ENFORCE_EAGER=0"
 run() { JOBID=$JOBID bash "$W/in_container.sh" "$1"; }
 until [ "$(squeue -j "$JOBID" -h -o %t 2>/dev/null)" = "R" ]; do sleep 30; done
 rc=0

@@ -19,9 +19,8 @@ import sys
 import traceback
 
 BACKENDS = (
-    "flashinfer_moe_ep_mega_deep_gemm_sm100",
-    "flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4",
-    "flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8",
+    "flashinfer_moe_ep_mega_deep_gemm",
+    "flashinfer_moe_ep_mega_cutedsl",
 )
 NATIVE = "deep_gemm_mega_moe"
 
@@ -30,6 +29,11 @@ _passed = 0
 
 # Checks run at decoration time, so print the banner before any of them.
 print(f"python {sys.version.split()[0]}")
+
+# validate_fi_moe_ep_config() calls the flashinfer version gate, which this
+# venv is deliberately below. Skip it globally so the other checks test what
+# they are named for; the gate itself has its own check, which unsets this.
+os.environ["FI_MOE_EP_SKIP_VERSION_CHECK"] = "1"
 
 
 def check(name: str):
@@ -137,13 +141,15 @@ def _kernelconfig_normalises():
 
 @check("every registered backend has a spec, and specs are self-consistent")
 def _table():
-    from vllm.models.deepseek_v4.nvidia import fi_utils
+    from vllm.utils import flashinfer_moe_ep as fi_utils
 
     assert set(fi_utils.FI_MOE_EP_BACKENDS) == set(BACKENDS), (
         f"table {sorted(fi_utils.FI_MOE_EP_BACKENDS)} != expected {sorted(BACKENDS)}"
     )
+    assert fi_utils.FI_MOE_EP_MIN_CAPABILITY == (10, 0), (
+        f"arch floor moved: {fi_utils.FI_MOE_EP_MIN_CAPABILITY}"
+    )
     for name, spec in fi_utils.FI_MOE_EP_BACKENDS.items():
-        assert spec.min_capability == (10, 0), f"{name}: {spec.min_capability}"
         # deep_gemm needs only torch.distributed; the cutedsl kernels need NVSHMEM
         assert spec.needs_nvshmem == ("cutedsl" in name), (
             f"{name}: needs_nvshmem={spec.needs_nvshmem}"
@@ -155,7 +161,7 @@ def _table():
 @check("runtime requirements: NVSHMEM only for the cutedsl kernels")
 def _requirements():
     from flashinfer.moe_ep.core.runtime import NVSHMEM, TORCH_DIST
-    from vllm.models.deepseek_v4.nvidia import fi_utils
+    from vllm.utils import flashinfer_moe_ep as fi_utils
 
     for name, spec in fi_utils.FI_MOE_EP_BACKENDS.items():
         reqs = fi_utils.megakernel_runtime_requirements(spec)
@@ -165,7 +171,7 @@ def _requirements():
 
 @check("predicates: fi backends are mega, native is mega but not fi")
 def _predicates():
-    from vllm.models.deepseek_v4.nvidia import fi_utils
+    from vllm.utils import flashinfer_moe_ep as fi_utils
 
     for b in BACKENDS:
         assert fi_utils.is_mega_moe_backend(b), f"{b} not treated as mega"
@@ -179,7 +185,7 @@ def _predicates():
 
 @check("unknown megakernel name is rejected")
 def _unknown_megakernel():
-    from vllm.models.deepseek_v4.nvidia import fi_utils
+    from vllm.utils import flashinfer_moe_ep as fi_utils
 
     expect_raises(ValueError, lambda: fi_utils.fi_spec_for_megakernel("nope_cutedsl"))
     expect_raises(ValueError, lambda: fi_utils.fi_moe_ep_backend_spec(NATIVE))
@@ -202,7 +208,7 @@ def _stub_config(backend: str, *, enable_eplb: bool = False):
 
 @check("a valid fi config passes validation on this device")
 def _validate_ok():
-    from vllm.models.deepseek_v4.nvidia import fi_utils
+    from vllm.utils import flashinfer_moe_ep as fi_utils
 
     for var in ("FI_MOE_EP", "FI_MOE_EP_MEGAKERNEL"):
         os.environ.pop(var, None)
@@ -212,7 +218,7 @@ def _validate_ok():
 
 @check("retired FI_MOE_EP / FI_MOE_EP_MEGAKERNEL are rejected")
 def _validate_retired_env():
-    from vllm.models.deepseek_v4.nvidia import fi_utils
+    from vllm.utils import flashinfer_moe_ep as fi_utils
 
     for var in ("FI_MOE_EP", "FI_MOE_EP_MEGAKERNEL"):
         for value in ("1", "0", "deep_gemm_mega"):
@@ -231,7 +237,7 @@ def _validate_retired_env():
 
 @check("EPLB is rejected for fi backends but allowed for native")
 def _validate_eplb():
-    from vllm.models.deepseek_v4.nvidia import fi_utils
+    from vllm.utils import flashinfer_moe_ep as fi_utils
 
     for b in BACKENDS:
         expect_raises(
@@ -245,16 +251,42 @@ def _validate_eplb():
     fi_utils.validate_fi_moe_ep_config(_stub_config(NATIVE, enable_eplb=True))
 
 
+@check("flashinfer version gate rejects builds below the floor")
+def _version_gate():
+    from vllm.utils import flashinfer_moe_ep as fi
+
+    floor = fi.FI_MOE_EP_MIN_FLASHINFER
+    found = fi._flashinfer_version()
+    shown = ".".join(map(str, found)) if found else "undeterminable"
+    print(f"      flashinfer {shown}, floor {'.'.join(map(str, floor))}")
+    os.environ.pop("FI_MOE_EP_SKIP_VERSION_CHECK", None)
+    try:
+        if found is not None and found < floor:
+            # Below the floor: must refuse, and the escape hatch must work.
+            expect_raises(
+                ValueError,
+                fi.check_flashinfer_version,
+                contains=".".join(map(str, floor)),
+            )
+            os.environ["FI_MOE_EP_SKIP_VERSION_CHECK"] = "1"
+            fi.check_flashinfer_version()
+        else:
+            # At or above the floor (or undeterminable): must not refuse.
+            fi.check_flashinfer_version()
+    finally:
+        os.environ["FI_MOE_EP_SKIP_VERSION_CHECK"] = "1"
+
+
 @check("arch floor is enforced against the real device capability")
 def _validate_arch():
     import torch
-    from vllm.models.deepseek_v4.nvidia import fi_utils
+    from vllm.utils import flashinfer_moe_ep as fi_utils
 
     if not torch.cuda.is_available():
         raise AssertionError("no CUDA device visible - run this on a GPU node")
     cc = torch.cuda.get_device_capability()
     print(f"      device capability sm_{cc[0]}{cc[1]}")
-    floor = max(s.min_capability for s in fi_utils.FI_MOE_EP_BACKENDS.values())
+    floor = fi_utils.FI_MOE_EP_MIN_CAPABILITY
     assert cc >= floor, (
         f"this node is sm_{cc[0]}{cc[1]} but the backends declare a floor of "
         f"sm_{floor[0]}{floor[1]} -- so _validate_ok above should have failed. "

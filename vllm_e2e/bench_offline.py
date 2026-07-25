@@ -5,7 +5,7 @@ N timed rounds of the same fixed workload — repeats without engine-restart
 variance (prefill cells showed +-35% across restarts with `vllm bench
 throughput`, which boots a fresh engine per run).
 
-    MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm_sm100 \
+    MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm \
     python bench_offline.py --tag fi_dg --workload prefill:1024:1 \
         --rounds 5 --out results/offline_fi_dg_prefill.json
 """
@@ -41,7 +41,7 @@ def resolve_model(explicit: str | None) -> str:
         return explicit
     if os.environ.get("MODEL"):
         return os.environ["MODEL"]
-    if os.environ.get("MOE_BACKEND") == "flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4":
+    if os.environ.get("MOE_BACKEND") == "flashinfer_moe_ep_mega_cutedsl":
         return os.environ.get("MODEL_NVFP4", DEFAULT_MODEL_NVFP4)
     return DEFAULT_MODEL
 

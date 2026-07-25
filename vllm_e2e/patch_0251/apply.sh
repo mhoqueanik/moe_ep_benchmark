@@ -13,17 +13,20 @@ fi
 DST="$VLLM_DIR/models/deepseek_v4/nvidia"
 [[ -f "$DST/model.py.orig" ]] || cp "$DST/model.py" "$DST/model.py.orig"
 cp "$HERE/model.py" "$DST/model.py"
-cp "$HERE/fi_utils.py" "$DST/fi_utils.py"
+# The helpers moved to vllm/utils/ alongside flashinfer.py and deep_gemm.py.
+cp "$HERE/flashinfer_moe_ep.py" "$VLLM_DIR/utils/flashinfer_moe_ep.py"
+# Drop the pre-move copy so a stale one cannot shadow the new location.
+rm -f "$DST/fi_utils.py"
 
 # The flashinfer path is selected by backend string, and KernelConfig rejects
 # any moe_backend outside the MoEBackend Literal before the model ever sees
-# it -- so the three flashinfer_moe_ep_mega_* names have to be registered in
-# the installed config too, not just handled in the model.
+# it -- so both flashinfer_moe_ep_mega_* names have to be registered in the
+# installed config too, not just handled in the model.
 #
 # Done as an in-place insertion rather than shipping a whole kernel.py: that
 # file is core config and changes between vLLM releases, so a full-file copy
 # would silently roll the rest of it back to whatever version this patch was
-# snapshotted from. The only thing needed here is three lines in one Literal.
+# snapshotted from. The only thing needed here is two lines in one Literal.
 CFG="$VLLM_DIR/config"
 [[ -f "$CFG/kernel.py.orig" ]] || cp "$CFG/kernel.py" "$CFG/kernel.py.orig"
 python3 - "$CFG/kernel.py" <<'PY'
@@ -33,9 +36,8 @@ import sys
 path = pathlib.Path(sys.argv[1])
 src = path.read_text()
 backends = (
-    "flashinfer_moe_ep_mega_deep_gemm_sm100",
-    "flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4",
-    "flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8",
+    "flashinfer_moe_ep_mega_deep_gemm",
+    "flashinfer_moe_ep_mega_cutedsl",
 )
 missing = [b for b in backends if f'"{b}"' not in src]
 if not missing:
@@ -62,6 +64,6 @@ print("kernel.py: registered " + ", ".join(missing))
 PY
 
 # Drop stale bytecode so the patched sources are what actually imports.
-find "$DST" "$CFG" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+find "$DST" "$CFG" "$VLLM_DIR/utils" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 echo "patched: $DST (backup: model.py.orig)"
 echo "patched: $CFG/kernel.py (backup: kernel.py.orig)"

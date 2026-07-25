@@ -21,7 +21,7 @@ echo "node up: $(squeue -j "$JOBID" -h -o %N)"
 rc=0
 for backend in fi_dg native; do
   case $backend in
-    fi_dg)  ENVS="MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm_sm100" ;;
+    fi_dg)  ENVS="MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm" ;;
     native) ENVS="MOE_BACKEND=deep_gemm_mega_moe" ;;
   esac
   for r in a b; do

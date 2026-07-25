@@ -20,9 +20,8 @@ Three registered MoE backends replace `FI_MOE_EP=1` + `FI_MOE_EP_MEGAKERNEL`:
 
 | config | `moe_backend` string | megakernel | needs |
 |---|---|---|---|
-| fi_dg | `flashinfer_moe_ep_mega_deep_gemm_sm100` | `deep_gemm_mega` | torch.distributed |
-| fi_nvfp4 | `flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4` | `nvfp4_cutedsl` | + NVSHMEM |
-| fi_mxfp8 | `flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8` | `mxfp8_cutedsl` | + NVSHMEM |
+| fi_dg | `flashinfer_moe_ep_mega_deep_gemm` | `deep_gemm_mega` | torch.distributed |
+| fi_nvfp4 | `flashinfer_moe_ep_mega_cutedsl` | `nvfp4_cutedsl` | + NVSHMEM |
 
 All three are SM100-only, require expert parallel, and are DeepSeek-V4 only.
 The native `deep_gemm_mega_moe` backend is unchanged.
@@ -108,7 +107,7 @@ JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && bash patch
 Expected:
 
 ```
-kernel.py: registered flashinfer_moe_ep_mega_deep_gemm_sm100, flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4, flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8
+kernel.py: registered flashinfer_moe_ep_mega_deep_gemm, flashinfer_moe_ep_mega_cutedsl
 patched: .../vllm/models/deepseek_v4/nvidia (backup: model.py.orig)
 patched: .../vllm/config/kernel.py (backup: kernel.py.orig)
 ```
@@ -162,7 +161,7 @@ JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
   python smoke_infer.py --tag native --out results/pr_native.json'
 
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  ENFORCE_EAGER=1 MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm_sm100 \
+  ENFORCE_EAGER=1 MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm \
   python smoke_infer.py --tag fi_dg --out results/pr_fi_dg.json'
 
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
@@ -211,7 +210,7 @@ takes `--moe-backend`.
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 \
+  MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
   python bench_offline.py --tag fi_nvfp4 --workload decode:128:256 \
     --rounds 3 --out results/pr_bench_fi_nvfp4.json'
 ```
@@ -239,7 +238,7 @@ Every cell is within 2.2% of its pre-switch value, so the **1.18x prefill /
 ```bash
 # decode-1k
 ENFORCE_EAGER=0 MAX_CAPTURE=4096 MAX_NUM_SEQS=1024 \
-MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 \
+MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
 FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_dsv4_dec2k.json \
 python bench_offline.py --tag fi_dec --workload decode:128:256 \
   --num-prompts 1024 --rounds 3 --out results/fi_dec.json
@@ -248,7 +247,7 @@ python bench_offline.py --tag fi_dec --workload decode:128:256 \
 # default made vllm estimate 310 GiB of graph pool and drove KV negative.
 ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 \
 CAPTURE_SIZES=256,2048,4096,8192 \
-MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 \
+MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
 FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_dsv4_8k.json \
 python bench_offline.py --tag fi_pre --workload prefill:1024:1 \
   --num-prompts 256 --rounds 3 --out results/fi_pre.json
@@ -313,7 +312,7 @@ mxfp8, graph-mode throughput), all 4xGB200, vLLM 0.25.1, cutlass-dsl 4.5.2.
 | fi_dg vs native, eager | 8/8 bit-exact, \|dlp\| 0.0000 |
 | fi_nvfp4 (mx ckpt, dequant path) vs native | 1/8 exact, \|dlp\| 0.016-0.13 |
 | fi_nvfp4 (NVFP4 ckpt, **prequant** path) vs native | 2/8 exact, \|dlp\| 0.013-0.077 — cross-checkpoint |
-| **fi_mxfp8** vs native | 1/8 exact, \|dlp\| 0.021-0.062 |
+| **fi_mxfp8** vs native | 1/8 exact, \|dlp\| 0.021-0.062 (backend since retired) |
 | NVFP4 ckpt + a deep_gemm backend | rejected at startup, naming the nvfp4 backend |
 | graph-mode throughput, both regimes | within 2.2% of pre-switch (§7) |
 

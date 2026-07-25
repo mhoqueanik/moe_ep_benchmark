@@ -35,9 +35,8 @@ echo "backend,workload,input_len,output_len,num_prompts,eager,requests_per_s,tot
 backend_moe() {
     case "$1" in
         native)   echo "deep_gemm_mega_moe" ;;
-        fi_dg)    echo "flashinfer_moe_ep_mega_deep_gemm_sm100" ;;
-        fi_nvfp4) echo "flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4" ;;
-        fi_mxfp8) echo "flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8" ;;
+        fi_dg)    echo "flashinfer_moe_ep_mega_deep_gemm" ;;
+        fi_nvfp4) echo "flashinfer_moe_ep_mega_cutedsl" ;;
         *) echo "unknown backend $1" >&2; return 1 ;;
     esac
 }

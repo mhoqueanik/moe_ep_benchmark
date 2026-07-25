@@ -10,7 +10,7 @@ W=$ROOT/moe_ep_benchmark/vllm_e2e
 JOBID=$1
 STAMP=$(date +%Y%m%d_%H%M%S)
 CACHE=$W/results/knob_cache_dsv4.json
-FIENV="MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4 FLASHINFER_MOE_EP_KNOB_CACHE=$CACHE"
+FIENV="MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl FLASHINFER_MOE_EP_KNOB_CACHE=$CACHE"
 run() { JOBID=$JOBID bash "$W/in_container.sh" "$1"; }
 
 until [ "$(squeue -j "$JOBID" -h -o %t 2>/dev/null)" = "R" ]; do sleep 30; done

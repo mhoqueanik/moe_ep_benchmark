@@ -17,9 +17,9 @@ echo "node up: $(squeue -j "$JOBID" -h -o %N)"
 rc=0
 for cell in \
   "native_dec_g:MOE_BACKEND=deep_gemm_mega_moe:ENFORCE_EAGER=0:decode:128:256" \
-  "fi_dec_g:MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4:ENFORCE_EAGER=0:decode:128:256" \
+  "fi_dec_g:MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl:ENFORCE_EAGER=0:decode:128:256" \
   "native_pre_e:MOE_BACKEND=deep_gemm_mega_moe:ENFORCE_EAGER=1:prefill:1024:1" \
-  "fi_pre_e:MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4:ENFORCE_EAGER=1:prefill:1024:1"; do
+  "fi_pre_e:MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl:ENFORCE_EAGER=1:prefill:1024:1"; do
   IFS=: read -r name fienv eager wname ilen olen <<< "$cell"
   rep="$W/results/nsys_gap_${STAMP}_${name}"
   echo "=== $name ==="

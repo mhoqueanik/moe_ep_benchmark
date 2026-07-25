@@ -6,9 +6,9 @@ End-to-end vLLM inference benchmark comparing:
   (`DeepseekV4MegaMoEExperts`, `deep_gemm.fp8_fp4_mega_moe`)
 - **fi_dg** — flashinfer `moe_ep` mega path with the `deep_gemm_mega` kernel
   (same deep_gemm kernel underneath, flashinfer runtime/layer on top)
-- **fi_nvfp4 / fi_mxfp8** — flashinfer `moe_ep` CuTeDSL mega kernels
-  (`nvfp4_cutedsl` / `mxfp8_cutedsl`; checkpoint fp4 weights are dequantized
-  to bf16 at load and requantized with the kernel's own recipe)
+- **fi_nvfp4** — flashinfer `moe_ep` CuTeDSL mega kernel (`nvfp4_cutedsl`;
+  an NVFP4 checkpoint is consumed prequantized, while MXFP4 weights are
+  dequantized to bf16 at load and requantized)
 
 Model: DeepSeek-V4-Flash (hidden 4096, moe_inter 2048, 256 experts, top-6,
 43 layers) from
@@ -82,9 +82,8 @@ Each config is a distinct `moe_backend`. The python entry points read it from
 | config   | moe_backend |
 |----------|-------------|
 | native   | `deep_gemm_mega_moe` |
-| fi_dg    | `flashinfer_moe_ep_mega_deep_gemm_sm100` |
-| fi_nvfp4 | `flashinfer_moe_ep_mega_cutedsl_sm100_nvfp4` |
-| fi_mxfp8 | `flashinfer_moe_ep_mega_cutedsl_sm100_mxfp8` |
+| fi_dg    | `flashinfer_moe_ep_mega_deep_gemm` |
+| fi_nvfp4 | `flashinfer_moe_ep_mega_cutedsl` |
 
 `FI_MOE_EP` / `FI_MOE_EP_MEGAKERNEL` are retired (runs up to 2026-07-23 used
 them; see RUNS.md). The patched model now *errors* if either is still
@@ -106,7 +105,7 @@ first forward) or a JSON dict of explicit knobs.
 JOBID=$JOBID bash $W/in_container.sh \
   'source venv0251/bin/activate && MOE_BACKEND=deep_gemm_mega_moe python smoke_infer.py --tag native --out results/smoke_native.json'
 JOBID=$JOBID bash $W/in_container.sh \
-  'source venv0251/bin/activate && MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm_sm100 python smoke_infer.py --tag fi_dg --out results/smoke_fi_dg.json'
+  'source venv0251/bin/activate && MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm python smoke_infer.py --tag fi_dg --out results/smoke_fi_dg.json'
 JOBID=$JOBID bash $W/in_container.sh \
   'source venv0251/bin/activate && python compare_outputs.py results/smoke_native.json results/smoke_fi_dg.json'
 ```
