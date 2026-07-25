@@ -9,7 +9,7 @@
 #SBATCH --output=gsm8k_flash_pro_%j.log
 #
 # GSM8K accuracy gate across BOTH checkpoints of BOTH models:
-#   Flash EP4/TP4 : native, fi_dg (mx)  +  fi_cutedsl (NVFP4 cast)
+#   Flash EP8/TP8 : native, fi_dg (mx)  +  fi_cutedsl (NVFP4 cast)
 #   Pro   EP8/TP8 : native, fi_dg (mx)  +  fi_cutedsl (NVFP4 cast)
 #
 # WHY THIS IS NOT A RERUN OF THE 2026-07-25 03:42 GSM8K (job 2337127 step 5):
@@ -103,14 +103,17 @@ gcell() {
     fi
 }
 
-# The Flash cells run TP4 even on an 8-GPU node: this is an accuracy gate, not
-# a throughput measurement, and TP4 is what produced the recorded 0.960/0.960/
-# 0.970. That is why an EP4 knob cache (knob_cache_dsv4_8k.json) ships on an
-# otherwise 8-GPU-only branch.
-echo; echo '########## DSV4-FLASH  (EP4/TP4)'
-gcell flash_native     native     4 \"\$MODEL_MX_FLASH\"    gsm8k2_flash_native
-gcell flash_fi_dg      fi_dg      4 \"\$MODEL_MX_FLASH\"    gsm8k2_flash_fi_dg
-gcell flash_fi_cutedsl fi_cutedsl 4 \"\$MODEL_NVFP4_FLASH\" gsm8k2_flash_fi_cutedsl knob_cache_dsv4_8k.json
+# Stale-result guard: the summary below only accepts JSONs written after
+# this point. Without it, a run whose cells all fail still prints a full
+# plausible table from the result files committed in the repo (observed:
+# job 2337618, 12/12 cells failed on the DSL guard, rc=0, summary looked
+# perfect). Committed results must never masquerade as a fresh run.
+export RUN_T0=\$(date +%s)
+
+echo; echo '########## DSV4-FLASH  (EP8/TP8)'
+gcell flash_native     native     8 \"\$MODEL_MX_FLASH\"    gsm8k2_flash_native
+gcell flash_fi_dg      fi_dg      8 \"\$MODEL_MX_FLASH\"    gsm8k2_flash_fi_dg
+gcell flash_fi_cutedsl fi_cutedsl 8 \"\$MODEL_NVFP4_FLASH\" gsm8k2_flash_fi_cutedsl knob_cache_ep8.json
 
 echo; echo '########## DSV4-PRO  (EP8/TP8)'
 gcell pro_native       native     8 \"\$MODEL_MX_PRO\"      gsm8k2_pro_native
@@ -120,6 +123,11 @@ gcell pro_fi_cutedsl   fi_cutedsl 8 \"\$MODEL_NVFP4_PRO\"   gsm8k2_pro_fi_cuteds
 echo; echo '########## SUMMARY'
 python - <<'PY'
 import json, os
+
+RUN_T0 = float(os.environ.get('RUN_T0', 0))
+
+def fresh(path):
+    return os.path.exists(path) and os.path.getmtime(path) >= RUN_T0
 
 rows = [
     ('Flash', 'native',     'gsm8k2_flash_native'),
@@ -134,7 +142,7 @@ acc = {}
 problems = []
 for mdl, be, stem in rows:
     p = 'results/%s.json' % stem
-    if not os.path.exists(p):
+    if not fresh(p):
         print('%-7s %-12s %9s' % (mdl, be, 'MISSING'))
         problems.append('%s/%s did not produce a result' % (mdl, be))
         continue

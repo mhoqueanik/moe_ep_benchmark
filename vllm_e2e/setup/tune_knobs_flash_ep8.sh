@@ -1,5 +1,5 @@
 #!/bin/bash
-# EP8 knob retune (RUNBOOK_REPRO.md §5, knob-cache preamble). The branch
+# EP8 knob retune (RUNBOOK_REPRO.md §3a). The branch
 # already ships the result as
 # results/knob_cache_ep8.json, so this only needs rerunning if your geometry or
 # world size differs;

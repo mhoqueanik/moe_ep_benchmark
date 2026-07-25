@@ -1,6 +1,6 @@
 #!/bin/bash
 # In-container payload for one model-shape sweep job (see submit_jobs.sh).
-# Mirrors RUNBOOK_REPRO.md §4: editable-install the branch, upgrade CuTe-DSL,
+# Mirrors RUNBOOK_REPRO.md §2: editable-install the branch, upgrade CuTe-DSL,
 # sanity-check the import path, then run the shape sweep.
 set -uo pipefail
 

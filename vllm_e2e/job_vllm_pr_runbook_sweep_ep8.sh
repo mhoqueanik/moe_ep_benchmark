@@ -22,7 +22,7 @@
 # explicitly skipped -- that is the documented pre-release escape hatch.
 #
 # Provenance: this is the script that produced job 2337204 -- the Flash rows of
-# expected_results.md §1 and RUNBOOK_REPRO.md §5c. Its decode-1k cell was
+# expected_results.md §1 and RUNBOOK_REPRO.md §3c. Its decode-1k cell was
 # re-measured as job 2337549 after CAPTURE_SIZES was pinned (see the comment on
 # that cell below). Keep the cells byte-identical to those jobs or the recorded
 # numbers stop being a baseline.
@@ -106,6 +106,13 @@ cell() {
     done
 }
 
+# Stale-result guard: the summary below only accepts JSONs written after
+# this point. Without it, a run whose cells all fail still prints a full
+# plausible table from the result files committed in the repo (observed:
+# job 2337618, 12/12 cells failed on the DSL guard, rc=0, summary looked
+# perfect). Committed results must never masquerade as a fresh run.
+export RUN_T0=\$(date +%s)
+
 echo; echo '########## PREFILL-8K (headline)'
 cell pre8k 'ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 CAPTURE_SIZES=256,2048,4096,8192' \
     --workload prefill:1024:1 --num-prompts 256 --rounds $ROUNDS
@@ -137,6 +144,11 @@ echo; echo '########## SUMMARY'
 python - <<'PY'
 import json, os
 
+RUN_T0 = float(os.environ.get('RUN_T0', 0))
+
+def fresh(path):
+    return os.path.exists(path) and os.path.getmtime(path) >= RUN_T0
+
 CELLS = [
     ('prefill-8k',      'pre8k',  'prefill 1024x1, 256 prompts, capture 8192'),
     ('decode-1k',       'dec1k',  'decode 128->256, 1024 seqs, capture 4096'),
@@ -152,7 +164,7 @@ for title, stem, note in CELLS:
     base = None
     for label, short in ROWS:
         p = f'results/sweep_ep8_{stem}_{short}.json'
-        if not os.path.exists(p):
+        if not fresh(p):
             print(f'  {label:11s} MISSING'); continue
         d = json.load(open(p))
         v = d['median_total_tok_per_s']

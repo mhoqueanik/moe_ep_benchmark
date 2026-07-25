@@ -8,8 +8,8 @@ benchmark on DeepSeek-V4-Flash and V4-Pro.
 [expected_results.md](expected_results.md) is the source of truth for numbers
 and for the two known ways this produces plausible-but-wrong results.
 [README.md](README.md) is the repo map. Setup is
-[RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) — the single runbook: build (§1–3),
-microbenchmark (§4), e2e (§5).
+[RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) — the single runbook, four sections:
+prep (§1), microbenchmark (§2), e2e throughput (§3), accuracy (§4).
 
 Analysis history, one-off investigation drivers, EP4 material and the
 chronological run log live on the `vllm-pr` branch. Do not port them here —

@@ -9,7 +9,7 @@
 #   VARIANTS="fi_combine_fp8 fi_combine_fp4" SHAPE_LIST=... bash submit_jobs.sh
 set -uo pipefail
 
-ROOT=/lustre/fsw/coreai_libraries_cudnn/mhoqueanik
+ROOT="${ROOT:-/lustre/fsw/coreai_libraries_cudnn/mhoqueanik}"
 IMG="${IMG:-$ROOT/flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh}"
 BENCH=$ROOT/moe_ep_benchmark
 REPO=$ROOT/flashinfer-2/flashinfer-moe_ep

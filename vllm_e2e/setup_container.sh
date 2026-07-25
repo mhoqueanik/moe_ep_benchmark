@@ -1,6 +1,6 @@
 #!/bin/bash
 # One-time (per venv) setup for the vLLM 0.25.1 e2e benchmark inside the
-# flashinfer-ep container ($IMG in RUNBOOK_REPRO.md §0). Creates a persistent venv on
+# flashinfer-ep container ($IMG in RUNBOOK_REPRO.md §1.1). Creates a persistent venv on
 # lustre so container restarts don't repeat the install.
 #
 #   bash setup_container.sh            # create/refresh venv + patch vllm

@@ -11,7 +11,7 @@ one 1x8 B200 node, vLLM 0.25.1, cutlass-dsl 4.5.2. The numbers themselves live
 in [expected_results.md](expected_results.md).
 
 > **This document was originally written against 1x4; on this branch it is
-> 1x8 throughout.** §1–§3 (build, container, venv, patch, checkpoints) are
+> 1x8 throughout.** §1.2–§1.4 (build, container, venv, patch, checkpoints) are
 > world-size independent and are what `vllm_e2e/RUNBOOK_1x8.md` defers to. For
 > the runs themselves follow that document, and check yourself against
 > `expected_results.md`.
@@ -20,12 +20,22 @@ Companions, paths relative to this repo unless noted:
 `vllm_e2e/RUNBOOK_1x8.md` (the executed 8-GPU procedure),
 `expected_results.md` (the numbers), `RUNBOOK.md` (microbenchmark), and — in
 the flashinfer checkout — `docs/design_docs/moe_ep_runbook.md`, which owns the
-container recipe (§1c) and the guide to adding a new mega-kernel backend.
+container recipe (§1.2c) and the guide to adding a new mega-kernel backend.
 The chronological run log (`vllm_e2e/RUNS.md`) lives on the `vllm-pr` branch.
+
+
+**Four sections.** [§1 Prep](#1-prep) — clone, image, checkpoints, venv, patch.
+[§2 Kernel microbenchmark](#2-kernel-microbenchmark-16-min) — no vLLM, no
+checkpoints. [§3 vLLM e2e — throughput](#3-vllm-e2e--throughput) — the four
+headline cells, both models. [§4 Accuracy](#4-accuracy) — correctness smoke and
+the GSM8K cross-checkpoint gate. Then §5 gotchas and §6 what is not covered.
+Expected numbers for §2–§4 live in [expected_results.md](expected_results.md).
 
 ---
 
-## 0. Prerequisites
+## 1. Prep
+
+### 1.1. Prerequisites
 
 * One node with 8x SM100 (B200 or GB200 NVL8). Nothing here is multi-node.
   The measured configuration is TP8+EP8 throughout; `expected_results.md`
@@ -33,7 +43,7 @@ The chronological run log (`vllm_e2e/RUNS.md`) lives on the `vllm-pr` branch.
 * SLURM with pyxis/enroot, account `coreai_libraries_cudnn`.
 * Container image: `$ROOT/flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh`.
   Ships torch 2.12, deep_gemm, triton, nvshmem, cutlass. Does **not** ship vLLM.
-  You build it yourself in §1c — the recipe lives in repo (2), so it cannot be
+  You build it yourself in §1.2c — the recipe lives in repo (2), so it cannot be
   built before the clone, and it needs a SLURM allocation.
 * ~350 GB of disk for the two checkpoints (149 GB + 157 GB), plus room for the
   venv and the JIT cache.
@@ -46,14 +56,14 @@ export IMG=$ROOT/flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh
 
 `ROOT` may be any scratch dir you own, but **keep the directory layout below it
 exactly as shown** — including the `flashinfer-2/` parent. Several scripts
-hardcode these paths; see §6 for the full list of what to patch when `ROOT`
+hardcode these paths; see §1.5 for the full list of what to patch when `ROOT`
 differs.
 
 ---
 
-## 1. Clone the repos and build the image
+### 1.2. Clone the repos and build the image
 
-### 1a. The two repos you need
+#### 1.2a. The two repos you need
 
 ```bash
 mkdir -p $ROOT/flashinfer-2
@@ -76,7 +86,7 @@ Branch discipline: `moe_ep_benchmark` `main` deliberately still uses the old
 `FI_MOE_EP=1` opt-in, because no released vLLM knows the new backend strings.
 Use `vllm-pr` for everything in this file.
 
-### 1b. Optional third repo — the PR, for reading only
+#### 1.2b. Optional third repo — the PR, for reading only
 
 ```bash
 # branch fi-moe-ep-v4 -- REFERENCE ONLY, never built, nothing here imports it
@@ -86,7 +96,7 @@ git -C $ROOT/vllm-fi-moe-ep switch fi-moe-ep-v4
 
 Nothing in `moe_ep_benchmark` references this path — no script, no import. Skip
 it unless you want to diff the port. The PR sits on a much newer vLLM `main`
-than 0.25.1, so the validated path patches a 0.25.1 wheel instead (§3d);
+than 0.25.1, so the validated path patches a 0.25.1 wheel instead (§1.4d);
 building it from source is untried. `patch_0251/flashinfer_moe_ep.py` is
 byte-identical to the PR's copy, so repo (1) already gives you that file;
 `patch_0251/model.py` is a 0.25.1 port and differs by ~90 lines of unrelated
@@ -100,11 +110,11 @@ Commits the recorded numbers were taken at:
 | `flashinfer-2/flashinfer-moe_ep` | `4_5_2-perf-fix` | `1ee41bcd` |
 | `vllm-fi-moe-ep` (optional) | `fi-moe-ep-v4` | `c019433` |
 
-### 1c. Build the container image
+#### 1.2c. Build the container image
 
-Needs a SLURM allocation. Easiest is to hold the §3a node first and come back
-here — the ordering works because nothing in §3 runs before the image exists.
-The build script comes from repo (2), which is why this cannot precede §1a.
+Needs a SLURM allocation. Easiest is to hold the §1.4a node first and come back
+here — the ordering works because nothing in §1.4 runs before the image exists.
+The build script comes from repo (2), which is why this cannot precede §1.2a.
 
 ```bash
 RW=$ROOT/flashinfer-2/flashinfer-moe_ep
@@ -123,18 +133,18 @@ directory, which has no `pyproject.toml` — and the editable install fails.
 (Verified 2026-07-25 on a from-scratch build.)
 
 (Upstream writes `--jobid="$SLURM_JOB_ID"` without `--overlap`, which is right
-only from *inside* a batch script. From a login shell against the §3a hold job
+only from *inside* a batch script. From a login shell against the §1.4a hold job
 you want `$JOBID` and `--overlap`, as above.)
 
 **Build it on the same CPU architecture as the nodes you will run on.** The
-image is a full userspace, not just CUDA payload: the one in §0 was built on
+image is a full userspace, not just CUDA payload: the one in §1.1 was built on
 GB200 and is aarch64, so it cannot be copied to an x86_64 cluster. The recipe
 itself is arch-agnostic — it resolves wheels at build time — so the identical
-command produces a working image on either. See §4b for the check.
+command produces a working image on either. See §2b for the check.
 
 Upstream source: `docs/design_docs/moe_ep_runbook.md` §"Create the container" in
 repo (2). It saves to the **undated** `flashinfer-ep-pt2605-mega_moe_ep.sqsh`;
-`--container-save=$IMG` above writes the dated name §0 pins instead. Same
+`--container-save=$IMG` above writes the dated name §1.1 pins instead. Same
 recipe — the date is just a rebuild stamp. If `$ROOT` already holds several
 `.sqsh` files, `-20260712` is the one the numbers were taken on;
 `-new-cutedsl` is a **later** sibling and is *not* it, so do not pick by mtime.
@@ -145,15 +155,15 @@ error, `BUILD_NVEP=0` turns both backends off.
 
 > **The image is not the DSL source of truth.** `build_flashinfer_ep_pytorch.sh`
 > pins `nvidia-cutlass-dsl[cu13]==4.5.0`, but every recorded number is on
-> **4.5.2**. The two paths reach it differently: §3 gets it for free because
-> `vllm==0.25.1` pins 4.5.2 and the venv shadows the image, while §4 does *not*
+> **4.5.2**. The two paths reach it differently: §1.4 gets it for free because
+> `vllm==0.25.1` pins 4.5.2 and the venv shadows the image, while §2 does *not*
 > use the venv, so its payload must install and assert 4.5.2 explicitly over the
-> image's 4.5.0. Never read the DSL version off the image — §3f and the §4
+> image's 4.5.0. Never read the DSL version off the image — §1.4f and the §2
 > payload guard are the checks.
 
 ---
 
-## 2. Fetch the two checkpoints
+### 1.3. Fetch the two checkpoints
 
 Two checkpoints, same base weights. Each backend runs the format its kernel
 consumes natively, so fi_cutedsl skips a dequant/requant:
@@ -166,7 +176,7 @@ consumes natively, so fi_cutedsl skips a dequant/requant:
 Run this **on a host with outbound network**, not inside the container and not
 on a compute node — nothing here needs a GPU, and compute nodes are commonly
 walled off from the Hub. It is also the one long-running step you want going
-before you hold a node in §3a, since 305 GB dominates the whole setup.
+before you hold a node in §1.4a, since 305 GB dominates the whole setup.
 
 ```bash
 export CKPT=$ROOT/checkpoints
@@ -188,7 +198,7 @@ export HF_HUB_DISABLE_XET=1
 # completed without a 429. Log in if you do hit "We had to rate limit your IP".
 hf auth login   # optional; skip to try anonymous first
 
-# Full 40-char commits pin the exact trees §5d was measured on. Do NOT drop
+# Full 40-char commits pin the exact trees §3d was measured on. Do NOT drop
 # --revision and do NOT resolve to main -- see the warning below.
 
 # (a) mx-format original -- native and fi_dg
@@ -258,7 +268,7 @@ print('both checkpoints are at the pinned revisions')
 > safetensors are byte-identical either way — only metadata changed — but the
 > metadata is what the loaders read:
 >
-> | file | pinned (what §5d ran) | HEAD |
+> | file | pinned (what §3d ran) | HEAD |
 > |---|---|---|
 > | NVFP4 `hf_quant_config.json` | `quant_algo: null`, per-expert-tensor keys (`layers.0.ffn.experts.0.w1`), `awq_block_size: 16` | `quant_algo: "MIXED_PRECISION"`, per-layer keys (`layers.0.ffn.experts`), `group_size: 16` |
 > | mx `config.json` | no `expert_dtype` | `expert_dtype: "fp4"` |
@@ -294,14 +304,14 @@ this tree carries an mxfp4→NVFP4 script, and `cast_mxfp4_to_nvfp4.log` records
 the result (33792 expert tensors across 46 shards, 100% lossless) but not the
 tool or its invocation. Running fi_cutedsl on the mx checkpoint
 (`MODEL_NVFP4=$MODEL`) takes the dequant→requant path instead: it runs, and is
-what the pre-2026-07-19 setup did, **but it will not reproduce §5d** — those
+what the pre-2026-07-19 setup did, **but it will not reproduce §3d** — those
 numbers were all measured on the prequantized path.
 
 ---
 
-## 3. Build the environment
+### 1.4. Build the environment
 
-### 3a. Hold a node
+#### 1.4a. Hold a node
 
 ```bash
 JOBID=$(sbatch --parsable -A coreai_libraries_cudnn -p batch -N1 \
@@ -311,7 +321,7 @@ JOBID=$(sbatch --parsable -A coreai_libraries_cudnn -p batch -N1 \
 echo "hold job $JOBID"
 ```
 
-### 3b. Every later command goes through the container wrapper
+#### 1.4b. Every later command goes through the container wrapper
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh '<command>'
@@ -339,23 +349,23 @@ If your checkpoints live outside `$ROOT`, add them to `--container-mounts` or
 Those four are the **only** variables the wrapper sets. Everything else —
 `CKPT`, `MODEL`, `MODEL_NVFP4` — reaches the container solely through srun's
 default `--export=ALL`, i.e. from whatever shell you type the command in. So
-re-export §2's block in any new shell before using the hold job. Skipping it is
-not silent-but-wrong, it just fails to find the model: §5c's
+re-export §1.3's block in any new shell before using the hold job. Skipping it is
+not silent-but-wrong, it just fails to find the model: §3c's
 `export MODEL=$CKPT/deepseek-v4-flash` expands to `/deepseek-v4-flash` when
 `CKPT` is unset. This bites most often the day *after* setup, when the 4h hold
 job is still alive but your terminal is not.
 
-### 3c. One command
+#### 1.4c. One command
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'bash setup_container.sh'
 ```
 
 `FRESH=1` wipes and rebuilds — needed if the venv predates the 2026-07-22 MR!27
-WAR and still carries DSL 4.6.1. Steps 3d-3f are what it does; run them by hand
+WAR and still carries DSL 4.6.1. §1.4d-1.4f are what it does; run them by hand
 only if you are debugging the setup.
 
-### 3d. What that actually runs
+#### 1.4d. What that actually runs
 
 ```bash
 export PIP_CACHE_DIR=$ROOT/.cache/pip
@@ -397,7 +407,7 @@ Because the kernels are generated from source rather than shipped prebuilt, the
 DSL version is part of the measurement, not an install detail — hence the pin
 and the guards below.
 
-### 3e. What `patch_0251/apply.sh` does
+#### 1.4e. What `patch_0251/apply.sh` does
 
 Idempotent; re-running prints `kernel.py: backends already registered (no-op)`.
 
@@ -425,7 +435,7 @@ patched: .../vllm/models/deepseek_v4/nvidia (backup: model.py.orig)
 patched: .../vllm/config/kernel.py (backup: kernel.py.orig)
 ```
 
-### 3f. Verify
+#### 1.4f. Verify
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && python - <<PY
@@ -450,16 +460,49 @@ site-packages wheel.
 
 ---
 
-## 4. Kernel microbenchmark (~16 min)
+### 1.5. Running with a different ROOT
+
+`in_container.sh`, `setup_container.sh` and `bench_offline.py` all take
+overrides (`ROOT`, `REPO`, `VENV`, `MODEL`, `MODEL_NVFP4`), so §1.3, §1.4 and §3
+need no edits. The microbenchmark in §2 does — these three lines hardcode the
+original path:
+
+| file | line | what |
+|---|---|---|
+| `model_shapes/submit_jobs.sh` | 12 | `ROOT=/lustre/fsw/.../mhoqueanik` |
+| `model_shapes/job_payload.sh` | 7 | `ROOT=/lustre/fsw/.../mhoqueanik` |
+| `model_shapes/job_payload.sh` | 28 | `assert m.__file__.startswith(".../flashinfer-2")` |
+
+```bash
+OLD=/lustre/fsw/coreai_libraries_cudnn/mhoqueanik
+sed -i "s#$OLD#$ROOT#g" $ROOT/moe_ep_benchmark/model_shapes/submit_jobs.sh \
+                        $ROOT/moe_ep_benchmark/model_shapes/job_payload.sh
+```
+
+Also swap `-A coreai_libraries_cudnn` / `-p batch` for your account and
+partition in `submit_jobs.sh`, `job_payload.sh`, and the §1.4a hold job.
+`job_vllm_pr_runbook_sweep_ep8.sh` needs no edit for either — it takes `ROOT` from
+the environment, and `sbatch -A … -p …` on the command line overrides its
+`#SBATCH` lines.
+
+The line-28 assert is why the `flashinfer-2/` parent directory has to stay:
+it checks the resolved `flashinfer.__file__` prefix, so renaming the checkout
+makes the microbenchmark fail after the install rather than before it.
+
+---
+
+---
+
+## 2. Kernel microbenchmark (~16 min)
 
 Drives the FlashInfer kernels directly, no vLLM, so it isolates kernel work
 from integration overhead. Submits its own SLURM job — it does not use the hold
-job from §3a, and it installs into the container overlay rather than the venv.
+job from §1.4a, and it installs into the container overlay rather than the venv.
 
-**§2 is not a prerequisite for this section.** The geometries come from
+**§1.3 is not a prerequisite for this section.** The geometries come from
 `model_shapes/shapes.tsv` (hidden / inter / experts / top-k) and the weights are
 synthetic, so nothing here reads a checkpoint. If the microbenchmark is all you
-want, you need §1, §3a's node, and this section — skip the 305 GB download.
+want, you need §1.2, §1.4a's node, and this section — skip the 305 GB download.
 
 ```bash
 cd $ROOT/moe_ep_benchmark
@@ -469,7 +512,7 @@ SHAPE_LIST="deepseek_v4_flash" SEQ_LENS="8 64 512 1024 2048 4096 8192" \
 # Output lands in model_shapes/results_ep8/, which already holds the committed
 # CSV from job 2337199. make_tables keys on (geometry, tokens/rank, variant)
 # and IGNORES the gpus column, so later files win and a glob silently mixes
-# runs -- render only your own CSV to compare against expected_results.md §3:
+# runs -- render only your own CSV to compare against expected_results.md §1.4:
 python model_shapes/make_tables.py \
     model_shapes/results_ep8/model_shapes_<your_stamp>_deepseek_v4_flash.csv \
     -o /tmp/micro_scratch_RESULTS.md
@@ -478,7 +521,7 @@ python model_shapes/make_tables.py \
 ```
 
 Its in-container payload (`model_shapes/job_payload.sh`) — note the defaults are
-env-overridable, which is what makes §4b possible without editing anything:
+env-overridable, which is what makes §2b possible without editing anything:
 
 ```bash
 cd $ROOT/flashinfer-2/flashinfer-moe_ep
@@ -491,17 +534,17 @@ GPUS="${GPUS:-8}" CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}
     bash "$BENCH/model_shapes/run_model_shapes.sh"
 ```
 
-This is the step that needs §6 if `ROOT` differs — both `submit_jobs.sh` and
+This is the step that needs §1.5 if `ROOT` differs — both `submit_jobs.sh` and
 `job_payload.sh` hardcode the original path, and the payload asserts on it.
 
 Do **not** unpin the DSL. The CuteDSL codegen is version-sensitive enough
 (34-54% slower pre-4.5.2) that an unpinned `--upgrade` makes a sweep
 unattributable. `DSL_VERSION` overrides.
 
-### 4a. Expected numbers
+### 2a. Expected numbers
 
 EP8, DeepSeek-V4-Flash MoE geometry (4096 hidden / 2048 inter / 256 experts /
-top-6), job 2337199 — see [expected_results.md](expected_results.md) §3 for the
+top-6), job 2337199 — see [expected_results.md](expected_results.md) §1.4 for the
 full table and `model_shapes/results_ep8/` for the CSV it came from.
 
 The DeepGEMM↔CuteDSL crossover sits at ~1024 tokens/rank: below it
@@ -509,16 +552,16 @@ The DeepGEMM↔CuteDSL crossover sits at ~1024 tokens/rank: below it
 and `+combine_nvfp4` to 1.70x. That crossover is why the e2e decode cells gain
 less than the prefill ones.
 
-### 4b. Porting to another system, and to EP8
+### 2b. Porting to another system, and to EP8
 
-Nothing below needs a source edit beyond §6's `sed`. In order of what actually
+Nothing below needs a source edit beyond §1.5's `sed`. In order of what actually
 blocks you:
 
-**1. The container image is architecture-bound.** The `.sqsh` in §0 was built on
+**1. The container image is architecture-bound.** The `.sqsh` in §1.1 was built on
 the GB200 nodes and is **aarch64** — `unsquashfs -l` shows an
 `aarch64-linux-gnu` userspace throughout. On an x86_64 target it will not run,
 and the failure is not obviously an arch problem. Rebuild it on the target with
-§1c; the build script is arch-agnostic (it resolves wheels at build time), so
+§1.2c; the build script is arch-agnostic (it resolves wheels at build time), so
 the same command works on either. Check what you have:
 
 ```bash
@@ -533,12 +576,12 @@ there. B200 and GB200 NVL are both fine.
 **3. Ask for GPUs explicitly if your scheduler needs it.** `submit_jobs.sh`
 requests `-N1 --ntasks-per-node=1` and **no** `--gres`/`--gpus-per-node`, which
 works only because `-p batch` here hands out whole nodes. Elsewhere that lands
-you a 0-GPU allocation. Add the flag alongside the §6 account/partition swap.
+you a 0-GPU allocation. Add the flag alongside the §1.5 account/partition swap.
 
 **4. Set the world size by environment, not by editing.** `job_payload.sh`
 defaults to `${GPUS:-8}` and `${CUDA_VISIBLE_DEVICES:-0,1,...,7}` on this
 branch, and `submit_jobs.sh` submits with `--export=ALL`, so an override rides
-through. To reproduce §4a you need nothing; to run a different world size:
+through. To reproduce §2a you need nothing; to run a different world size:
 
 ```bash
 cd $ROOT/moe_ep_benchmark
@@ -579,7 +622,7 @@ rather than a broken run.
 on `(geometry, tokens_per_rank, variant)` only and never reads it
 (`make_tables.py:68`). Merging CSVs from two world sizes therefore overwrites
 matching cells rather than separating them — later file wins, exactly as
-`submit_jobs.sh` advertises for filling gaps at a *fixed* world size. §4's own
+`submit_jobs.sh` advertises for filling gaps at a *fixed* world size. §2's own
 render command globs the whole directory, so the default path walks straight
 into it:
 
@@ -589,7 +632,7 @@ python model_shapes/make_tables.py model_shapes/results_ep8/model_shapes_*.csv
 # at a directory holding two world sizes silently overwrites cells.
 ```
 
-The output would look like §4a and contain EP8 numbers, with nothing in
+The output would look like §2a and contain EP8 numbers, with nothing in
 `RESULTS.md` recording the difference — and `RESULTS.md` is a tracked file, so
 the corruption commits. `run_model_shapes.sh` honours `OUT_DIR`, which rides
 through `--export=ALL`, so keep the two apart at the source:
@@ -601,7 +644,7 @@ SHAPE_LIST="deepseek_v4_flash" SEQ_LENS="8 64 512 1024 2048 4096 8192" \
     bash model_shapes/submit_jobs.sh
 
 python model_shapes/make_tables.py model_shapes/results_ep8/model_shapes_*.csv \
-    -o /tmp/micro_ep8_RESULTS.md      # expected_results.md §3 is the reference
+    -o /tmp/micro_ep8_RESULTS.md      # expected_results.md §1.4 is the reference
 ```
 
 Sanity-check before rendering — the column is there, so use it:
@@ -612,7 +655,7 @@ cut -d, -f10 model_shapes/results_ep8/model_shapes_*.csv | sort -u   # expect: g
 
 ---
 
-### 4c. The ad-hoc launcher (`run.sh`)
+### 2c. The ad-hoc launcher (`run.sh`)
 
 `model_shapes/submit_jobs.sh` above sweeps the shapes in `shapes.tsv` under
 SLURM. `run.sh` is the interactive alternative: one process per GPU via
@@ -647,19 +690,18 @@ skip them unless you want the split-path comparison.
 > or output copy. Use `HIDDEN/INTER/NUM_EXPERTS/TOPK` plus `MEGA_TIMING=kernel`
 > for an apples-to-apples run.
 
-## 5. vLLM e2e
+## 3. vLLM e2e — throughput
 
-### Before §5a: the fi_cutedsl knob cache
+### 3a. The fi_cutedsl knob cache
 
 The cutedsl kernel picks its tile/cluster schedule from a knob cache keyed by
 geometry and world size. This branch ships both caches the sweeps use, so you
-can go straight to §5a:
+can go straight to §3b:
 
 | cache | geometry | used by |
 |---|---|---|
 | `results/knob_cache_ep8.json` | 4096/2048/256/top-6 | Flash EP8 sweep |
 | `results/knob_cache_pro_ep8.json` | 7168/3072/384/top-6 | V4-Pro EP8 sweep |
-| `results/knob_cache_dsv4_8k.json` | 4096/2048/256/top-6, world 4 | the GSM8K Flash cells, which run TP4 |
 
 Retune only if your geometry or world size differs — the winning tile moves
 with tokens-per-expert, and at EP8 each rank holds 32 of 256 experts rather
@@ -675,7 +717,7 @@ torchrun --nproc_per_node=8 -m flashinfer.moe_ep.tune --dtype nvfp4 \
 It is not cosmetic: on the EP8 cache fi_cutedsl prefill-8k reaches 1.199x; on a
 cache tuned for another world size it is understated.
 
-### 5a. Tier 1 — config checks (~1 min, no model)
+### 3b. Tier 1 — config checks (~1 min, no model)
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
@@ -692,107 +734,7 @@ Run this whenever you touch backend selection — it catches the likeliest rot, 
 backend registered in one file but not the other, in a minute instead of the
 ~10 a smoke costs.
 
-### 5b. Tier 2 — correctness smoke (~12 min)
-
-Tier 1 is **not** sufficient: it passes even if `use_fi_mega_moe` silently stays
-false and the run quietly executes the native path.
-
-```bash
-JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  ENFORCE_EAGER=1 MOE_BACKEND=deep_gemm_mega_moe \
-  python smoke_infer.py --tag native --out results/pr_native.json'
-
-JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  ENFORCE_EAGER=1 MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm \
-  python smoke_infer.py --tag fi_dg --out results/pr_fi_dg.json'
-
-JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  python compare_outputs.py results/pr_native.json results/pr_fi_dg.json'
-```
-
-**Check the bootstrap banner in the fi log** — this, not the diff, is the proof
-the backend string reached a kernel on every EP rank:
-
-```
-[fi_moe_ep] ep_rank=0 world=4 cuda.current_device=0 megakernel=deep_gemm_mega
-[fi_moe_ep] ep_rank=1 world=4 cuda.current_device=1 megakernel=deep_gemm_mega
-... one per rank
-```
-
-The **native** run must print no `[fi_moe_ep]` line at all. If it does, the
-predicate is mis-routing and the comparison means nothing.
-
-Expected (job 2439811): fi_dg vs native **8/8 exact**, mean |dlogprob| 0.0000.
-fi_cutedsl vs native 1/8 exact, 0.016-0.13 — it diverges by construction
-(double quantization), and that comparison is cross-checkpoint, so a wider band
-is expected and is not a bug.
-
-> **The fi_dg 8/8-exact figure is build-specific — do not treat it as a gate.**
-> On a from-scratch build 2026-07-25 (B200, DSL 4.5.2), fi_dg vs native came in
-> at **1/8 exact, mean |dlogprob| ≈ 0.02–0.06**: near-identical, but one flipped
-> logit early in a greedy decode diverges the rest of that sequence. native and
-> fi_dg are separate kernel implementations, so bit-exactness is not guaranteed
-> across builds/hardware. The real correctness gate is GSM8K (below), where a
-> properly-armed run (job 2337476) scored native **0.960**, fi_dg **0.960**
-> (identical), fi_cutedsl **0.970** on the NVFP4 cast — all in band. Use the
-> logprob smoke to confirm *routing* (the `[fi_moe_ep]` banner), not to demand
-> bit-exact generations.
->
-> The fi_cutedsl **0.955** previously recorded here came from the 03:42 run
-> that had `MODEL` exported and so scored the mx checkpoint under an
-> `fi_nvfp4` tag — see the warning in §5b.
-
-To produce that fi_cutedsl row, add a third smoke. **`smoke_infer.py` does not
-resolve the checkpoint per backend** the way `bench_offline.py` and
-`eval_gsm8k.py` do — its `--model` defaults to `$MODEL` regardless of
-`MOE_BACKEND`, so the NVFP4 path must be passed explicitly or you will quietly
-benchmark fi_cutedsl on the mx checkpoint:
-
-```bash
-JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  ENFORCE_EAGER=1 MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
-  python smoke_infer.py --tag fi_cutedsl --model $MODEL_NVFP4 \
-    --out results/pr_fi_cutedsl.json'
-
-JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  python compare_outputs.py results/pr_native.json results/pr_fi_cutedsl.json'
-```
-
-Because that pair is cross-checkpoint, the logprob delta is not a pass/fail
-signal — `eval_gsm8k.py` is. It boots one engine per backend and resolves the
-checkpoint per backend; both must land in the same band (~0.95 for DSV4-Flash)
-before any §5d ratio is an apples-to-apples claim.
-
-> **Do not export `MODEL` around this gate — it silently disarms it.**
-> `resolve_model` ranks `--model` > `$MODEL` > per-backend default, so a
-> `MODEL=<mx path>` in the environment sends *every* backend to the mx
-> checkpoint, including `fi_cutedsl`. The gate then compares the mx weights
-> against themselves, scores a comfortable pass, and tests nothing. This is not
-> hypothetical: the 2026-07-25 03:42 run (job 2337127) did exactly that — its
-> `gsm8k_fi_nvfp4.json` records `model=...hf-6e76323_orig`, the mx original —
-> so the NVFP4 checkpoints behind every fi_cutedsl throughput number went
-> unvalidated until job 2337476. Pass `--model` explicitly and check the
-> `model` field the eval records in each result JSON.
-
-```bash
-JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  python eval_gsm8k.py --tag native --model $MODEL_MX \
-    --out results/gsm8k_native.json'
-
-JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
-  python eval_gsm8k.py --tag fi_nvfp4 --model $MODEL_NVFP4 --min-acc 0.93 \
-    --out results/gsm8k_fi_nvfp4.json'
-```
-
-`--min-acc` exits 2 below threshold. The eval also records `truncated` — how
-many completions hit `--max-tokens` — because a chain cut off mid-reasoning
-still ends in *a* number and so scores as a confident wrong answer, not as
-unparseable. A low accuracy with a high `truncated` is a token-budget problem,
-not a model problem; `--min-acc 0.93` is calibrated for DSV4-Flash and is not
-automatically the right threshold for a model that reasons longer.
-
-### 5c. Throughput — the four headline cells
+### 3c. The four headline cells
 
 Run the three backends of a regime in **one session**: native's decode-1k drifts
 round-over-round, so cross-session ratios are not trustworthy.
@@ -815,11 +757,11 @@ bash patch_0251/apply.sh
 # DO NOT export MODEL. resolve_model() (bench_offline.py:42) returns $MODEL for
 # EVERY backend when it is set, so `export MODEL=$CKPT/deepseek-v4-flash` forces
 # fi_cutedsl onto the mx checkpoint too — the dequant→requant path — and the
-# fi_cutedsl column silently STOPS reproducing §5d (measured ~1.15x instead of
+# fi_cutedsl column silently STOPS reproducing §3d (measured ~1.15x instead of
 # ~1.18x at prefill-8k; verified 2026-07-25). Leave MODEL unset so native/fi_dg
 # use DEFAULT_MODEL (the pinned mx mirror) and only fi_cutedsl consults
 # MODEL_NVFP4. Set MODEL_NVFP4 explicitly (the compiled-in default is off-pin,
-# see §2):
+# see §1.3):
 export MODEL_NVFP4=$CKPT/deepseek-v4-flash-nvfp4
 export FI_MOE_EP_SKIP_VERSION_CHECK=1   # the 0.6.15 venv is below the new
                                         # flashinfer floor: documented
@@ -839,11 +781,11 @@ cell() {
         [[ $be == "$CUTEDSL" ]] && short=fi_cutedsl
         local cache=''
         [[ $short == fi_cutedsl ]] && \
-            cache=FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_dsv4_8k.json
+            cache=FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_ep8.json
         echo "--- $name / $short ---"
         env $envs MOE_BACKEND=$be $cache \
-            python bench_offline.py --tag sw_${name}_${short} "$@" \
-            --out results/sweep_${name}_${short}.json
+            python bench_offline.py --tag sw_ep8_${name}_${short} "$@" \
+            --out results/sweep_ep8_${name}_${short}.json
     done
 }
 ```
@@ -893,7 +835,7 @@ cell ctx32k 'ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 CAPTURE_SI
 > and costs native ~3% to batch padding — so **dec1k numbers recorded before
 > 2026-07-25 are not comparable with ones recorded after.**
 
-Results land in `$W/results/sweep_<cell>_<backend>.json` — twelve files.
+Results land in `$W/results/sweep_ep8_<cell>_<backend>.json` — twelve files.
 
 All twelve at once (~1 h, submits its own exclusive node, prints a summary table
 and re-applies the patch itself):
@@ -923,9 +865,9 @@ that cell is measuring. Prefix caching is off for the same reason: rounds reuse
 prompts, so with it on every post-warmup round is a 100% cache hit and prefill
 measures nothing (once produced a fake 91k tok/s).
 
-### 5d. Expected numbers
+### 3d. Expected numbers
 
-TP8+EP8, both models, in [expected_results.md](expected_results.md) §1-2 —
+TP8+EP8, both models, in [expected_results.md](expected_results.md) §1.2-2 —
 kept in one place so there is a single set of numbers to check against, with
 tolerances and the two known failure modes.
 
@@ -940,19 +882,16 @@ backends of a cell must run in one session.
 > the Grace side rather than a discrete host. Both are Blackwell sm_100 and
 > valid; just don't compare cell-for-cell across the two.
 
-### 5e. The other two jobs — V4-Pro, and the accuracy gate
+### 3e. The V4-Pro sweep
 
-Everything above is DeepSeek-V4-Flash. Two more jobs complete the branch's
-results, both submitting their own exclusive 8-GPU node:
+Everything above is DeepSeek-V4-Flash. The V4-Pro sweep completes the
+throughput picture; the accuracy gate for both models is §4.
 
 ```bash
 # V4-Pro, same four cells, ~2 h. native/fi_dg on the Pro mx checkpoint,
 # fi_cutedsl on the pinned Pro NVFP4; knob cache knob_cache_pro_ep8.json.
 cd $W && MODEL_MX_PRO=... MODEL_NVFP4_PRO=... sbatch job_vllm_pr_runbook_sweep_pro.sh
 
-# GSM8K across both models AND both checkpoints, ~35 min.
-cd $W && MODEL_MX_FLASH=... MODEL_NVFP4_FLASH=... \
-         MODEL_MX_PRO=...   MODEL_NVFP4_PRO=...   sbatch job_gsm8k_flash_pro.sh
 ```
 
 Both take their checkpoints from the environment and fail at submit time with a
@@ -962,46 +901,131 @@ an hour into the allocation. Outputs are `results/sweep_pro_*.json` and
 
 The Pro sweep's V4-Pro NVFP4 checkpoint is 45 GiB *larger* than its mx one
 (850.4 vs 805.3 GiB), which is why fi_cutedsl is the first thing to run out of
-KV cache if a cell is misconfigured — see §7.
+KV cache if a cell is misconfigured — see §5.
 
-The GSM8K job runs its Flash cells at **TP4** and its Pro cells at TP8. That is
-deliberate: it is an accuracy gate rather than a throughput measurement, and TP4
-is the configuration the recorded Flash accuracies were measured at. It is the
-one place on this branch that is not TP8, and it is why `knob_cache_dsv4_8k.json`
-(world 4) ships.
+The GSM8K job runs both models at TP8, like everything else here.
 
-## 6. Running with a different ROOT
+## 4. Accuracy
 
-`in_container.sh`, `setup_container.sh` and `bench_offline.py` all take
-overrides (`ROOT`, `REPO`, `VENV`, `MODEL`, `MODEL_NVFP4`), so §2, §3 and §5
-need no edits. The microbenchmark in §4 does — these three lines hardcode the
-original path:
+Two levels. The smoke in §2a proves the backend string reached a kernel and the
+outputs are sane; the GSM8K gate in §2b is what licenses a throughput claim,
+because fi_cutedsl runs a different checkpoint from native.
 
-| file | line | what |
-|---|---|---|
-| `model_shapes/submit_jobs.sh` | 12 | `ROOT=/lustre/fsw/.../mhoqueanik` |
-| `model_shapes/job_payload.sh` | 7 | `ROOT=/lustre/fsw/.../mhoqueanik` |
-| `model_shapes/job_payload.sh` | 28 | `assert m.__file__.startswith(".../flashinfer-2")` |
+### 4a. Correctness smoke (~12 min)
+
+Tier 1 is **not** sufficient: it passes even if `use_fi_mega_moe` silently stays
+false and the run quietly executes the native path.
 
 ```bash
-OLD=/lustre/fsw/coreai_libraries_cudnn/mhoqueanik
-sed -i "s#$OLD#$ROOT#g" $ROOT/moe_ep_benchmark/model_shapes/submit_jobs.sh \
-                        $ROOT/moe_ep_benchmark/model_shapes/job_payload.sh
+JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
+  ENFORCE_EAGER=1 MOE_BACKEND=deep_gemm_mega_moe \
+  python smoke_infer.py --tag native --out results/pr_native.json'
+
+JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
+  ENFORCE_EAGER=1 MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm \
+  python smoke_infer.py --tag fi_dg --out results/pr_fi_dg.json'
+
+JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
+  python compare_outputs.py results/pr_native.json results/pr_fi_dg.json'
 ```
 
-Also swap `-A coreai_libraries_cudnn` / `-p batch` for your account and
-partition in `submit_jobs.sh`, `job_payload.sh`, and the §3a hold job.
-`job_vllm_pr_runbook_sweep_ep8.sh` needs no edit for either — it takes `ROOT` from
-the environment, and `sbatch -A … -p …` on the command line overrides its
-`#SBATCH` lines.
+**Check the bootstrap banner in the fi log** — this, not the diff, is the proof
+the backend string reached a kernel on every EP rank:
 
-The line-28 assert is why the `flashinfer-2/` parent directory has to stay:
-it checks the resolved `flashinfer.__file__` prefix, so renaming the checkout
-makes the microbenchmark fail after the install rather than before it.
+```
+[fi_moe_ep] ep_rank=0 world=4 cuda.current_device=0 megakernel=deep_gemm_mega
+[fi_moe_ep] ep_rank=1 world=4 cuda.current_device=1 megakernel=deep_gemm_mega
+... one per rank
+```
 
----
+The **native** run must print no `[fi_moe_ep]` line at all. If it does, the
+predicate is mis-routing and the comparison means nothing.
 
-## 7. Things that will bite you
+Expected (job 2439811): fi_dg vs native **8/8 exact**, mean |dlogprob| 0.0000.
+fi_cutedsl vs native 1/8 exact, 0.016-0.13 — it diverges by construction
+(double quantization), and that comparison is cross-checkpoint, so a wider band
+is expected and is not a bug.
+
+> **The fi_dg 8/8-exact figure is build-specific — do not treat it as a gate.**
+> On a from-scratch build 2026-07-25 (B200, DSL 4.5.2), fi_dg vs native came in
+> at **1/8 exact, mean |dlogprob| ≈ 0.02–0.06**: near-identical, but one flipped
+> logit early in a greedy decode diverges the rest of that sequence. native and
+> fi_dg are separate kernel implementations, so bit-exactness is not guaranteed
+> across builds/hardware. The real correctness gate is GSM8K (below), where a
+> properly-armed run (job 2337476) scored native **0.960**, fi_dg **0.960**
+> (identical), fi_cutedsl **0.970** on the NVFP4 cast — all in band. Use the
+> logprob smoke to confirm *routing* (the `[fi_moe_ep]` banner), not to demand
+> bit-exact generations.
+>
+> The fi_cutedsl **0.955** previously recorded here came from the 03:42 run
+> that had `MODEL` exported and so scored the mx checkpoint under an
+> `fi_nvfp4` tag — see the warning in §4b.
+
+To produce that fi_cutedsl row, add a third smoke. **`smoke_infer.py` does not
+resolve the checkpoint per backend** the way `bench_offline.py` and
+`eval_gsm8k.py` do — its `--model` defaults to `$MODEL` regardless of
+`MOE_BACKEND`, so the NVFP4 path must be passed explicitly or you will quietly
+benchmark fi_cutedsl on the mx checkpoint:
+
+```bash
+JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
+  ENFORCE_EAGER=1 MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
+  python smoke_infer.py --tag fi_cutedsl --model $MODEL_NVFP4 \
+    --out results/pr_fi_cutedsl.json'
+
+JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
+  python compare_outputs.py results/pr_native.json results/pr_fi_cutedsl.json'
+```
+
+### 4b. GSM8K — the cross-checkpoint gate
+
+Because that pair is cross-checkpoint, the logprob delta is not a pass/fail
+signal — `eval_gsm8k.py` is. It boots one engine per backend and resolves the
+checkpoint per backend; both must land in the same band (~0.95 for DSV4-Flash)
+before any §3d ratio is an apples-to-apples claim.
+
+> **Do not export `MODEL` around this gate — it silently disarms it.**
+> `resolve_model` ranks `--model` > `$MODEL` > per-backend default, so a
+> `MODEL=<mx path>` in the environment sends *every* backend to the mx
+> checkpoint, including `fi_cutedsl`. The gate then compares the mx weights
+> against themselves, scores a comfortable pass, and tests nothing. This is not
+> hypothetical: the 2026-07-25 03:42 run (job 2337127) did exactly that — its
+> `gsm8k_fi_nvfp4.json` records `model=...hf-6e76323_orig`, the mx original —
+> so the NVFP4 checkpoints behind every fi_cutedsl throughput number went
+> unvalidated until job 2337476. Pass `--model` explicitly and check the
+> `model` field the eval records in each result JSON.
+
+```bash
+JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
+  python eval_gsm8k.py --tag native --model $MODEL_MX \
+    --out results/gsm8k_native.json'
+
+JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
+  MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
+  python eval_gsm8k.py --tag fi_nvfp4 --model $MODEL_NVFP4 --min-acc 0.93 \
+    --out results/gsm8k_fi_nvfp4.json'
+```
+
+`--min-acc` exits 2 below threshold. The eval also records `truncated` — how
+many completions hit `--max-tokens` — because a chain cut off mid-reasoning
+still ends in *a* number and so scores as a confident wrong answer, not as
+unparseable. A low accuracy with a high `truncated` is a token-budget problem,
+not a model problem; `--min-acc 0.93` is calibrated for DSV4-Flash and is not
+automatically the right threshold for a model that reasons longer.
+
+Both models and both checkpoints in one job (~35 min, its own 8-GPU node):
+
+```bash
+cd $W && MODEL_MX_FLASH=... MODEL_NVFP4_FLASH=... \
+         MODEL_MX_PRO=...   MODEL_NVFP4_PRO=...   sbatch job_gsm8k_flash_pro.sh
+```
+
+It runs six cells — native / fi_dg / fi_cutedsl for each model, all at TP8 —
+and its summary prints the checkpoint each row actually loaded, flagging any
+fi_cutedsl row that did not run an nvfp4 path. Expected numbers:
+[expected_results.md](expected_results.md) §4.
+
+## 5. Things that will bite you
 
 **`FI_MOE_EP` is now a hard error.** Any non-empty `FI_MOE_EP` or
 `FI_MOE_EP_MEGAKERNEL` aborts at startup — including `FI_MOE_EP=0`, and
@@ -1027,12 +1051,12 @@ which the new code rejects. For a full revert, copy `kernel.py.orig` back.
 `CuMemAllocator`, which trips over tilelang's `libcudart_stub.so` missing
 `cudaDeviceReset`. They appear after results are written.
 
-## 8. Not covered
+## 6. Not covered
 
 * No multi-node run. Single node, TP8+EP8.
 * ~~GSM8K not re-run since the backend-string switch~~ **DONE 2026-07-25, job
   2337476** — and it caught that the gate had been disarmed by an exported
-  `MODEL` (§5b). Flash: native 0.960 / fi_dg 0.960 / fi_cutedsl 0.970 on the
+  `MODEL` (§4a). Flash: native 0.960 / fi_dg 0.960 / fi_cutedsl 0.970 on the
   NVFP4 cast. V4-Pro scores 0.880 / 0.880 / 0.890 — consistent across all three
   backends, so not a moe_ep issue, but below the 0.93 gate; whether that is the
   512-token cap truncating a longer reasoner or a real deficit is open (job

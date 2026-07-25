@@ -9,9 +9,17 @@ branch `4_5_2-perf-fix` @ `1ee41bcd`, nvidia-cutlass-dsl **4.5.2** (pinned — t
 CuteDSL codegen is 34-54% slower before it), TP8 + EP8, DP1, kv fp8, block 256,
 prefix caching off, round 0 discarded as warmup, median of 3 timed rounds.
 
-**Backends.** `native` = vLLM `deep_gemm_mega_moe`. `fi_dg` =
-`flashinfer_moe_ep_mega_deep_gemm`. `fi_cutedsl` =
-`flashinfer_moe_ep_mega_cutedsl`.
+**The three backends, and what a ratio between them means.**
+
+| name | `moe_backend` string | what it is |
+|---|---|---|
+| `native` | `deep_gemm_mega_moe` | vLLM's own DeepGEMM MegaMoE. The baseline every speedup below is relative to. |
+| `fi_dg` | `flashinfer_moe_ep_mega_deep_gemm` | FlashInfer `moe_ep` DeepGEMM MegaMoE — **the same kernel as native**, reached through different glue: the `moe_ep` wrapper rather than a torch op. So `fi_dg` vs `native` isolates integration overhead, not kernel work, and ~1.00x is the expected answer. |
+| `fi_cutedsl` | `flashinfer_moe_ep_mega_cutedsl` | FlashInfer `moe_ep` NVFP4 CuteDSL MegaMoE — a **different kernel**, and the one the work is actually about. Its speedup is the result. |
+
+Read the two columns differently: `fi_dg` at 1.02x says the wrapper costs
+nothing (and, at 0.44x, said something was badly wrong — §5.1). `fi_cutedsl`
+at 1.31x is the kernel win.
 
 **Two checkpoints, deliberately.** native and fi_dg run the mx original;
 fi_cutedsl runs the NVFP4 cast of the same base weights, because that is the
@@ -58,18 +66,19 @@ on both models. If you see fi_dg far from 1.02x, read §5.1 before believing it.
 `model_shapes/submit_jobs.sh` for the shape table. Job 2337199;
 `model_shapes/results_ep8/model_shapes_20260725_045752_deepseek_v4_flash.csv`.
 
-DSV4-Flash geometry (hidden 4096, inter 2048, 256 experts, top-6), e2e us p50
-per rank:
+DSV4-Flash geometry (hidden 4096, inter 2048, 256 experts, top-6). `e2e_pipelined`
+p50 microseconds per rank, with the same numbers as speedup vs
+`deep_gemm_mega` — higher is better, >1.00x means the CuteDSL kernel is ahead:
 
 | tok/rank | deep_gemm_mega | nvfp4_cutedsl | +combine_mxfp8 | +combine_nvfp4 |
 |---|---|---|---|---|
-| 8 | 108.6 | 121.8 | 128.1 | 128.0 |
-| 64 | 125.0 | 134.2 | 146.4 | 146.5 |
-| 512 | 155.7 | 191.5 | 175.1 | 169.1 |
-| 1024 | 237.7 | 232.4 | 207.9 | 197.5 |
-| 2048 | 381.0 | 336.7 | 289.8 | 275.4 |
-| 4096 | 693.4 | 578.6 | 471.9 | 425.0 |
-| 8192 | 1321.4 | 1100.8 | 880.7 | **779.2** |
+| 8 | 108.6 µs | 121.8 (0.89x) | 128.1 (0.85x) | 128.0 (0.85x) |
+| 64 | 125.0 µs | 134.2 (0.93x) | 146.4 (0.85x) | 146.5 (0.85x) |
+| 512 | 155.7 µs | 191.5 (0.81x) | 175.1 (0.89x) | 169.1 (0.92x) |
+| 1024 | 237.7 µs | 232.4 (**1.02x**) | 207.9 (1.14x) | 197.5 (1.20x) |
+| 2048 | 381.0 µs | 336.7 (1.13x) | 289.8 (1.31x) | 275.4 (1.38x) |
+| 4096 | 693.4 µs | 578.6 (1.20x) | 471.9 (1.47x) | 425.0 (1.63x) |
+| 8192 | 1321.4 µs | 1100.8 (1.20x) | 880.7 (1.50x) | **779.2 (1.70x)** |
 
 The crossover is near 1024 tokens/rank: below it deep_gemm_mega wins, above it
 the cutedsl kernels pull away, reaching 1.70x at 8192. This is the kernel-level

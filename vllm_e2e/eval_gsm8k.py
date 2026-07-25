@@ -33,7 +33,7 @@ import re
 import sys
 import time
 
-from bench_offline import resolve_model
+from bench_offline import assert_expected_dsl, resolve_model
 
 DEFAULT_GSM8K_DIR = (
     "/lustre/share/coreai_dlalgo_ci/artifacts/dataset/core-models_verl/gsm8k/prep1"
@@ -148,6 +148,11 @@ def main() -> int:
     ap.add_argument("--enforce-eager", action="store_true",
                     default=os.environ.get("ENFORCE_EAGER", "1") == "1")
     args = ap.parse_args()
+    # Same guard bench_offline.py applies. Without it the accuracy gate will
+    # happily score a run on an unpinned CuTe-DSL while the throughput
+    # harness refuses to — an inconsistency that let job 2337620 start on
+    # 4.6.1 unnoticed. EXPECT_DSL='' disables, as there.
+    assert_expected_dsl()
     args.model = resolve_model(args.model)
     print(f"[eval_gsm8k] {args.tag}: model = {args.model}", flush=True)
 

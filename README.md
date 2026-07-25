@@ -12,14 +12,14 @@ tolerances, and the two failure modes that produce plausible-but-wrong results.
 
 | | what | how | ~time |
 |---|---|---|---|
-| Kernel microbenchmark | cutedsl vs deep_gemm_mega at DSV4 shapes. No vLLM, no checkpoints. | [RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) §4 | 20 min |
+| Kernel microbenchmark | cutedsl vs deep_gemm_mega at DSV4 shapes. No vLLM, no checkpoints. | [RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) §2 | 20 min |
 | vLLM e2e, Flash | 4 cells x 3 backends, EP8 | `vllm_e2e/job_vllm_pr_runbook_sweep_ep8.sh` | 1 h |
 | vLLM e2e, Pro | same cells, V4-Pro | `vllm_e2e/job_vllm_pr_runbook_sweep_pro.sh` | 2 h |
 | Accuracy gate | GSM8K, both models, both checkpoints | `vllm_e2e/job_gsm8k_flash_pro.sh` | 35 min |
 
 Setup — container, venv, patch, checkpoints — is
-[RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) §1-3; it is the single runbook and covers
-the microbenchmark (§4) and the e2e sweeps (§5) too.
+[RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) §1. It is the single runbook, in four
+sections: prep (§1), microbenchmark (§2), e2e throughput (§3), accuracy (§4).
 
 ## Layout
 
