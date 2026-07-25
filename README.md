@@ -9,6 +9,12 @@ Single-node MoE expert-parallel microbenchmarks. Each variant launches one proce
 > checklist, with this repo's vLLM patch (`vllm_e2e/patch_0251/`) as the
 > worked example.
 
+> **Reproducing the recorded numbers on another machine?**
+> [RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) is the from-scratch path — clone, build
+> the container image, fetch checkpoints, microbenchmark, vLLM e2e — with the
+> expected numbers and their job IDs. §4b covers porting to a different system
+> and to EP8.
+
 ## Subsections
 
 | Section | Script | Backends |
