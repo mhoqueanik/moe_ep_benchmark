@@ -10,27 +10,42 @@ tolerances, and the two failure modes that produce plausible-but-wrong results.
 
 ## Can you run this?
 
-Not from a public checkout. Three of the inputs are not obtainable outside
-NVIDIA, so be honest with yourself about this list before budgeting time:
+**All four checkpoints are public and ungated**, at the exact revisions the
+numbers were measured on — verified against huggingface.co on 2026-07-25:
 
-| you need | where it comes from | outside NVIDIA? |
-|---|---|---|
-| 8x SM100 GPUs, one node, SLURM + pyxis/enroot | your cluster | yes, if you have the hardware |
-| `flashinfer-moe_ep` @ `4_5_2-perf-fix` | a fork, see RUNBOOK_REPRO §1a | access-dependent |
-| mx checkpoints (V4-Flash, V4-Pro) | `/lustre/share/coreai_dlalgo_ci/artifacts/model/` | **no — internal mirror** |
-| NVFP4 casts | HF `nvidia/DeepSeek-V4-*-NVFP4`, via `vllm_e2e/setup/` | yes |
-| GSM8K | internal parquet, else auto-downloads from the OpenAI jsonl | yes (fallback) |
+| | repo | revision | shards |
+|---|---|---|---|
+| Flash mx | `deepseek-ai/DeepSeek-V4-Flash` | `6e763230…` | 46 |
+| Flash NVFP4 | `nvidia/DeepSeek-V4-Flash-NVFP4` | `48bfe38c…` | 46 |
+| Pro mx | `deepseek-ai/DeepSeek-V4-Pro` | `0366e4e` | 64 |
+| Pro NVFP4 | `nvidia/DeepSeek-V4-Pro-NVFP4` | `9e7e88ee…` | 64 |
 
-The mx checkpoints are the hard blocker: they are the baseline every ratio is
-measured against, and `bench_offline.py` compiles their mirror path in as
-`DEFAULT_MODEL`. With your own copy of the same weights, point `MODEL` /
-`MODEL_NVFP4` (or `--model`) at it and everything else works — but read
-expected_results.md §5.2 first, because setting `MODEL` is exactly what
-disarms the accuracy gate.
+`vllm_e2e/setup/dl_mx_originals.sh` and `dl_nvfp4_{flash,pro}.sh` fetch them.
+The `/lustre/share/coreai_dlalgo_ci/...` paths compiled into `bench_offline.py`
+as `DEFAULT_MODEL` are only a cluster-local cache of these same trees — set
+`MODEL_MX_*` / `MODEL_NVFP4_*` and you never touch them.
+
+> **Pin the revisions — for NVFP4 this is correctness, not provenance.**
+> `nvidia/DeepSeek-V4-Pro-NVFP4` at `main` is `1449d1e6` as of 2026-07-25,
+> which is the **post-rewrite** `hf_quant_config.json` schema
+> (`quant_algo: "MIXED_PRECISION"`, per-layer keys). fi_cutedsl loads that
+> without complaint and silently takes the dequant fallback, so you get numbers
+> that look plausible and mean nothing. `dl_nvfp4_pro.sh` resolves the newest
+> revision whose schema is still prequantized rather than trusting `main`.
+
+So what you actually need is the hardware and the kernels:
+
+| | |
+|---|---|
+| 8x SM100 GPUs, one node, SLURM + pyxis/enroot | your cluster |
+| `flashinfer-moe_ep` @ `4_5_2-perf-fix` | a fork — see RUNBOOK_REPRO §1a; access-dependent |
+| GSM8K | internal parquet if present, else auto-downloads the OpenAI jsonl |
 
 Also cluster-specific and worth overriding: the `#SBATCH --account` /
 `--partition` lines in `vllm_e2e/job_*.sh` (pass `sbatch -A <acct> -p <part>`),
-and `ROOT`, which every script takes from the environment.
+and `ROOT`, which every script takes from the environment. And read
+expected_results.md §5.2 before exporting `MODEL` — that is what disarms the
+accuracy gate.
 
 ## What reproduces
 
