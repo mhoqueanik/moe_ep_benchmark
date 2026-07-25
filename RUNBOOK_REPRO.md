@@ -668,10 +668,15 @@ is expected and is not a bug.
 > at **1/8 exact, mean |dlogprob| ≈ 0.02–0.06**: near-identical, but one flipped
 > logit early in a greedy decode diverges the rest of that sequence. native and
 > fi_dg are separate kernel implementations, so bit-exactness is not guaranteed
-> across builds/hardware. The real correctness gate is GSM8K (below), where the
-> same run scored native **0.960**, fi_dg **0.960** (identical), fi_cutedsl
-> **0.955** — all in band. Use the logprob smoke to confirm *routing* (the
-> `[fi_moe_ep]` banner), not to demand bit-exact generations.
+> across builds/hardware. The real correctness gate is GSM8K (below), where a
+> properly-armed run (job 2337476) scored native **0.960**, fi_dg **0.960**
+> (identical), fi_cutedsl **0.970** on the NVFP4 cast — all in band. Use the
+> logprob smoke to confirm *routing* (the `[fi_moe_ep]` banner), not to demand
+> bit-exact generations.
+>
+> The fi_cutedsl **0.955** previously recorded here came from the 03:42 run
+> that had `MODEL` exported and so scored the mx checkpoint under an
+> `fi_nvfp4` tag — see the warning in §5b.
 
 To produce that fi_cutedsl row, add a third smoke. **`smoke_infer.py` does not
 resolve the checkpoint per backend** the way `bench_offline.py` and
@@ -691,21 +696,37 @@ JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
 
 Because that pair is cross-checkpoint, the logprob delta is not a pass/fail
 signal — `eval_gsm8k.py` is. It boots one engine per backend and resolves the
-checkpoint automatically; both must land in the same band (~0.95 for
-DSV4-Flash) before any §5d ratio is an apples-to-apples claim:
+checkpoint per backend; both must land in the same band (~0.95 for DSV4-Flash)
+before any §5d ratio is an apples-to-apples claim.
+
+> **Do not export `MODEL` around this gate — it silently disarms it.**
+> `resolve_model` ranks `--model` > `$MODEL` > per-backend default, so a
+> `MODEL=<mx path>` in the environment sends *every* backend to the mx
+> checkpoint, including `fi_cutedsl`. The gate then compares the mx weights
+> against themselves, scores a comfortable pass, and tests nothing. This is not
+> hypothetical: the 2026-07-25 03:42 run (job 2337127) did exactly that — its
+> `gsm8k_fi_nvfp4.json` records `model=...hf-6e76323_orig`, the mx original —
+> so the NVFP4 checkpoints behind every fi_cutedsl throughput number went
+> unvalidated until job 2337476. Pass `--model` explicitly and check the
+> `model` field the eval records in each result JSON.
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  python eval_gsm8k.py --tag native --out results/gsm8k_native.json'
+  python eval_gsm8k.py --tag native --model $MODEL_MX \
+    --out results/gsm8k_native.json'
 
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
   MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
-  python eval_gsm8k.py --tag fi_nvfp4 --min-acc 0.93 \
+  python eval_gsm8k.py --tag fi_nvfp4 --model $MODEL_NVFP4 --min-acc 0.93 \
     --out results/gsm8k_fi_nvfp4.json'
 ```
 
-`--min-acc` exits 2 below threshold. This gate **has not been re-run since the
-backend-string switch** — see §8.
+`--min-acc` exits 2 below threshold. The eval also records `truncated` — how
+many completions hit `--max-tokens` — because a chain cut off mid-reasoning
+still ends in *a* number and so scores as a confident wrong answer, not as
+unparseable. A low accuracy with a high `truncated` is a token-budget problem,
+not a model problem; `--min-acc 0.93` is calibrated for DSV4-Flash and is not
+automatically the right threshold for a model that reasons longer.
 
 ### 5c. Throughput — the four headline cells
 
@@ -771,8 +792,9 @@ The four cells:
 cell pre8k 'ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 CAPTURE_SIZES=256,2048,4096,8192' \
     --workload prefill:1024:1 --num-prompts 256 --rounds 3
 
-# decode-1k (headline)
-cell dec1k 'ENFORCE_EAGER=0 MAX_CAPTURE=4096 MAX_NUM_SEQS=1024' \
+# decode-1k (headline). CAPTURE_SIZES is mandatory here for the same reason --
+# see the warning below; this cell shipped without it until 2026-07-25.
+cell dec1k 'ENFORCE_EAGER=0 MAX_CAPTURE=4096 MAX_NUM_SEQS=1024 CAPTURE_SIZES=256,1024,2048,4096' \
     --workload decode:128:256 --num-prompts 1024 --rounds 3
 
 # 100K ISL / 1K OSL @ 32 concurrent (interactivity)
@@ -783,6 +805,29 @@ cell lc100k 'ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 CAPTURE_SI
 cell ctx32k 'ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 CAPTURE_SIZES=32,256,2048,8192 MAX_NUM_SEQS=32 MAX_MODEL_LEN=33792 GPU_MEM_UTIL=0.93 REQUIRE_LATENCY=1' \
     --workload longctx:32768:32 --num-prompts 32 --rounds 3
 ```
+
+> **Every cell that sets `MAX_CAPTURE` must also pin `CAPTURE_SIZES`, and the
+> penalty for forgetting lands on the flashinfer backends only.** `dec1k` was
+> the one cell that did not, and it silently produced garbage for months.
+> Measured on V4-Pro EP8 (jobs 2337473 / 2337487): with the dense default
+> ladder, vLLM's CUDA-graph memory profiler reserved **~48 GiB/GPU** for both
+> flashinfer backends against a real capture cost of ~6 GiB — the same ~6 GiB
+> it estimates correctly for native. The phantom reservation comes straight out
+> of the KV cache:
+>
+> | backend | KV available | KV tokens | sequences resident | tok/s |
+> |---|---|---|---|---|
+> | native | 48.91 GiB | 95,979 | 1024 of 1024 | 13268 |
+> | fi_dg | 7.28 GiB | 14,286 | **189** of 1024 | 5969 (0.45x) |
+> | fi_cutedsl | 0.07 GiB | — | engine would not start | OOM |
+>
+> The tell is a backend that looks *fast per step and slow overall*: fi_dg's
+> ITL was **better** than native (42.6 vs 94.4 ms) precisely because its
+> batches were 5x smaller. If you see that shape, check
+> `Available KV cache memory` and the `Running:`/`Waiting:` counts before
+> blaming the kernel. Pinning restores fi_dg to 1.02x and fi_cutedsl to 1.19x,
+> and costs native ~3% to batch padding — so **dec1k numbers recorded before
+> 2026-07-25 are not comparable with ones recorded after.**
 
 Results land in `$W/results/sweep_<cell>_<backend>.json` — twelve files.
 
@@ -919,7 +964,12 @@ which the new code rejects. For a full revert, copy `kernel.py.orig` back.
 ## 8. Not covered
 
 * No multi-node run. Single node, TP4+EP4 only.
-* GSM8K not re-run since the backend-string switch — the cross-checkpoint
-  accuracy gate.
+* ~~GSM8K not re-run since the backend-string switch~~ **DONE 2026-07-25, job
+  2337476** — and it caught that the gate had been disarmed by an exported
+  `MODEL` (§5b). Flash: native 0.960 / fi_dg 0.960 / fi_cutedsl 0.970 on the
+  NVFP4 cast. V4-Pro scores 0.880 / 0.880 / 0.890 — consistent across all three
+  backends, so not a moe_ep issue, but below the 0.93 gate; whether that is the
+  512-token cap truncating a longer reasoner or a real deficit is open (job
+  2337550).
 * Building the real PR branch from source is unverified; everything here
   patches a 0.25.1 wheel.

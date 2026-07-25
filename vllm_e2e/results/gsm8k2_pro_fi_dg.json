@@ -1,0 +1,11 @@
+{
+ "tag": "pro_fi_dg",
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-pro/hf/hf-0366e4e_orig",
+ "num_questions": 200,
+ "accuracy": 0.88,
+ "correct": 176,
+ "invalid": 0,
+ "elapsed_s": 63.170386992016574,
+ "eager": true,
+ "moe_backend": "flashinfer_moe_ep_mega_deep_gemm"
+}

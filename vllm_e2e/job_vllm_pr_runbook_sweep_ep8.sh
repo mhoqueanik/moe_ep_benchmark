@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=deepseekv4flash.vllm_pr_sweep
+#SBATCH --job-name=deepseekv4flash.vllm_pr_sweep_ep8
 #SBATCH --account=coreai_libraries_cudnn
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --exclusive
 #SBATCH --time=04:00:00
 #SBATCH --partition=batch
-#SBATCH --output=vllm_pr_sweep_%j.log
+#SBATCH --output=vllm_pr_sweep_ep8_%j.log
 #
 # Full e2e rerun of RUNBOOK_VLLM_PR.md on 1x4 GB200, against the reshaped API
 # (two backends, module at vllm/utils/flashinfer_moe_ep.py). Also the first
@@ -72,6 +72,7 @@ export HF_HOME=$ROOT/.cache/huggingface
 export PIP_CACHE_DIR=$ROOT/.cache/pip
 export FLASHINFER_WORKSPACE_BASE=$ROOT/.cache/flashinfer-root-ws
 export FI_MOE_EP_SKIP_VERSION_CHECK=1
+export TP=8   # EP8: bench_offline sets tensor_parallel_size=TP, DP=1 => EP=world=8
 $FWD
 
 echo '=== node ==='; hostname; nvidia-smi -L | head -4
@@ -97,11 +98,11 @@ cell() {
         [[ \$be == \$DG ]] && short=fi_dg
         [[ \$be == \$CUTEDSL ]] && short=fi_cutedsl
         local cache=''
-        [[ \$short == fi_cutedsl ]] && cache=FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_dsv4_8k.json
+        [[ \$short == fi_cutedsl ]] && cache=FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_ep8.json
         echo; echo \"--- \$name / \$short ---\"
         env \$envs MOE_BACKEND=\$be \$cache \
-            python bench_offline.py --tag sw_\${name}_\${short} \"\$@\" \
-            --out results/sweep_\${name}_\${short}.json 2>&1 \
+            python bench_offline.py --tag sw_ep8_\${name}_\${short} \"\$@\" \
+            --out results/sweep_ep8_\${name}_\${short}.json 2>&1 \
             | grep -E '^\\[bench_offline\\]|Error|Traceback' | tail -8
     done
 }
@@ -120,9 +121,8 @@ echo; echo '########## DECODE-1K (headline)'
 # the 1024 requested sequences (0.44x native, with *better* ITL because the
 # batches were tiny) and fi_cutedsl could not allocate a KV cache at all.
 # Pinning restores fi_dg to 1.02x and fi_cutedsl to 1.19x.
-# NB: this changes the cell. Native loses ~3% to padding (batches round up to
-# the nearest captured size), so dec1k numbers recorded before 2026-07-25 are
-# not comparable with ones recorded after.
+# NB: this changes the cell. Native loses ~3% to padding, so dec1k numbers
+# recorded before 2026-07-25 are not comparable with ones recorded after.
 cell dec1k 'ENFORCE_EAGER=0 MAX_CAPTURE=4096 MAX_NUM_SEQS=1024 CAPTURE_SIZES=256,1024,2048,4096' \
     --workload decode:128:256 --num-prompts 1024 --rounds $ROUNDS
 
@@ -152,7 +152,7 @@ for title, stem, note in CELLS:
           f\"{'TTFT p50':>9s} {'ITL p50':>9s} {'ITL p99':>9s}\")
     base = None
     for label, short in ROWS:
-        p = f'results/sweep_{stem}_{short}.json'
+        p = f'results/sweep_ep8_{stem}_{short}.json'
         if not os.path.exists(p):
             print(f'  {label:11s} MISSING'); continue
         d = json.load(open(p))

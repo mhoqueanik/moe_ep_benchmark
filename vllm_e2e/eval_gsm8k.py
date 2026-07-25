@@ -183,6 +183,12 @@ def main() -> int:
 
     preds = [extract_answer(o.outputs[0].text) for o in outs]
     invalid = sum(1 for p in preds if p != p)
+    # A completion cut off at --max-tokens still ends in *a* number, so it
+    # scores as a confident wrong answer rather than as unparseable. Without
+    # this count a low accuracy cannot be told apart from a too-small token
+    # budget -- which is exactly the ambiguity DSV4-Pro hit at 0.88 on the
+    # 512-token default (2026-07-25).
+    truncated = sum(1 for o in outs if o.outputs[0].finish_reason == "length")
     correct = sum(1 for p, gt in zip(preds, labels) if p == p and p == gt)
     acc = correct / len(labels)
 
@@ -193,6 +199,8 @@ def main() -> int:
         "accuracy": acc,
         "correct": correct,
         "invalid": invalid,
+        "truncated": truncated,
+        "max_tokens": args.max_tokens,
         "elapsed_s": dt,
         "eager": args.enforce_eager,
         "moe_backend": os.environ.get("MOE_BACKEND", "deep_gemm_mega_moe"),
@@ -207,7 +215,8 @@ def main() -> int:
         json.dump(payload, f, indent=1)
     print(
         f"[eval_gsm8k] {args.tag}: accuracy {acc:.4f} "
-        f"({correct}/{len(labels)}, {invalid} unparseable) -> {args.out}",
+        f"({correct}/{len(labels)}, {invalid} unparseable, "
+        f"{truncated} truncated at max_tokens={args.max_tokens}) -> {args.out}",
         flush=True,
     )
 
