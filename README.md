@@ -8,45 +8,6 @@ lives on `vllm-pr`.
 **Start with [expected_results.md](expected_results.md)** — the numbers, the
 tolerances, and the two failure modes that produce plausible-but-wrong results.
 
-## Can you run this?
-
-**All four checkpoints are public and ungated**, at the exact revisions the
-numbers were measured on — verified against huggingface.co on 2026-07-25:
-
-| | repo | revision | shards |
-|---|---|---|---|
-| Flash mx | `deepseek-ai/DeepSeek-V4-Flash` | `6e763230…` | 46 |
-| Flash NVFP4 | `nvidia/DeepSeek-V4-Flash-NVFP4` | `48bfe38c…` | 46 |
-| Pro mx | `deepseek-ai/DeepSeek-V4-Pro` | `0366e4e` | 64 |
-| Pro NVFP4 | `nvidia/DeepSeek-V4-Pro-NVFP4` | `9e7e88ee…` | 64 |
-
-`vllm_e2e/setup/dl_mx_originals.sh` and `dl_nvfp4_{flash,pro}.sh` fetch them.
-The `/lustre/share/coreai_dlalgo_ci/...` paths compiled into `bench_offline.py`
-as `DEFAULT_MODEL` are only a cluster-local cache of these same trees — set
-`MODEL_MX_*` / `MODEL_NVFP4_*` and you never touch them.
-
-> **Pin the revisions — for NVFP4 this is correctness, not provenance.**
-> `nvidia/DeepSeek-V4-Pro-NVFP4` at `main` is `1449d1e6` as of 2026-07-25,
-> which is the **post-rewrite** `hf_quant_config.json` schema
-> (`quant_algo: "MIXED_PRECISION"`, per-layer keys). fi_cutedsl loads that
-> without complaint and silently takes the dequant fallback, so you get numbers
-> that look plausible and mean nothing. `dl_nvfp4_pro.sh` resolves the newest
-> revision whose schema is still prequantized rather than trusting `main`.
-
-So what you actually need is the hardware and the kernels:
-
-| | |
-|---|---|
-| 8x SM100 GPUs, one node, SLURM + pyxis/enroot | your cluster |
-| `flashinfer-moe_ep` @ `4_5_2-perf-fix` | a fork — see RUNBOOK_REPRO §1a; access-dependent |
-| GSM8K | internal parquet if present, else auto-downloads the OpenAI jsonl |
-
-Also cluster-specific and worth overriding: the `#SBATCH --account` /
-`--partition` lines in `vllm_e2e/job_*.sh` (pass `sbatch -A <acct> -p <part>`),
-and `ROOT`, which every script takes from the environment. And read
-expected_results.md §5.2 before exporting `MODEL` — that is what disarms the
-accuracy gate.
-
 ## What reproduces
 
 | | what | how | ~time |
