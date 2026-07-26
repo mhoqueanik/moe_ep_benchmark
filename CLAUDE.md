@@ -37,7 +37,7 @@ the flashinfer `4_5_2-perf-fix` branch is validated against — DSL version and 
 branch move together. The codegen is version-sensitive: on 4.5.2 *without* that
 branch's MR!27 mainloop WAR the kernels ran 34-54% slower, which is what the
 old 4.6.1 compatibility chain existed to avoid; with the WAR, 4.5.2 matches the
-4.6.1 stack within 0.7% (vllm-pr RUNS.md runs 41-42) and 4.6.1 is unnecessary.
+4.6.1 stack within 0.7%, so 4.6.1 is unnecessary.
 The venv gets 4.5.2 from vLLM's pin; `model_shapes/job_payload.sh` installs and
 asserts it explicitly because it does not use the venv. The container image
 pins 4.5.0 and is *not* the source of truth.
@@ -55,7 +55,7 @@ vLLM's CUDA-graph memory profiler reserves ~48 GiB/GPU for the flashinfer
 backends against a real cost of ~6 GiB, and the difference comes out of the KV
 cache — the engine then runs a fraction of the requested sequences and the
 backend looks fast-per-step but slow overall. `dec1k` shipped without it until
-2026-07-25. See expected_results.md §5.1.
+See expected_results.md §5.1.
 
 **Never export `MODEL` around `eval_gsm8k.py`.** `resolve_model` ranks it above
 the per-backend NVFP4 default, so it sends every backend to the same checkpoint

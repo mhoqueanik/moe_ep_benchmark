@@ -1,9 +1,9 @@
 # moe_ep benchmarks — 1x8 SM100 reproduction
 
-Reproduction-only branch (`vllm_repro_8_gpu`): the FlashInfer `moe_ep`
-mega-MoE path on one 8-GPU Blackwell node, at two levels, plus the vLLM patch
-and the numbers to check yourself against. Everything not needed to reproduce
-lives on `vllm-pr`.
+Reproduction branch (`vllm_repro_8_gpu`): the FlashInfer `moe_ep` mega-MoE
+path on one 8-GPU Blackwell node, at two levels, plus the vLLM patch and the
+numbers to check yourself against. Nothing else — development history lives
+elsewhere in the repo.
 
 **Start with [expected_results.md](expected_results.md)** — the numbers, the
 tolerances, and the two failure modes that produce plausible-but-wrong results.
@@ -76,6 +76,5 @@ vllm_e2e/
 
 ## Provenance
 
-Measured 2026-07-25 on 1x8 B200. Jobs 2337199, 2337204, 2337438, 2337473,
-2337476, 2337487, 2337549, 2337550. Full run log and the analysis history are
-on `vllm-pr` (`vllm_e2e/RUNS.md`, runs 43-50).
+Measured on one 1x8 B200 node, from this branch's own scripts. The numbers
+and their tolerances are in [expected_results.md](expected_results.md).

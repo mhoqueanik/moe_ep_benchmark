@@ -1,8 +1,8 @@
 # Expected results — 1x8 SM100, FlashInfer `moe_ep`
 
-Every number here was measured from a scratch clone on **2026-07-25**, on one
-**8x B200** node. If your run lands outside the tolerances below, something is
-different — §5 lists the two ways that has actually happened.
+Every number here was measured from a scratch clone on one **8x B200** node.
+If your run lands outside the tolerances below, something is different — §5
+lists the two ways that has actually happened.
 
 **Configuration.** vLLM 0.25.1 (wheel + `vllm_e2e/patch_0251/`), flashinfer
 branch `4_5_2-perf-fix` @ `1ee41bcd`, nvidia-cutlass-dsl **4.5.2** (vLLM
@@ -31,7 +31,7 @@ cross-checkpoint, which is why §4 exists and is not optional.
 
 ## 1. vLLM e2e — DeepSeek-V4-Flash, EP8
 
-`sbatch vllm_e2e/job_vllm_pr_runbook_sweep_ep8.sh` (~1 h). Job **2337646**.
+`sbatch vllm_e2e/job_vllm_pr_runbook_sweep_ep8.sh` (~1 h).
 
 | cell | native tok/s | fi_dg | fi_cutedsl |
 |---|---|---|---|
@@ -46,7 +46,7 @@ and 191.2ms vs 226.5ms.
 
 ## 2. vLLM e2e — DeepSeek-V4-Pro, EP8
 
-`sbatch vllm_e2e/job_vllm_pr_runbook_sweep_pro.sh` (~2 h). Job **2337637**.
+`sbatch vllm_e2e/job_vllm_pr_runbook_sweep_pro.sh` (~2 h).
 
 | cell | native tok/s | fi_dg | fi_cutedsl |
 |---|---|---|---|
@@ -65,8 +65,8 @@ on both models. If you see fi_dg far from 1.02x, read §5.1 before believing it.
 ## 3. Kernel microbenchmark — no vLLM, no checkpoints
 
 `GPUS=8 ./run.sh` for the ad-hoc sweep, or
-`model_shapes/submit_jobs.sh` for the shape table. Job **2337617**;
-`model_shapes/results_ep8/model_shapes_20260725_154623_deepseek_v4_flash.csv`.
+`model_shapes/submit_jobs.sh` for the shape table; the CSVs it writes are in
+`model_shapes/results_ep8/`.
 
 `e2e_pipelined` p50 microseconds per rank, with each CuteDSL variant's speedup
 against `deep_gemm_mega` in brackets — higher is better, >1.00x means CuteDSL is
@@ -169,7 +169,6 @@ number. Model quality is §4.
 ## 4. Accuracy gate — GSM8K, both checkpoints
 
 `sbatch vllm_e2e/job_gsm8k_flash_pro.sh` (~35 min, both models, both at TP8).
-Job **2337638**; token-budget probe 2337550.
 
 | model | native | fi_dg | fi_cutedsl (NVFP4 cast) | delta |
 |---|---|---|---|---|
@@ -246,10 +245,7 @@ session** — native's decode drifts round-over-round, so cross-session ratios
 are not trustworthy. GSM8K on 200 questions has a granularity of 0.005, so
 treat anything inside ±0.02 as agreement.
 
-Provenance, if you need to match a log against a table: microbenchmark
-**2337617**, Flash e2e **2337646**, V4-Pro e2e **2337637**, GSM8K **2337638**,
-all produced by this branch's own scripts against a freshly built venv.
-
 The ±0.02x above is measured, not assumed: repeating the whole set on a second
 pass reproduced it to within **0.5% on absolute throughput and 0.008x on every
-ratio**.
+ratio**. Every table was produced by this branch's own scripts against a freshly
+built venv.
