@@ -7,7 +7,8 @@ different — §5 lists the two ways that has actually happened.
 **Configuration.** vLLM 0.25.1 (wheel + `vllm_e2e/patch_0251/`), flashinfer
 branch `4_5_2-perf-fix` @ `1ee41bcd`, nvidia-cutlass-dsl **4.5.2** (vLLM
 0.25.1's own pin), TP8 + EP8, DP1, kv fp8, block 256,
-prefix caching off, round 0 discarded as warmup, median of 3 timed rounds.
+prefix caching off, round 0 discarded as warmup, median of the timed rounds
+(3 for every cell except the 100K one, which runs 2).
 
 **The three backends, and what a ratio between them means.**
 
@@ -19,7 +20,7 @@ prefix caching off, round 0 discarded as warmup, median of 3 timed rounds.
 
 Read the two columns differently: `fi_dg` at 1.02x says the wrapper costs
 nothing (and, at 0.44x, said something was badly wrong — §5.1). `fi_cutedsl`
-at 1.31x is the kernel win.
+at 1.32x is the kernel win.
 
 **Two checkpoints, deliberately.** native and fi_dg run the mx original;
 fi_cutedsl runs the NVFP4 cast of the same base weights, because that is the
@@ -57,7 +58,7 @@ and 191.2ms vs 226.5ms.
 Latency, fi_cutedsl vs native: TTFT 95.0s vs 122.3s at 100K and 29.5s vs 38.4s
 at 32K; ITL p50 111.8ms vs 134.3ms and 441.3ms vs 573.9ms.
 
-**The fi_cutedsl win grows with model size** — 1.19-1.31x on Pro against
+**The fi_cutedsl win grows with model size** — 1.19-1.32x on Pro against
 1.06-1.20x on Flash, on identical cells. fi_dg is at parity (1.02x) everywhere,
 on both models. If you see fi_dg far from 1.02x, read §5.1 before believing it.
 
@@ -200,7 +201,9 @@ are documented rather than merely fixed.
 The dense default capture ladder makes vLLM's CUDA-graph memory profiler
 reserve **~48 GiB/GPU** for the flashinfer backends against a real capture cost
 of ~6 GiB — the same ~6 GiB it estimates correctly for native. The phantom
-reservation is taken out of the KV cache. Measured on Pro EP8 (job 2337473):
+reservation is taken out of the KV cache. Measured by running the V4-Pro
+decode cell unpinned on purpose — these rows are not in `results/`, since the
+shipped cells all pin `CAPTURE_SIZES`:
 
 | backend | KV available | KV tokens | resident seqs | tok/s |
 |---|---|---|---|---|
@@ -216,17 +219,17 @@ before blaming a kernel.
 
 Severity scales with how little KV headroom the model leaves: Pro EP8 held 189
 of 1024 requested sequences, Flash EP8 520 — the bigger the weights, the harder
-it bites, and on a small enough model it hides entirely. All shipped cells now
-pin `CAPTURE_SIZES`; pinning costs native ~3% to batch padding, so **decode-1k
-numbers from before 2026-07-25 are not comparable with these.**
+it bites, and on a small enough model it hides entirely. All shipped cells pin
+`CAPTURE_SIZES`; doing so costs native ~3% to batch padding, which is already
+reflected in §1 and §2.
 
 ### 5.2 Exporting `MODEL` around the GSM8K gate
 
 `resolve_model` ranks `--model` > `$MODEL` > per-backend default. A `MODEL=`
 in the environment therefore sends *every* backend to that checkpoint,
 including fi_cutedsl — the gate then compares the mx weights against
-themselves, scores a comfortable pass, and validates nothing. This happened
-(job 2337127): its `fi_nvfp4` result recorded `model=...hf-6e76323_orig`.
+themselves, scores a comfortable pass, and validates nothing — the fi_cutedsl
+row carries the mx checkpoint under an NVFP4 label.
 
 `job_gsm8k_flash_pro.sh` passes `--model` per cell and unsets `MODEL` inside
 the container. **Check the `model` field in each result JSON** — it records
@@ -243,12 +246,10 @@ session** — native's decode drifts round-over-round, so cross-session ratios
 are not trustworthy. GSM8K on 200 questions has a granularity of 0.005, so
 treat anything inside ±0.02 as agreement.
 
-Provenance: every table above is the **verification pass of 2026-07-25
-evening**, run from this branch's own scripts against a freshly rebuilt venv —
-microbenchmark **2337617**, Flash e2e **2337646**, Pro e2e **2337637**, GSM8K
-**2337638**. It reproduced the original measurement pass (2337199 / 2337204 /
-2337438 / 2337487 / 2337476) to within **0.5% on absolute throughput and
-0.008x on every ratio**, which is where the ±0.02x tolerance above comes from.
-The diagnostic jobs behind §5 are 2337473 (root cause), 2337549 (Flash fix) and
-2337550 (token budget). The full chronological log lives on the `vllm-pr`
-branch in `vllm_e2e/RUNS.md` (runs 43-50).
+Provenance, if you need to match a log against a table: microbenchmark
+**2337617**, Flash e2e **2337646**, V4-Pro e2e **2337637**, GSM8K **2337638**,
+all produced by this branch's own scripts against a freshly built venv.
+
+The ±0.02x above is measured, not assumed: repeating the whole set on a second
+pass reproduced it to within **0.5% on absolute throughput and 0.008x on every
+ratio**.
