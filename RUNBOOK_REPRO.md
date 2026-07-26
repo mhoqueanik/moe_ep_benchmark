@@ -571,10 +571,22 @@ Drives the FlashInfer kernels directly, no vLLM, so it isolates kernel work
 from integration overhead. Submits its own SLURM job — it does not use the hold
 job from §1.4a, and it installs into the container overlay rather than the venv.
 
-**Parallelism differs from §3 and §4.** With no model to shard there is no
-tensor parallelism: this runs one process per GPU, so `DP=8, EP=8, TP=1`. The
-e2e sweeps run `TP=8, EP=8, DP=1`. Expert parallelism is 8 either way — that is
-the axis being measured — but the two are not the same configuration.
+**Parallelism differs from §3 and §4, for a reason.** This benchmark
+constructs the MoE expert layer alone, with synthetic weights — no attention, no
+dense projections, no KV cache. Tensor parallelism exists to split those, so
+here there is nothing for it to shard and `TP=1` is the only meaningful setting;
+the layer is distributed by expert parallelism instead, which is the axis under
+test. That gives `DP=8, EP=8, TP=1`, matching the geometry the split-path
+baselines (`bench_moe_ep_nonmega.py`) use for DeepSeek-V4.
+
+The e2e sweeps run `TP=8, EP=8, DP=1` because there vLLM has a whole model to
+place: V4-Pro's weights are 806 GB, so a data-parallel replica per GPU is not
+an option and tensor parallelism is what makes it fit.
+
+Expert parallelism is 8 in both, so the kernel is exercised the same way. But
+`tokens/rank` here is the input each DP rank feeds into dispatch, which is not
+the same quantity as an e2e cell's batched-token count — treat §2a's crossover
+as a property of the kernel, not as a batch size to look up in §3.
 
 **Only §1.2 is a prerequisite.** The geometries come from
 `model_shapes/shapes.tsv` (hidden / inter / experts / top-k) and the weights are

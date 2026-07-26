@@ -9,8 +9,8 @@ only ``kernel.compute()``.
 
 Launch (8 GPUs, Blackwell sm_100+):
 
-    CUDA_VISIBLE_DEVICES=0,1,2,3 python bench_moe_ep_mega.py \\
-        --world-size 4 --mega-backend mxfp8_cutedsl \\
+    CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python bench_moe_ep_mega.py \\
+        --world-size 8 --mega-backend mxfp8_cutedsl \\
         --tokens-per-rank 8 --num-experts 256 --top-k 8 \\
         --hidden 7168 --intermediate 2048
 

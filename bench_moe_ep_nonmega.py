@@ -20,8 +20,8 @@ fuses dispatch+GEMM+combine into one kernel and is NOT simulated here.
 
 Launch (single node, 8 GPUs -- matches CUDA_VISIBLE_DEVICES=0,1,...,7, DP=8):
 
-    CUDA_VISIBLE_DEVICES=0,1,2,3 python bench_moe_ep_nonmega.py \
-        --world-size 4 --algorithm ll --experts-backend deepgemm \
+    CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 python bench_moe_ep_nonmega.py \
+        --world-size 8 --algorithm ll --experts-backend deepgemm \
         --tokens-per-rank 8 --num-experts 256 --top-k 8 \
         --hidden 7168 --intermediate 2048
 
