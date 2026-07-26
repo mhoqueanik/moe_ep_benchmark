@@ -832,6 +832,8 @@ It is not cosmetic: on the EP8 cache fi_cutedsl prefill-8k reaches ~1.20x
 
 ### 3b. Tier 1 — config checks (~1 min, no model)
 
+First rung of the ladder in §4; run it before spending a node on §3c.
+
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
   python test_backend_registration.py'
@@ -1027,14 +1029,29 @@ if a cell is misconfigured — see §5.
 
 ## 4. Accuracy
 
-Two levels. The smoke in §4a proves the backend string reached a kernel and the
-outputs are sane; the GSM8K gate in §4b is what licenses a throughput claim,
-because fi_cutedsl runs a different checkpoint from native.
+Three verification tiers, cheapest first. Each one catches something the one
+before it cannot:
 
-### 4a. Correctness smoke (~12 min)
+| tier | what it proves | cost | where |
+|---|---|---|---|
+| **1** — config checks | both backend strings are registered and validate, and the retired `FI_MOE_EP` env vars are rejected | ~1 min, no model | §3b |
+| **2** — correctness smoke | the backend string actually reached a kernel on every EP rank, and generations are sane | ~12 min | §4a |
+| **3** — GSM8K gate | the NVFP4 checkpoint fi_cutedsl runs scores the same as the mx one native runs | ~35 min | §4b |
 
-Tier 1 is **not** sufficient: it passes even if `use_fi_mega_moe` silently stays
-false and the run quietly executes the native path.
+The throughput cells (§3c, §3e) are the measurement, not a check — they will
+happily produce numbers from a mis-routed run, which is what tiers 1 and 2 are
+for.
+
+**Tier 1 is necessary but not sufficient.** It never builds a model, so it
+passes even when `use_fi_mega_moe` silently stays false and the run executes the
+native path — three identical columns labelled as three backends. Tier 2 is what
+rules that out.
+
+**Tier 3 is the only one that gates a number.** Because fi_cutedsl runs a
+different checkpoint from native, its throughput is only comparable if its
+accuracy is; tiers 1 and 2 say nothing about that.
+
+### 4a. Tier 2 — correctness smoke (~12 min)
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
@@ -1053,29 +1070,29 @@ JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
 the backend string reached a kernel on every EP rank:
 
 ```
-[fi_moe_ep] ep_rank=0 world=4 cuda.current_device=0 megakernel=deep_gemm_mega
-[fi_moe_ep] ep_rank=1 world=4 cuda.current_device=1 megakernel=deep_gemm_mega
-... one per rank
+[fi_moe_ep] ep_rank=0 world=8 cuda.current_device=0 megakernel=deep_gemm_mega
+[fi_moe_ep] ep_rank=1 world=8 cuda.current_device=1 megakernel=deep_gemm_mega
+... one per rank, eight in total, world=8 on every line
 ```
+
+`world` must equal your EP size — eight here. A line with `world=4` means the
+run is not the configuration you think it is.
 
 The **native** run must print no `[fi_moe_ep]` line at all. If it does, the
 predicate is mis-routing and the comparison means nothing.
 
-Expect fi_dg and native to agree closely — often exactly.
-fi_cutedsl vs native 1/8 exact, 0.016-0.13 — it diverges by construction
-(double quantization), and that comparison is cross-checkpoint, so a wider band
-is expected and is not a bug.
+`compare_outputs.py` reports how many of the 8 prompts matched exactly and the
+mean |dlogprob|. Typical: fi_dg vs native around **1/8 exact, mean |dlogprob|
+0.02–0.06**; fi_cutedsl vs native **1/8 exact, 0.016–0.13**, wider because it is
+cross-checkpoint and doubly quantized.
 
-> **The fi_dg 8/8-exact figure is build-specific — do not treat it as a gate.**
-> On a from-scratch build, fi_dg vs native came in at **1/8 exact, mean
-> |dlogprob| ≈ 0.02–0.06**: near-identical, but one flipped
-> logit early in a greedy decode diverges the rest of that sequence. native and
-> fi_dg are separate kernel implementations, so bit-exactness is not guaranteed
-> across builds/hardware. The real correctness gate is GSM8K (§4b), where Flash
-> scores **0.965** on all three backends, fi_cutedsl on the NVFP4 cast — a
-> cross-checkpoint delta of zero. Use the
-> logprob smoke to confirm *routing* (the `[fi_moe_ep]` banner), not to demand
-> bit-exact generations.
+> **Do not treat exact-match counts as a gate.** native and fi_dg are separate
+> kernel implementations, so bit-exactness is not guaranteed across builds or
+> hardware — and one flipped logit early in a greedy decode diverges the whole
+> rest of that sequence, which turns a near-identical run into a low
+> exact-match count. What this tier proves is *routing*: the `[fi_moe_ep]`
+> banner above, present on every fi rank and absent from native. Numerical
+> correctness is tier 3, where Flash scores 0.965 on all three backends.
 
 To produce that fi_cutedsl row, add a third smoke. **`smoke_infer.py` does not
 resolve the checkpoint per backend** the way `bench_offline.py` and
@@ -1093,7 +1110,7 @@ JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
   python compare_outputs.py results/pr_native.json results/pr_fi_cutedsl.json'
 ```
 
-### 4b. GSM8K — the cross-checkpoint gate
+### 4b. Tier 3 — GSM8K, the cross-checkpoint gate
 
 The native-vs-fi_cutedsl smoke above compares two *different* checkpoints, so
 its logprob delta is not a pass/fail signal — `eval_gsm8k.py` is. It boots one
