@@ -627,8 +627,9 @@ cudnn-frontend SDPA training benchmark's model list (MoE-capable models only):
 | **deepseek_v4_flash** | 4096 | 2048 | 256 | 6 |
 | deepseek_v4_pro | 7168 | 3072 | 384 | 6 |
 
-`SHAPE_LIST` selects rows; the recorded numbers are `deepseek_v4_flash`. Weights
-are synthetic, so no checkpoint is read.
+`SHAPE_LIST` selects rows; omitting it runs all six. Weights are synthetic, so
+no checkpoint is read. All six are recorded in
+[expected_results.md](expected_results.md) §3a.
 
 ### 2a. Expected numbers
 
@@ -642,7 +643,9 @@ and `+combine_nvfp4` to 1.71x. That crossover is why the e2e decode cells gain
 less than the prefill ones.
 
 `deep_gemm_mega` cannot run every shape — see §2b item 7 for why
-`gpt_oss_120b` comes back with no baseline row.
+`gpt_oss_120b` comes back with no baseline row. Per-shape ratios for all six
+are in [expected_results.md](expected_results.md) §3a; V4-Flash, the shape the
+e2e sweeps use, is the least favourable of the five that have a baseline.
 
 ### 2b. Porting to another system, or another world size
 

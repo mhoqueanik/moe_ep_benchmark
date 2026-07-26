@@ -89,6 +89,33 @@ shape of the e2e prefill win in §1-2 — large batches are where it pays.
 deep_gemm_mega, 23.1-24.9% for the cutedsl variants), **not** a model-quality
 number. Model quality is §4.
 
+### 3a. Across all six shapes in `shapes.tsv`
+
+`nvfp4_cutedsl` vs `deep_gemm_mega`, p50, EP8. Last column is the best of the
+four CuteDSL variants at 8192 tok/rank:
+
+| shape | geometry | 512 | 1024 | 2048 | 4096 | 8192 | best @8192 |
+|---|---|---|---|---|---|---|---|
+| `deepseek_v4_flash` | 4096/2048/256E top-6 | 0.82x | 1.00x | 1.13x | 1.18x | 1.20x | **1.71x** |
+| `deepseek_v4_pro` | 7168/3072/384E top-6 | 0.96x | 1.12x | 1.44x | 1.56x | 1.64x | **1.83x** |
+| `deepseek_v3` | 7168/2048/256E top-8 | 1.06x | 1.24x | 1.40x | 1.53x | 1.59x | **2.05x** |
+| `kimi_k2_6` | 7168/2048/384E top-8 | 0.98x | 1.10x | 1.33x | 1.59x | 1.53x | **1.92x** |
+| `qwen3_5_397b` | 4096/1024/512E top-10 | 0.93x | 1.04x | 1.18x | 1.21x | 1.25x | **1.84x** |
+| `gpt_oss_120b` | 2880/2880/128E top-4 | n/a | n/a | n/a | n/a | n/a | n/a |
+
+The pattern holds across every geometry: `deep_gemm_mega` wins small batches,
+the crossover sits between 512 and 1024 tok/rank, and CuteDSL pulls away above
+it. **V4-Flash is the *least* favourable of the five** — the shape the e2e
+sweeps use is the one where the kernel wins least, so §1's 1.06-1.20x is a
+conservative reading of what the kernel can do. V4-Pro's 1.64x at 8192 against
+Flash's 1.20x is why fi_cutedsl gains more on Pro end-to-end (§2).
+
+`gpt_oss_120b` has no ratio because `deep_gemm_mega` cannot run it at all: it
+requires `hidden % 128 == 0 && intermediate % 128 == 0` and 2880 is not a
+multiple of 128, so the harness logs the assertion per token count and produces
+only the four CuteDSL variants. An absent baseline row for that shape is
+expected, not a failed run.
+
 ## 4. Accuracy gate — GSM8K, both checkpoints
 
 `sbatch vllm_e2e/job_gsm8k_flash_pro.sh` (~35 min, both models, both at TP8).
