@@ -42,10 +42,11 @@ Expected numbers for §2–§4 live in [expected_results.md](expected_results.md
   ships torch 2.12, deep_gemm, triton, nvshmem and cutlass, and does **not**
   ship vLLM. The recipe lives in repo (2), so it cannot be built before the
   clone, and it needs a SLURM allocation.
-* Disk for the checkpoints (§1.3), plus room for the venv and JIT cache:
-  **323 GB for Flash** (mx 149 + NVFP4 174), and **another 1.66 TB if you also
-  want V4-Pro** (mx 806 + NVFP4 851), which is optional. §2 (the kernel
-  microbenchmark) needs no checkpoints at all.
+* Disk under `$ROOT`: **~350 GB for Flash** — checkpoints 323 GB (mx 149 +
+  NVFP4 174) plus ~25 GB for the container image, venv and pip cache, which all
+  live there too. **Another 1.66 TB if you also want V4-Pro** (mx 806 + NVFP4
+  851), which is optional. §2 (the kernel microbenchmark) reads no checkpoint,
+  so it needs only the ~25 GB.
 
 Set these three once; every command below is written against them.
 
