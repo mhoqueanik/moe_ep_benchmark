@@ -294,9 +294,9 @@ metadata schemas below are the tell:
 ```bash
 python -c "
 import json
-q = json.load(open('$MODEL_NVFP4/hf_quant_config.json'))['quantization']
+q = json.load(open('$MODEL_NVFP4_FLASH/hf_quant_config.json'))['quantization']
 k = next(iter(q['quantized_layers']))
-mx = json.load(open('$MODEL/config.json'))
+mx = json.load(open('$MODEL_MX_FLASH/config.json'))
 assert q['quant_algo'] is None, 'NVFP4 ckpt is at HEAD, not 48bfe38'
 assert k.count('.') == 5, 'NVFP4 ckpt is at HEAD, not 48bfe38 (per-layer keys)'
 assert 'expert_dtype' not in mx, 'mx ckpt is at HEAD, not 6e76323'
@@ -533,17 +533,19 @@ job from §1.4a, and it installs into the container overlay rather than the venv
 **§1.3 is not a prerequisite for this section.** The geometries come from
 `model_shapes/shapes.tsv` (hidden / inter / experts / top-k) and the weights are
 synthetic, so nothing here reads a checkpoint. If the microbenchmark is all you
-want, you need §1.2, §1.4a's node, and this section — skip the 305 GB download.
+want, you need §1.2, §1.4a's node, and this section — skip §1.3 entirely.
 
 ```bash
 cd $ROOT/moe_ep_benchmark
+ACCOUNT=<account> PARTITION=<partition> \
 SHAPE_LIST="deepseek_v4_flash" SEQ_LENS="8 64 512 1024 2048 4096 8192" \
     bash model_shapes/submit_jobs.sh
 
-# Output lands in model_shapes/results_ep8/, which already holds the committed
-# CSV from job 2337199. make_tables keys on (geometry, tokens/rank, variant)
+# Omitting SHAPE_LIST runs every row of shapes.tsv -- six shapes, one job each,
+# submitted in parallel. Output lands in model_shapes/results_ep8/, which
+# already holds the committed CSV. make_tables keys on (geometry, tokens/rank, variant)
 # and IGNORES the gpus column, so later files win and a glob silently mixes
-# runs -- render only your own CSV to compare against expected_results.md §1.4:
+# runs -- render only your own CSV to compare against expected_results.md §3:
 python model_shapes/make_tables.py \
     model_shapes/results_ep8/model_shapes_<your_stamp>_deepseek_v4_flash.csv \
     -o /tmp/micro_scratch_RESULTS.md
@@ -573,7 +575,17 @@ flashinfer `4_5_2-perf-fix` branch is validated against; the codegen is version-
 sensitive enough that an unpinned `--upgrade` makes a sweep unattributable. (On
 4.5.2 *without* that branch's MR!27 mainloop WAR the kernels ran 34-54% slower —
 the reason a 4.6.1 compatibility chain once existed. With the WAR, 4.5.2 matches
-the 4.6.1 stack within 0.7%, so 4.6.1 is not needed.) `DSL_VERSION` overrides.
+the 4.6.1 stack within 0.7%, so 4.6.1 is not needed.) `DSL_VERSION` overrides
+the version this payload installs.
+
+> **The same pin is enforced at run time, and it will stop you.**
+> `bench_offline.py` and `eval_gsm8k.py` both call `assert_expected_dsl()`,
+> which aborts unless the installed `nvidia-cutlass-dsl` equals `EXPECT_DSL`
+> (default `4.5.2`). A venv left over from an older stack carrying 4.6.1 fails
+> every cell before it loads a model — that is the guard working, and the fix
+> is `FRESH=1 setup_container.sh` (§1.4c), not `EXPECT_DSL=4.6.1`. Set
+> `EXPECT_DSL` only when you are deliberately benching another runtime, or
+> `EXPECT_DSL=""` to disable the check entirely.
 
 The geometries come from `model_shapes/shapes.tsv`, whose MoE shapes mirror the
 cudnn-frontend SDPA training benchmark's model list (MoE-capable models only):
@@ -593,15 +605,18 @@ are synthetic, so no checkpoint is read.
 ### 2a. Expected numbers
 
 EP8, DeepSeek-V4-Flash MoE geometry (4096 hidden / 2048 inter / 256 experts /
-top-6), job 2337199 — see [expected_results.md](expected_results.md) §1.4 for the
+top-6) — see [expected_results.md](expected_results.md) §3 for the
 full table and `model_shapes/results_ep8/` for the CSV it came from.
 
 The DeepGEMM↔CuteDSL crossover sits at ~1024 tokens/rank: below it
 `deep_gemm_mega` wins, above it `nvfp4_cutedsl` pulls away to 1.20x at 8192,
-and `+combine_nvfp4` to 1.70x. That crossover is why the e2e decode cells gain
+and `+combine_nvfp4` to 1.71x. That crossover is why the e2e decode cells gain
 less than the prefill ones.
 
-### 2b. Porting to another system, and to EP8
+`deep_gemm_mega` cannot run every shape — see §2b item 7 for why
+`gpt_oss_120b` comes back with no baseline row.
+
+### 2b. Porting to another system, or another world size
 
 Nothing below needs a source edit — see §1.5. In order of what actually
 blocks you:
@@ -645,13 +660,15 @@ and that wins over the exported value — harmless when it lists all 8, wrong if
 it lists fewer than `GPUS`. `world size = DP = EP` (`run.sh:33`), so `GPUS=8`
 *is* EP8.
 
-**5. EP8 is a new measurement, not a refresh of §4a.** World size sets the
-expert split, so at 8-way each rank holds 32 of DeepSeek-V4-Flash's 256 experts
-instead of 64. Tokens-per-expert halves at a given tokens/rank, which is exactly
-the axis the DeepGEMM↔CuteDSL crossover sits on — expect it to move off ~1024.
-Record the result as its own table; it does not supersede §4a. Divisibility is
-fine for every row of `shapes.tsv` at 8-way (`num_experts % world == 0` is
-asserted at `bench_moe_ep_mega.py:353`; 128/256/384/512 all divide by 8).
+**5. A different world size is a different measurement.** §2a is EP8, and
+world size sets the expert split — at 8-way each rank holds 32 of
+DeepSeek-V4-Flash's 256 experts, at 4-way it holds 64. Tokens-per-expert
+therefore halves between them at a given tokens/rank, which is exactly the axis
+the DeepGEMM↔CuteDSL crossover sits on, so the crossover moves. If you run
+another world size, record it as its own table rather than merging it into the
+EP8 one. Divisibility is fine for every row of `shapes.tsv` at 8-way
+(`num_experts % world == 0` is asserted at `bench_moe_ep_mega.py:353`;
+128/256/384/512 all divide by 8).
 
 **6. Leave `MEGA_KNOBS` unset.** Empty means the shim's token-count heuristic,
 which is what job 2337199 used; `MEGA_KNOBS=auto` instead runs an online
@@ -665,14 +682,14 @@ produce rows; the cutedsl kernels are tail-safe down to `%64`. `run_variant`
 prints `[warn] … failed (continuing)`, so the gap in the table is expected
 rather than a broken run.
 
-**8. Write EP8 results to a separate directory — this one silently corrupts
-§4a.** The CSVs do record a `gpus` column, but `make_tables.py` keys each cell
+**8. One directory per world size — mixing them silently corrupts the
+table.** The CSVs do record a `gpus` column, but `make_tables.py` keys each cell
 on `(geometry, tokens_per_rank, variant)` only and never reads it
 (`make_tables.py:68`). Merging CSVs from two world sizes therefore overwrites
 matching cells rather than separating them — later file wins, exactly as
-`submit_jobs.sh` advertises for filling gaps at a *fixed* world size. §2's own
+`submit_jobs.sh` advertises for filling gaps at a *fixed* world size. §2's
 render command globs the whole directory, so the default path walks straight
-into it:
+into it if you ever add a second world size:
 
 ```bash
 python model_shapes/make_tables.py model_shapes/results_ep8/model_shapes_*.csv
@@ -680,10 +697,11 @@ python model_shapes/make_tables.py model_shapes/results_ep8/model_shapes_*.csv
 # at a directory holding two world sizes silently overwrites cells.
 ```
 
-The output would look like §2a and contain EP8 numbers, with nothing in
-`RESULTS.md` recording the difference — and `RESULTS.md` is a tracked file, so
-the corruption commits. `run_model_shapes.sh` honours `OUT_DIR`, which rides
-through `--export=ALL`, so keep the two apart at the source:
+The rendered table would look exactly like §2a while silently containing cells
+from two different world sizes, and nothing in the output records which is
+which. `run_model_shapes.sh` honours `OUT_DIR` (defaulting to `results_ep8/`
+on this branch) and it rides through `--export=ALL`, so keep world sizes apart
+at the source:
 
 ```bash
 OUT_DIR=$ROOT/moe_ep_benchmark/model_shapes/results_ep8 \
@@ -692,7 +710,7 @@ SHAPE_LIST="deepseek_v4_flash" SEQ_LENS="8 64 512 1024 2048 4096 8192" \
     bash model_shapes/submit_jobs.sh
 
 python model_shapes/make_tables.py model_shapes/results_ep8/model_shapes_*.csv \
-    -o /tmp/micro_ep8_RESULTS.md      # expected_results.md §1.4 is the reference
+    -o /tmp/micro_ep8_RESULTS.md      # expected_results.md §3 is the reference
 ```
 
 Sanity-check before rendering — the column is there, so use it:
@@ -762,8 +780,8 @@ torchrun --nproc_per_node=8 -m flashinfer.moe_ep.tune --dtype nvfp4 \
     --hidden 4096 --intermediate 2048 --num-experts 256 --topk 6 --max-tokens 8192
 ```
 
-It is not cosmetic: on the EP8 cache fi_cutedsl prefill-8k reaches 1.199x; on a
-cache tuned for another world size it is understated.
+It is not cosmetic: on the EP8 cache fi_cutedsl prefill-8k reaches ~1.20x
+(§3d); on a cache tuned for another geometry or world size it is understated.
 
 ### 3b. Tier 1 — config checks (~1 min, no model)
 
@@ -772,9 +790,8 @@ JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
   python test_backend_registration.py'
 ```
 
-Expected tail: `15/15 checks passed` / `ALL CHECKS PASSED`. The 15th is a
-flashinfer-version gate, added after the 14-check runs logged in `RUNS.md`.
-Two `Failed to import Triton kernels ...
+Expected tail: `15/15 checks passed` / `ALL CHECKS PASSED`. Two
+`Failed to import Triton kernels ...
 triton_kernels.matmul_ogs` ERROR lines are pre-existing container noise.
 `VERBOSE=1` prints tracebacks for real failures.
 
@@ -827,12 +844,19 @@ cell() {
         local short=native
         [[ $be == "$DG" ]] && short=fi_dg
         [[ $be == "$CUTEDSL" ]] && short=fi_cutedsl
+        # --model per backend, never the MODEL env (see the resolve_model
+        # warning in §1.3): MODEL outranks the per-backend NVFP4 default, so
+        # setting it would drag fi_cutedsl onto the mx dequant path too.
+        local model=$MODEL_MX_FLASH
         local cache=''
-        [[ $short == fi_cutedsl ]] && \
+        if [[ $short == fi_cutedsl ]]; then
+            model=$MODEL_NVFP4_FLASH
             cache=FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_ep8.json
-        echo "--- $name / $short ---"
+        fi
+        echo "--- $name / $short (model=$(basename $model)) ---"
         env $envs MOE_BACKEND=$be $cache \
-            python bench_offline.py --tag sw_ep8_${name}_${short} "$@" \
+            python bench_offline.py --model "$model" \
+            --tag sw_ep8_${name}_${short} "$@" \
             --out results/sweep_ep8_${name}_${short}.json
     done
 }
@@ -918,7 +942,7 @@ measures nothing (once produced a fake 91k tok/s).
 
 ### 3d. Expected numbers
 
-TP8+EP8, both models, in [expected_results.md](expected_results.md) §1.2-2 —
+TP8+EP8, both models, in [expected_results.md](expected_results.md) §1-2 —
 kept in one place so there is a single set of numbers to check against, with
 tolerances and the two known failure modes.
 
@@ -938,28 +962,28 @@ backends of a cell must run in one session.
 Everything above is DeepSeek-V4-Flash. The V4-Pro sweep completes the
 throughput picture; the accuracy gate for both models is §4.
 
-```bash
-# V4-Pro, same four cells, ~2 h. native/fi_dg on the Pro mx checkpoint,
-# fi_cutedsl on the pinned Pro NVFP4; knob cache knob_cache_pro_ep8.json.
-cd $W && MODEL_MX_PRO=... MODEL_NVFP4_PRO=... sbatch job_vllm_pr_runbook_sweep_pro.sh
+Requires the optional Pro checkpoints from §1.3. Same four cells, ~2 h, its own
+exclusive 8-GPU node; native/fi_dg on the Pro mx checkpoint, fi_cutedsl on the
+pinned Pro NVFP4, knob cache `knob_cache_pro_ep8.json`.
 
+```bash
+cd $W && sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_pro.sh
 ```
 
-Both take their checkpoints from the environment and fail at submit time with a
-readable message if one is unset or is not a directory — they do not discover it
-an hour into the allocation. Outputs are `results/sweep_pro_*.json` and
-`results/gsm8k2_*.json`.
+`MODEL_MX_PRO` and `MODEL_NVFP4_PRO` come from your shell via `--export=ALL`,
+exactly as the Flash sweep takes its two. The script checks both before
+requesting the allocation and exits with a readable message if either is unset
+or is not a directory, rather than discovering it an hour in. Output is
+`results/sweep_pro_<cell>_<backend>.json` — twelve files.
 
-The Pro sweep's V4-Pro NVFP4 checkpoint is 45 GiB *larger* than its mx one
-(850.4 vs 805.3 GiB), which is why fi_cutedsl is the first thing to run out of
-KV cache if a cell is misconfigured — see §5.
-
-The GSM8K job runs both models at TP8, like everything else here.
+The Pro NVFP4 checkpoint is 45 GiB *larger* than its mx one (850.4 vs
+805.3 GiB), which is why fi_cutedsl is the first thing to run out of KV cache
+if a cell is misconfigured — see §5.
 
 ## 4. Accuracy
 
-Two levels. The smoke in §2a proves the backend string reached a kernel and the
-outputs are sane; the GSM8K gate in §2b is what licenses a throughput claim,
+Two levels. The smoke in §4a proves the backend string reached a kernel and the
+outputs are sane; the GSM8K gate in §4b is what licenses a throughput claim,
 because fi_cutedsl runs a different checkpoint from native.
 
 ### 4a. Correctness smoke (~12 min)
@@ -1021,7 +1045,7 @@ benchmark fi_cutedsl on the mx checkpoint:
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
   ENFORCE_EAGER=1 MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
-  python smoke_infer.py --tag fi_cutedsl --model $MODEL_NVFP4 \
+  python smoke_infer.py --tag fi_cutedsl --model $MODEL_NVFP4_FLASH \
     --out results/pr_fi_cutedsl.json'
 
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
@@ -1030,10 +1054,11 @@ JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
 
 ### 4b. GSM8K — the cross-checkpoint gate
 
-Because that pair is cross-checkpoint, the logprob delta is not a pass/fail
-signal — `eval_gsm8k.py` is. It boots one engine per backend and resolves the
-checkpoint per backend; both must land in the same band (~0.95 for DSV4-Flash)
-before any §3d ratio is an apples-to-apples claim.
+The native-vs-fi_cutedsl smoke above compares two *different* checkpoints, so
+its logprob delta is not a pass/fail signal — `eval_gsm8k.py` is. It boots one
+engine per backend, scores 200 GSM8K questions, and records which checkpoint it
+loaded. native and fi_cutedsl must land in the same band before any §3d ratio
+is an apples-to-apples claim.
 
 > **Do not export `MODEL` around this gate — it silently disarms it.**
 > `resolve_model` ranks `--model` > `$MODEL` > per-backend default, so a
@@ -1048,13 +1073,13 @@ before any §3d ratio is an apples-to-apples claim.
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  python eval_gsm8k.py --tag native --model $MODEL_MX \
+  python eval_gsm8k.py --tag native --model $MODEL_MX_FLASH \
     --out results/gsm8k_native.json'
 
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
   MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
-  python eval_gsm8k.py --tag fi_nvfp4 --model $MODEL_NVFP4 --min-acc 0.93 \
-    --out results/gsm8k_fi_nvfp4.json'
+  python eval_gsm8k.py --tag fi_cutedsl --model $MODEL_NVFP4_FLASH --min-acc 0.93 \
+    --out results/gsm8k_fi_cutedsl.json'
 ```
 
 `--min-acc` exits 2 below threshold. The eval also records `truncated` — how
@@ -1067,9 +1092,12 @@ automatically the right threshold for a model that reasons longer.
 Both models and both checkpoints in one job (~35 min, its own 8-GPU node):
 
 ```bash
-cd $W && MODEL_MX_FLASH=... MODEL_NVFP4_FLASH=... \
-         MODEL_MX_PRO=...   MODEL_NVFP4_PRO=...   sbatch job_gsm8k_flash_pro.sh
+cd $W && sbatch -A <account> -p <partition> job_gsm8k_flash_pro.sh
 ```
+
+All four `MODEL_*` paths from §1.3 reach it through `--export=ALL`, and it
+checks them at submit time. It needs the optional Pro pair too, so if you
+skipped those, run the two Flash cells by hand as above instead.
 
 It runs six cells — native / fi_dg / fi_cutedsl for each model, all at TP8 —
 and its summary prints the checkpoint each row actually loaded, flagging any
