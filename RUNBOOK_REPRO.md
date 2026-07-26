@@ -15,11 +15,23 @@ owns the container recipe (§1.2c) and the guide to adding a new mega-kernel
 backend.
 
 **Four sections.** [§1 Prep](#1-prep) — clone, image, checkpoints, venv, patch.
-[§2 Kernel microbenchmark](#2-kernel-microbenchmark-16-min) — no vLLM, no
-checkpoints. [§3 vLLM e2e — throughput](#3-vllm-e2e--throughput) — the four
+[§2 Kernel microbenchmark](#2-kernel-microbenchmark-25-min-per-shape) — no vLLM,
+no checkpoints. [§3 vLLM e2e — throughput](#3-vllm-e2e-throughput) — the four
 headline cells, both models. [§4 Accuracy](#4-accuracy) — correctness smoke and
-the GSM8K cross-checkpoint gate. Then §5 gotchas and §6 what is not covered.
-Expected numbers for §2–§4 live in [expected_results.md](expected_results.md).
+the GSM8K cross-checkpoint gate. Then [§5](#5-things-that-will-bite-you) gotchas
+and [§6](#6-not-covered) what is not covered. Expected numbers for §2–§4 live in
+[expected_results.md](expected_results.md).
+
+**Pick a path — you do not have to run all of it.**
+
+| you want | do | needs | rough cost |
+|---|---|---|---|
+| kernel numbers only | §1.2 → §2 | ~25 GB, no checkpoints | half a day incl. the image build |
+| Flash end-to-end | §1 → §3a-§3d → §4 | + 323 GB checkpoints | a day, download-dominated |
+| everything, incl. V4-Pro | + §3e, and §4's Pro rows | + 1.66 TB checkpoints | two days |
+
+§2 needs neither the checkpoints nor the venv, so the kernel path is much
+cheaper than the rest — start there if you only want to see the kernels move.
 
 ---
 
