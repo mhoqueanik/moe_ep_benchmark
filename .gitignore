@@ -12,3 +12,12 @@ vllm_e2e/venv*/
 # Nsight Systems profiling dumps (large binaries)
 *.nsys-rep
 *.sqlite
+
+# Stray result artifacts from other configurations. This branch ships only the
+# JSONs and CSVs that expected_results.md cites; anything else in results/ is a
+# local run and must not be committed, or `git add -A` will quietly bring back
+# EP4-era files measured on a different DSL.
+vllm_e2e/results/offline_*
+vllm_e2e/results/bench_*
+vllm_e2e/results/smoke_*
+vllm_e2e/results/tput_*
