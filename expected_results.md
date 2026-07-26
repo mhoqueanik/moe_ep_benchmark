@@ -131,18 +131,19 @@ ahead. All six shapes in `model_shapes/shapes.tsv`, EP8:
 | 4096 | 1032.2 | 855.1 (1.21x) | 877.6 (1.18x) | 592.9 (1.74x) | 686.0 (1.50x) |
 | 8192 | 2022.4 | 1619.0 (1.25x) | 1678.3 (1.21x) | 1098.8 (1.84x) | 1270.8 (1.59x) |
 
-**`gpt_oss_120b`** — hidden 2880, inter 2880, 128 experts, top-4 — no `dg`
-column, so absolute microseconds only (see below).
+**`gpt_oss_120b`** — hidden 2880, inter 2880, 128 experts, top-4 — `dg` is
+`—` throughout: `deep_gemm_mega` requires hidden and intermediate both
+divisible by 128, and 2880 is not, so there is no baseline to divide by.
 
-| tok/rank | nvfp4 bf16 | +ikr | +combine_nvfp4 | +combine_mxfp8 |
-|---|---|---|---|---|
-| 8 | 93.2 | 95.4 | 97.2 | 97.4 |
-| 64 | 95.2 | 99.4 | 101.3 | 101.4 |
-| 512 | 132.2 | 136.2 | 127.9 | 132.0 |
-| 1024 | 173.1 | 177.2 | 165.0 | 169.0 |
-| 2048 | 240.7 | 244.8 | 222.1 | 226.4 |
-| 4096 | 379.9 | 383.8 | 329.6 | 339.1 |
-| 8192 | 697.4 | 697.2 | 541.7 | 607.3 |
+| tok/rank | dg | nvfp4 bf16 | +ikr | +combine_nvfp4 | +combine_mxfp8 |
+|---|---|---|---|---|---|
+| 8 | — | 93.2 | 95.4 | 97.2 | 97.4 |
+| 64 | — | 95.2 | 99.4 | 101.3 | 101.4 |
+| 512 | — | 132.2 | 136.2 | 127.9 | 132.0 |
+| 1024 | — | 173.1 | 177.2 | 165.0 | 169.0 |
+| 2048 | — | 240.7 | 244.8 | 222.1 | 226.4 |
+| 4096 | — | 379.9 | 383.8 | 329.6 | 339.1 |
+| 8192 | — | 697.4 | 697.2 | 541.7 | 607.3 |
 
 **The crossover sits between 512 and 1024 tok/rank on every shape.** Below it
 `deep_gemm_mega` wins; above it the CuteDSL variants pull away, and the
@@ -155,10 +156,10 @@ V4-Pro reaches 1.64x and `deepseek_v3` 1.59x. So §1's 1.06-1.20x end-to-end is
 a conservative reading of the kernel, and §2's larger Pro gains follow the
 kernel rather than any integration difference.
 
-`gpt_oss_120b` has no `dg` column because `deep_gemm_mega` cannot run it:
-it requires `hidden % 128 == 0 && intermediate % 128 == 0`, and 2880 is not a
-multiple of 128. The harness logs the assertion once per token count and
-carries on, so an absent baseline for that shape is expected, not a failed run.
+`gpt_oss_120b`'s empty `dg` column is expected, not a failed run: the harness
+attempts `deep_gemm_mega`, hits its `hidden % 128 == 0 && intermediate % 128 == 0`
+assertion once per token count, logs it and carries on with the CuteDSL
+variants.
 
 `acc_loss_pct` in the CSVs is a synthetic-input reconstruction error (20.6% for
 `deep_gemm_mega`, 23.1-24.9% for the CuteDSL variants), **not** a model-quality
