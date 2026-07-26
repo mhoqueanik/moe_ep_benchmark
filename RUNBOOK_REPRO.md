@@ -136,10 +136,12 @@ only from *inside* a batch script. From a login shell against the §1.4a hold jo
 you want `$JOBID` and `--overlap`, as above.)
 
 **Build it on the same CPU architecture as the nodes you will run on.** The
-image is a full userspace, not just CUDA payload: the one in §1.1 was built on
-GB200 and is aarch64, so it cannot be copied to an x86_64 cluster. The recipe
-itself is arch-agnostic — it resolves wheels at build time — so the identical
-command produces a working image on either. See §2b for the check.
+image is a full userspace, not just a CUDA payload, so an image built on
+aarch64 (GB200) will not run on x86_64 (B200 hosts) or vice versa. The recipe
+above is arch-agnostic — it resolves wheels at build time — so the identical
+command produces a working image on either; just run it on the target. This
+only becomes a problem if you copy a `.sqsh` in from somewhere else, and §2b
+has the one-line check for that case.
 
 Upstream source: `docs/design_docs/moe_ep_runbook.md` §"Create the container"
 in repo (2). Left to itself it saves as `flashinfer-ep-pt2605-mega_moe_ep.sqsh`;
@@ -601,15 +603,14 @@ less than the prefill ones.
 
 ### 2b. Porting to another system, and to EP8
 
-Nothing below needs a source edit beyond §1.5's `sed`. In order of what actually
+Nothing below needs a source edit — see §1.5. In order of what actually
 blocks you:
 
-**1. The container image is architecture-bound.** The `.sqsh` in §1.1 was built on
-the GB200 nodes and is **aarch64** — `unsquashfs -l` shows an
-`aarch64-linux-gnu` userspace throughout. On an x86_64 target it will not run,
-and the failure is not obviously an arch problem. Rebuild it on the target with
-§1.2c; the build script is arch-agnostic (it resolves wheels at build time), so
-the same command works on either. Check what you have:
+**1. The container image is architecture-bound.** It carries a full userspace,
+so an aarch64 image (built on GB200) will not run on x86_64 (B200 hosts) or the
+reverse, and the failure does not look like an arch problem. If you built it in
+§1.2c on the machine you are running on, this cannot bite you. It bites when a
+`.sqsh` is copied between clusters — check before you debug anything else:
 
 ```bash
 unsquashfs -l $IMG | grep -m1 -o 'aarch64\|x86_64'
@@ -888,21 +889,24 @@ All twelve at once (~1 h, submits its own exclusive node, prints a summary table
 and re-applies the patch itself):
 
 ```bash
-cd $W && sbatch job_vllm_pr_runbook_sweep_ep8.sh          # %j log lands here
+cd $W && sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_ep8.sh
 ```
 
-This is the script the Flash e2e numbers come from (job 2337204). It lived in
-a scratch dir until 2026-07-25; it now ships in the repo alongside
-`bench_offline.py`, with the cells byte-identical to that job. It reads `ROOT`,
-`IMG`, `ROUNDS`, `MODEL`, `MODEL_NVFP4`, and `EXTRA_MOUNTS` from the
-environment, so a different checkout needs no edit:
+That inherits `ROOT` and the two Flash checkpoint paths from your shell (§1.1,
+§1.3) via sbatch's `--export=ALL`. Being explicit is equivalent:
 
 ```bash
-# Pass MODEL_NVFP4 but NOT MODEL (see the resolve_model warning above): with
-# MODEL set, the sweep forwards it and fi_cutedsl loads the mx dequant path.
-cd $W && ROOT=$ROOT MODEL_NVFP4=$MODEL_NVFP4 \
+cd $W && ROOT=$ROOT IMG=$IMG \
+    MODEL_MX_FLASH=$MODEL_MX_FLASH MODEL_NVFP4_FLASH=$MODEL_NVFP4_FLASH \
     sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_ep8.sh
 ```
+
+Both checkpoint variables are **required** — the script checks them before
+requesting the allocation and exits with a readable message if either is unset
+or is not a directory, rather than discovering it an hour in. It passes
+`--model` per cell rather than relying on the `MODEL` environment variable,
+which is what keeps fi_cutedsl on the NVFP4 cast (see the `resolve_model`
+warning above). `ROUNDS` and `EXTRA_MOUNTS` are the other overrides.
 
 `--rounds N` runs **N+1** passes: round 0 is a warmup, kept in the JSON as
 `"warmup": true` and excluded from the median. Do not remove it — the warmup
