@@ -881,8 +881,9 @@ export FI_MOE_EP_SKIP_VERSION_CHECK=1   # the 0.6.15 venv is below the new
 DG=flashinfer_moe_ep_mega_deep_gemm
 CUTEDSL=flashinfer_moe_ep_mega_cutedsl
 
-# One cell = one workload against all three backends, in one session.
-# Verbatim from job_vllm_pr_runbook_sweep_ep8.sh. The knob cache is fi_cutedsl-only.
+# One cell = one workload against all three backends, in one session. Same
+# cells as job_vllm_pr_runbook_sweep_ep8.sh, minus its output filtering.
+# The knob cache is fi_cutedsl-only.
 cell() {
     local name=$1; shift
     local envs=$1; shift
@@ -931,10 +932,9 @@ cell ctx32k 'ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 CAPTURE_SI
 ```
 
 > **Every cell that sets `MAX_CAPTURE` must also pin `CAPTURE_SIZES`, and the
-> penalty for forgetting lands on the flashinfer backends only.** `dec1k` was
-> the one cell that did not, and it silently produced garbage for months.
-> Measured on V4-Pro EP8 (jobs 2337473 / 2337487): with the dense default
-> ladder, vLLM's CUDA-graph memory profiler reserved **~48 GiB/GPU** for both
+> penalty for forgetting lands on the flashinfer backends only.** Measured on
+> V4-Pro EP8: with the dense default ladder, vLLM's CUDA-graph memory profiler
+> reserved **~48 GiB/GPU** for both
 > flashinfer backends against a real capture cost of ~6 GiB — the same ~6 GiB
 > it estimates correctly for native. The phantom reservation comes straight out
 > of the KV cache:
@@ -996,11 +996,11 @@ sessions, absolute throughput moves more with node and thermal state, and the
 native decode-1k baseline drifts round-over-round — which is why all three
 backends of a cell must run in one session.
 
-> **The recorded numbers are on B200.** Jobs 2337204 / 2337438 / 2337549 /
-> 2337487 all ran on 1x8 B200 nodes. A GB200 node (Grace CPU + NVLink-C2C)
-> lands slightly differently because the dispatch/attention host work sits on
-> the Grace side rather than a discrete host. Both are Blackwell sm_100 and
-> valid; just don't compare cell-for-cell across the two.
+> **The recorded numbers are on B200.** A GB200 node (Grace CPU +
+> NVLink-C2C) lands slightly differently, because the dispatch and attention
+> host work sits on the Grace side rather than a discrete host. Both are
+> Blackwell sm_100 and both are valid — just don't compare cell-for-cell
+> across the two.
 
 ### 3e. The V4-Pro sweep
 
