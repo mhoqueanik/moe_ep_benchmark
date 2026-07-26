@@ -5,8 +5,8 @@ Every number here was measured from a scratch clone on **2026-07-25**, on one
 different — §5 lists the two ways that has actually happened.
 
 **Configuration.** vLLM 0.25.1 (wheel + `vllm_e2e/patch_0251/`), flashinfer
-branch `4_5_2-perf-fix` @ `1ee41bcd`, nvidia-cutlass-dsl **4.5.2** (pinned — the
-CuteDSL codegen is 34-54% slower before it), TP8 + EP8, DP1, kv fp8, block 256,
+branch `4_5_2-perf-fix` @ `1ee41bcd`, nvidia-cutlass-dsl **4.5.2** (vLLM
+0.25.1's own pin), TP8 + EP8, DP1, kv fp8, block 256,
 prefix caching off, round 0 discarded as warmup, median of 3 timed rounds.
 
 **The three backends, and what a ratio between them means.**

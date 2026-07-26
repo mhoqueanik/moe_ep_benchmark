@@ -48,9 +48,14 @@ vllm_e2e/
   `FI_MOE_EP_MEGAKERNEL` aborts at startup — including `FI_MOE_EP=0`, and
   including on the native backend. Backend selection is one `moe_backend`
   string.
-* **Do not unpin cutlass-dsl.** 4.5.2 exactly; the CuteDSL codegen is 34-54%
-  slower before it, which makes an unpinned sweep unattributable.
-  `model_shapes/job_payload.sh` asserts it because it does not use the venv.
+* **Do not unpin cutlass-dsl, and do not pair it with a different flashinfer
+  branch.** 4.5.2 is vLLM 0.25.1's own pin and the runtime `4_5_2-perf-fix` is
+  validated against; the two move together. The CuteDSL codegen is
+  version-sensitive — on 4.5.2 *without* that branch's MR!27 mainloop WAR the
+  kernels ran 34-54% slower, which is what the 4.6.1 compatibility chain used
+  to work around. With the WAR, 4.5.2 matches the old 4.6.1 stack to within
+  0.7% and 4.6.1 is unnecessary. `model_shapes/job_payload.sh` asserts the
+  version because it does not use the venv.
 * **World size = DP = EP** (`run.sh`). `GPUS=8` is EP8; a different world size
   is a different measurement, not a better estimate of the same one.
 * **`make_tables.py` ignores the `gpus` column** — it keys on

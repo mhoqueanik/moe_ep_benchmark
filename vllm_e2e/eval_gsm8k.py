@@ -33,7 +33,7 @@ import re
 import sys
 import time
 
-from bench_offline import assert_expected_dsl, resolve_model
+from bench_offline import _pkg_version, assert_expected_dsl, resolve_model
 
 DEFAULT_GSM8K_DIR = (
     "/lustre/share/coreai_dlalgo_ci/artifacts/dataset/core-models_verl/gsm8k/prep1"
@@ -207,6 +207,9 @@ def main() -> int:
         "truncated": truncated,
         "max_tokens": args.max_tokens,
         "elapsed_s": dt,
+        # stamp what it ran on, as bench_offline does: the guard stops a
+        # wrong-version run, this makes an old result auditable after the fact
+        "cutlass_dsl_version": _pkg_version("nvidia-cutlass-dsl"),
         "eager": args.enforce_eager,
         "moe_backend": os.environ.get("MOE_BACKEND", "deep_gemm_mega_moe"),
     }

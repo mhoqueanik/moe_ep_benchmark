@@ -4,23 +4,14 @@ Manual steps for the FlashInfer `moe_ep` mega-MoE work on DeepSeek-V4-Flash:
 clone, fetch checkpoints, build, kernel microbenchmark, vLLM e2e. Commands are
 copied verbatim from the scripts that produced the recorded numbers.
 
-Provenance of every expected number on this branch: jobs **2337199**
-(microbenchmark), **2337204** / **2337549** (Flash e2e), **2337438** /
-**2337487** (V4-Pro e2e) and **2337476** / **2337550** (GSM8K), 2026-07-25,
-one 1x8 B200 node, vLLM 0.25.1, cutlass-dsl 4.5.2. The numbers themselves live
-in [expected_results.md](expected_results.md).
+Provenance: the numbers live in [expected_results.md](expected_results.md) and
+come from the 2026-07-25 verification pass on one 1x8 B200 node — jobs
+**2337617** (microbenchmark), **2337646** (Flash e2e), **2337637** (V4-Pro e2e)
+and **2337638** (GSM8K), on vLLM 0.25.1 with cutlass-dsl 4.5.2.
 
-> **This document was originally written against 1x4; on this branch it is
-> 1x8 throughout.** §1.2–§1.4 (build, container, venv, patch, checkpoints) are
-> world-size independent and are what `vllm_e2e/RUNBOOK_1x8.md` defers to. For
-> the runs themselves follow that document, and check yourself against
-> `expected_results.md`.
-
-Companions, paths relative to this repo unless noted:
-`vllm_e2e/RUNBOOK_1x8.md` (the executed 8-GPU procedure),
-`expected_results.md` (the numbers), `RUNBOOK.md` (microbenchmark), and — in
-the flashinfer checkout — `docs/design_docs/moe_ep_runbook.md`, which owns the
-container recipe (§1.2c) and the guide to adding a new mega-kernel backend.
+This is the only runbook on the branch. The one other document you may want is
+in the flashinfer checkout — `docs/design_docs/moe_ep_runbook.md`, which owns
+the container recipe (§1.2c) and the guide to adding a new mega-kernel backend.
 The chronological run log (`vllm_e2e/RUNS.md`) lives on the `vllm-pr` branch.
 
 
@@ -555,9 +546,12 @@ GPUS="${GPUS:-8}" CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}
 This is the step that needs §1.5 if `ROOT` differs — both `submit_jobs.sh` and
 `job_payload.sh` hardcode the original path, and the payload asserts on it.
 
-Do **not** unpin the DSL. The CuteDSL codegen is version-sensitive enough
-(34-54% slower pre-4.5.2) that an unpinned `--upgrade` makes a sweep
-unattributable. `DSL_VERSION` overrides.
+Do **not** unpin the DSL. 4.5.2 is vLLM 0.25.1's own pin and what the
+flashinfer `4_5_2-perf-fix` branch is validated against; the codegen is version-
+sensitive enough that an unpinned `--upgrade` makes a sweep unattributable. (On
+4.5.2 *without* that branch's MR!27 mainloop WAR the kernels ran 34-54% slower —
+the reason a 4.6.1 compatibility chain once existed. With the WAR, 4.5.2 matches
+the 4.6.1 stack within 0.7%, so 4.6.1 is not needed.) `DSL_VERSION` overrides.
 
 The geometries come from `model_shapes/shapes.tsv`, whose MoE shapes mirror the
 cudnn-frontend SDPA training benchmark's model list (MoE-capable models only):

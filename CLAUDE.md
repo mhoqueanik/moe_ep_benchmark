@@ -32,9 +32,13 @@ this branch is deliberately only what a reproduction needs.
 including on the native backend. The `main` branch still uses that old opt-in;
 backend selection here is one `moe_backend` string.
 
-**Do not unpin cutlass-dsl.** The CuteDSL codegen is version-sensitive (34-54%
-slower pre-4.5.2), so an unpinned upgrade makes a sweep unattributable. The venv
-gets 4.5.2 from vLLM's own pin; `model_shapes/job_payload.sh` installs and
+**Do not unpin cutlass-dsl.** 4.5.2 is vLLM 0.25.1's own pin and the runtime
+the flashinfer `4_5_2-perf-fix` branch is validated against — DSL version and fi
+branch move together. The codegen is version-sensitive: on 4.5.2 *without* that
+branch's MR!27 mainloop WAR the kernels ran 34-54% slower, which is what the
+old 4.6.1 compatibility chain existed to avoid; with the WAR, 4.5.2 matches the
+4.6.1 stack within 0.7% (vllm-pr RUNS.md runs 41-42) and 4.6.1 is unnecessary.
+The venv gets 4.5.2 from vLLM's pin; `model_shapes/job_payload.sh` installs and
 asserts it explicitly because it does not use the venv. The container image
 pins 4.5.0 and is *not* the source of truth.
 
