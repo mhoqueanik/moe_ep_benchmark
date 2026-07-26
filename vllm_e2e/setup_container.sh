@@ -97,7 +97,10 @@ check("flashinfer.moe_ep", lambda: importlib.import_module("flashinfer.moe_ep").
 check("moe_ep runtime helpers", lambda: bool(importlib.import_module("flashinfer.moe_ep").bootstrap_moe_ep_runtime) and "present")
 check("cutlass dsl", lambda: importlib.import_module("cutlass").__version__)
 check("nvshmem4py", lambda: importlib.import_module("nvshmem.core").__name__)
-check("vllm fi patch", lambda: importlib.import_module("vllm.models.deepseek_v4.nvidia.fi_utils").__name__)
+# apply.sh moves the helpers to vllm/utils/ and deletes the pre-move
+# nvidia/fi_utils.py, so probing the old path always failed -- a permanent
+# misleading "FAIL vllm fi patch" on a correctly patched venv.
+check("vllm fi patch", lambda: importlib.import_module("vllm.utils.flashinfer_moe_ep").__name__)
 PY
 
 # Hard DSL-version guard (the sanity block above only prints): perf results

@@ -1,8 +1,9 @@
 # MoE-EP: reproducing the whole thing from scratch
 
-Manual steps for the FlashInfer `moe_ep` mega-MoE work on DeepSeek-V4-Flash:
-clone, fetch checkpoints, build, kernel microbenchmark, vLLM e2e. Commands are
-copied verbatim from the scripts that produced the recorded numbers.
+Manual steps for the FlashInfer `moe_ep` mega-MoE work on DeepSeek-V4-Flash
+and V4-Pro: clone, build the image, fetch checkpoints, build the venv, then the
+kernel microbenchmark, the vLLM e2e sweeps and the accuracy gate. Commands are
+copied from the scripts that produced the recorded numbers.
 
 Provenance: the numbers live in [expected_results.md](expected_results.md) and
 come from the 2026-07-25 verification pass on one 1x8 B200 node — jobs
@@ -46,15 +47,16 @@ Expected numbers for §2–§4 live in [expected_results.md](expected_results.md
 Set these three once; every command below is written against them.
 
 ```bash
-export ROOT=/path/to/your/scratch          # any dir you own, ~2 TB free
+export ROOT=/path/to/your/scratch          # ~350 GB, or ~2 TB with V4-Pro
 export W=$ROOT/moe_ep_benchmark/vllm_e2e   # derived; do not change
 export IMG=$ROOT/flashinfer-ep.sqsh        # the image §1.2c writes; any name
 ```
 
-`ROOT` is yours to choose, but **keep the directory layout below it exactly as
-shown** — including the `flashinfer-2/` parent, which several scripts assume.
-They read `ROOT` from the environment, so nothing needs editing; §1.5 covers
-the two that also need an account/partition swap.
+`ROOT` is yours to choose. The layout below it is what the scripts default to
+— notably `$ROOT/flashinfer-2/flashinfer-moe_ep` — but every path is an
+environment override, so a different arrangement only costs you a `REPO=`.
+They read `ROOT` from the environment, so no file needs editing — §1.5 has
+the details, including the account and partition you do have to supply.
 
 ---
 
@@ -95,7 +97,7 @@ git -C $ROOT/vllm-fi-moe-ep switch fi-moe-ep-v4
 
 Nothing in `moe_ep_benchmark` references this path — no script, no import. Skip
 it unless you want to diff the port. The PR sits on a much newer vLLM `main`
-than 0.25.1, so the validated path patches a 0.25.1 wheel instead (§1.4d);
+than 0.25.1, so the validated path patches a 0.25.1 wheel instead (§1.4e);
 building it from source is untried. `patch_0251/flashinfer_moe_ep.py` is
 byte-identical to the PR's copy, so repo (1) already gives you that file;
 `patch_0251/model.py` is a 0.25.1 port and differs by ~90 lines of unrelated
@@ -182,7 +184,8 @@ adds 1.66 TB.
 Run this **on a host with outbound network**, not inside the container and not
 on a compute node — nothing here needs a GPU, and compute nodes are commonly
 walled off from the Hub. It is also the one long-running step you want going
-before you hold a node in §1.4a, since 305 GB dominates the whole setup.
+before you hold a node in §1.4a: at 323 GB for Flash — 2.0 TB if you also take
+Pro — it dominates the whole setup.
 
 ```bash
 export CKPT=$ROOT/checkpoints
@@ -198,14 +201,14 @@ python -m pip install -U "huggingface_hub[cli,hf_transfer]"
 # Disable Xet so the pull uses low-CPU plain-HTTPS range downloads (resumable):
 export HF_HUB_DISABLE_XET=1
 
-# Both repos are public and ungated as of 2026-07-25, so no licence click.
+# All four repos are public and ungated as of 2026-07-25, so no licence click.
 # hf auth login raises rate limits, but is NOT strictly required: verified
 # 2026-07-25 that an anonymous, Xet-disabled pull of the 46-shard NVFP4 repo
 # completed without a 429. Log in if you do hit "We had to rate limit your IP".
 hf auth login   # optional; skip to try anonymous first
 
-# Full 40-char commits pin the exact trees §3d was measured on. Do NOT drop
-# --revision and do NOT resolve to main -- see the warning below.
+# The revisions pin the exact trees the recorded numbers were measured on.
+# Do NOT drop --revision and do NOT resolve to main -- see the warning below.
 
 # (a) mx-format original -- native and fi_dg
 hf download deepseek-ai/DeepSeek-V4-Flash \
@@ -281,7 +284,9 @@ for p in ('$MODEL_MX_FLASH', '$MODEL_NVFP4_FLASH'):
 "
 ```
 
-Expect `deepseek_v4 43L 256E top-6` and **46 shards** for both. The NVFP4 copy
+Expect `deepseek_v4 43L 256E top-6` and **46 shards** for both Flash copies.
+Re-run it against `$MODEL_MX_PRO` / `$MODEL_NVFP4_PRO` if you took Pro, where
+the answer is `deepseek_v4 61L 384E top-6` and **64 shards**. The NVFP4 copy
 additionally carries `hf_quant_config.json` (producer `modelopt`, version
 `dsv4-nvfp4-experts`, per-expert `w1`/`w2`/`w3` marked `NVFP4` at
 `awq_block_size` 16) and a `cast_mxfp4_to_nvfp4.log` recording the cast
@@ -320,7 +325,8 @@ print('both checkpoints are at the pinned revisions')
 > catch.
 
 Both repo IDs were confirmed against huggingface.co on 2026-07-25: public,
-ungated, 46 shards, 156.7 GiB (NVFP4) and 148.6 GiB (mx). The lowercase
+ungated, 46 shards, 156.7 GiB (NVFP4) and 148.6 GiB (mx) as the Hub reports
+them — the table above quotes on-disk `du`, which is a little larger. The lowercase
 spellings redirect to the canonical casing, so either form downloads the same
 tree.
 
@@ -332,12 +338,13 @@ tree.
 > the four `MODEL_*` variables and they are never consulted. The job scripts
 > require them and fail at submit time if they are missing.
 
-If you cannot reach the Hub, the fallback is to copy the 157 GB directory from
+If you cannot reach the Hub, the fallback is to copy the NVFP4 directory from
 a cluster that has it. Regenerating the cast is not an option here — no repo in
 this tree carries an mxfp4→NVFP4 script, and `cast_mxfp4_to_nvfp4.log` records
 the result (33792 expert tensors across 46 shards, 100% lossless) but not the
 tool or its invocation. Running fi_cutedsl on the mx checkpoint
-(`MODEL_NVFP4=$MODEL`) takes the dequant→requant path instead: it runs, and is
+(`MODEL_NVFP4_FLASH=$MODEL_MX_FLASH`) takes the dequant→requant path instead:
+it runs, and is
 what the pre-2026-07-19 setup did, **but it will not reproduce §3d** — those
 numbers were all measured on the prequantized path.
 
@@ -387,18 +394,24 @@ srun's default `--export=ALL`, i.e. from whatever shell you type the command
 in. So re-export §1.3's block in any new shell before using the hold job.
 Skipping it is not silent-but-wrong, it just fails to find the model:
 `MODEL_MX_FLASH=$CKPT/deepseek-v4-flash` expands to `/deepseek-v4-flash` when
-`CKPT` is unset, and the job scripts' guards reject it at submit time. This bites most often the day *after* setup, when the 4h hold
-job is still alive but your terminal is not.
+`CKPT` is unset, and the job scripts' guards reject it at submit time. This
+bites most often the day *after* setup, when the 4h hold job is still alive but
+your terminal is not.
 
 #### 1.4c. One command
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'bash setup_container.sh'
+
+# rebuilding over an existing venv? wipe it instead:
+JOBID=$JOBID bash $W/in_container.sh 'FRESH=1 bash setup_container.sh'
 ```
 
-`FRESH=1` wipes and rebuilds — needed if the venv predates the 2026-07-22 MR!27
-WAR and still carries DSL 4.6.1. §1.4d-1.4f are what it does; run them by hand
-only if you are debugging the setup.
+`FRESH=1` is what you want if a venv is already there and you are unsure of its
+provenance — in particular one predating the 2026-07-22 MR!27 WAR, which still
+carries DSL 4.6.1 and will fail every cell on the guard in §2. §1.4d and §1.4e
+are what the script does, and §1.4f checks it landed; run those by hand only if
+you are debugging the setup.
 
 #### 1.4d. What that actually runs
 
@@ -487,12 +500,6 @@ PY'
 `flashinfer.__file__` must resolve under `$ROOT/flashinfer-2`, not to a
 site-packages wheel.
 
-> The version of `setup_container.sh` at commit `36d3add` still probes the
-> **pre-move** path `vllm.models.deepseek_v4.nvidia.fi_utils` in its own sanity
-> block, so it prints a permanent, misleading `FAIL vllm fi patch`. It does not
-> stop the setup (that block only prints; the DSL guard is the only hard gate).
-> Use the check above instead.
-
 ---
 
 ### 1.5. Running with a different ROOT
@@ -514,13 +521,11 @@ ACCOUNT=<account> PARTITION=<partition> bash model_shapes/submit_jobs.sh
 sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_ep8.sh
 ```
 
-The `flashinfer-2/` parent directory still has to stay: `job_payload.sh` checks
-that the resolved `flashinfer.__file__` sits under `$REPO`, so a checkout
-somewhere else makes the microbenchmark fail after the editable install rather
-than before it. That check is what stops a stray wheel-installed flashinfer
-from being benchmarked instead of your branch.
-
----
+If you clone flashinfer somewhere other than `$ROOT/flashinfer-2/flashinfer-moe_ep`,
+export `REPO` to point at it. `job_payload.sh` asserts that the resolved
+`flashinfer.__file__` sits under `$REPO` — that check is what stops a stray
+wheel-installed flashinfer being benchmarked instead of your branch, and it
+follows `REPO` wherever you put it.
 
 ---
 
@@ -819,15 +824,14 @@ Common setup:
 cd $W
 source venv0251/bin/activate
 bash patch_0251/apply.sh
-# DO NOT export MODEL. resolve_model() (bench_offline.py:42) returns $MODEL for
-# EVERY backend when it is set, so `export MODEL=$CKPT/deepseek-v4-flash` forces
-# fi_cutedsl onto the mx checkpoint too — the dequant→requant path — and the
-# fi_cutedsl column silently STOPS reproducing §3d (measured ~1.15x instead of
-# ~1.18x at prefill-8k; verified 2026-07-25). Leave MODEL unset so native/fi_dg
-# use DEFAULT_MODEL (the pinned mx mirror) and only fi_cutedsl consults
-# MODEL_NVFP4. Set MODEL_NVFP4 explicitly (the compiled-in default is off-pin,
-# see §1.3):
-export MODEL_NVFP4=$CKPT/deepseek-v4-flash-nvfp4
+# The two Flash checkpoints from §1.3. cell() below passes whichever one the
+# backend needs via --model, which is the only form resolve_model ranks above
+# the environment.
+export MODEL_MX_FLASH=$CKPT/deepseek-v4-flash
+export MODEL_NVFP4_FLASH=$CKPT/deepseek-v4-flash-nvfp4
+# DO NOT export MODEL. resolve_model() returns $MODEL for EVERY backend when it
+# is set, which would drag fi_cutedsl onto the mx checkpoint — the
+# dequant→requant path — and its column would quietly stop reproducing §3d.
 export FI_MOE_EP_SKIP_VERSION_CHECK=1   # the 0.6.15 venv is below the new
                                         # flashinfer floor: documented
                                         # pre-release escape hatch
@@ -1026,15 +1030,11 @@ is expected and is not a bug.
 > at **1/8 exact, mean |dlogprob| ≈ 0.02–0.06**: near-identical, but one flipped
 > logit early in a greedy decode diverges the rest of that sequence. native and
 > fi_dg are separate kernel implementations, so bit-exactness is not guaranteed
-> across builds/hardware. The real correctness gate is GSM8K (below), where a
-> properly-armed run (job 2337476) scored native **0.960**, fi_dg **0.960**
-> (identical), fi_cutedsl **0.970** on the NVFP4 cast — all in band. Use the
+> across builds/hardware. The real correctness gate is GSM8K (§4b), where the
+> verification run (job 2337638) scored Flash **0.965** on all three backends,
+> fi_cutedsl on the NVFP4 cast — a cross-checkpoint delta of zero. Use the
 > logprob smoke to confirm *routing* (the `[fi_moe_ep]` banner), not to demand
 > bit-exact generations.
->
-> The fi_cutedsl **0.955** previously recorded here came from the 03:42 run
-> that had `MODEL` exported and so scored the mx checkpoint under an
-> `fi_nvfp4` tag — see the warning in §4b.
 
 To produce that fi_cutedsl row, add a third smoke. **`smoke_infer.py` does not
 resolve the checkpoint per backend** the way `bench_offline.py` and
@@ -1121,6 +1121,16 @@ routing. Use `deep_gemm_mega_moe` if you need EPLB.
 **Capture all recurring step shapes** (`MAX_CAPTURE=4096` for decode). Otherwise
 eager prefill chunks leak into decode rounds and fi decode looks falsely slow.
 
+**But never `MAX_CAPTURE` without `CAPTURE_SIZES`.** The dense default capture
+ladder makes vLLM's cudagraph memory profiler reserve ~48 GiB/GPU for the
+flashinfer backends against a real cost of ~6 GiB, and the difference comes
+out of the KV cache. The engine then holds a fraction of the sequences you
+asked for, so the backend reads *fast per step and slow overall* — better ITL
+than native, far worse throughput — and fi_cutedsl, whose NVFP4 weights are the
+largest, is the first to fail outright with "No available memory for the cache
+blocks". Every cell in §3c pins it. Full mechanism and the measured numbers:
+[expected_results.md](expected_results.md) §5.1.
+
 **The venv keeps whatever was applied last.** `apply.sh` writes into the
 installed wheel. To go back to `main`'s workflow, switch the branch and
 re-apply. Forgetting is loud, not silent: `main`'s scripts set `FI_MOE_EP=1`,
@@ -1133,12 +1143,14 @@ which the new code rejects. For a full revert, copy `kernel.py.orig` back.
 ## 6. Not covered
 
 * No multi-node run. Single node, TP8+EP8.
-* ~~GSM8K not re-run since the backend-string switch~~ **DONE 2026-07-25, job
-  2337476** — and it caught that the gate had been disarmed by an exported
-  `MODEL` (§4a). Flash: native 0.960 / fi_dg 0.960 / fi_cutedsl 0.970 on the
-  NVFP4 cast. V4-Pro scores 0.880 / 0.880 / 0.890 — consistent across all three
-  backends, so not a moe_ep issue, but below the 0.93 gate; whether that is the
-  512-token cap truncating a longer reasoner or a real deficit is open (job
-  2337550).
+* ~~GSM8K not re-run since the backend-string switch~~ **DONE** — and it caught
+  that the gate had been disarmed by an exported `MODEL` (§4b). At TP8 (job
+  2337638) Flash scores 0.965 on all three backends and V4-Pro 0.880 / 0.880 /
+  0.890. Pro sitting below the 0.93 gate is **not** a token-budget artifact:
+  raising `--max-tokens` to 1024 and 2048 moved accuracy 0.8800 -> 0.8750 ->
+  0.8750 while truncations only fell 15 -> 14 -> 13 (job 2337550), so a handful
+  of completions never terminate at any budget. All three backends agree
+  exactly, so it is a property of the model and this eval, not of moe_ep;
+  `--min-acc 0.93` is calibrated for Flash.
 * Building the real PR branch from source is unverified; everything here
   patches a 0.25.1 wheel.
