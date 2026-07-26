@@ -521,7 +521,7 @@ you would be benchmarking a released flashinfer instead of the branch.
 
 ---
 
-### 1.5. Running with a different ROOT
+### 1.5. Running somewhere else
 
 **No file needs editing.** Every script reads its paths from the environment:
 `ROOT`, and where relevant `REPO`, `VENV`, `IMG`, `W`, and the four `MODEL_*`
@@ -540,24 +540,28 @@ ACCOUNT=<account> PARTITION=<partition> bash model_shapes/submit_jobs.sh
 sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_ep8.sh
 ```
 
-If you clone flashinfer somewhere other than `$ROOT/flashinfer-2/flashinfer-moe_ep`,
-export `REPO` to point at it. `job_payload.sh` asserts that the resolved
+If you clone flashinfer anywhere other than the default
+`$ROOT/flashinfer-2/flashinfer-moe_ep`, export `REPO` to point at it.
+`job_payload.sh` asserts that the resolved
 `flashinfer.__file__` sits under `$REPO` — that check is what stops a stray
 wheel-installed flashinfer being benchmarked instead of your branch, and it
 follows `REPO` wherever you put it.
 
 ---
 
-## 2. Kernel microbenchmark (~16 min)
+## 2. Kernel microbenchmark (~25 min per shape)
 
 Drives the FlashInfer kernels directly, no vLLM, so it isolates kernel work
 from integration overhead. Submits its own SLURM job — it does not use the hold
 job from §1.4a, and it installs into the container overlay rather than the venv.
 
-**§1.3 is not a prerequisite for this section.** The geometries come from
+**Only §1.2 is a prerequisite.** The geometries come from
 `model_shapes/shapes.tsv` (hidden / inter / experts / top-k) and the weights are
-synthetic, so nothing here reads a checkpoint. If the microbenchmark is all you
-want, you need §1.2, §1.4a's node, and this section — skip §1.3 entirely.
+synthetic, so nothing here reads a checkpoint, and the payload installs into the
+container overlay rather than the venv. So if the microbenchmark is all you
+want: clone and build the image (§1.2), then run this — skip §1.3 and §1.4
+entirely. Building the image does need an allocation, and §1.4a is one way to
+get one.
 
 ```bash
 cd $ROOT/moe_ep_benchmark
@@ -584,32 +588,32 @@ env-overridable, which is what makes §2b possible without editing anything:
 cd $ROOT/flashinfer-2/flashinfer-moe_ep
 PIP_CONSTRAINT="" BUILD_NIXL_EP=0 python -m pip install --no-build-isolation -e .
 DSL_VERSION="${DSL_VERSION:-4.5.2}"
-python -m pip install "nvidia-cutlass-dsl[cu13]==${DSL_VERSION}"
+CU="cu${CUDA_MAJOR:-$(python -c 'import torch; v=torch.version.cuda or ""; print(v.split(".")[0])')}"
+python -m pip install "nvidia-cutlass-dsl[$CU]==${DSL_VERSION}"
 python -c "from importlib.metadata import version; v=version('nvidia-cutlass-dsl'); \
 assert v=='${DSL_VERSION}', f'DSL {v} != ${DSL_VERSION}'; print(f'GUARD PASS: cutlass-dsl {v}')"
 GPUS="${GPUS:-8}" CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}" \
     bash "$BENCH/model_shapes/run_model_shapes.sh"
 ```
 
-This is the step that needs §1.5 if `ROOT` differs — both `submit_jobs.sh` and
-`job_payload.sh` hardcode the original path, and the payload asserts on it.
+Both scripts take `ROOT`, `REPO` and `ACCOUNT`/`PARTITION` from the
+environment, so a different location needs no edit — see §1.5.
 
 Do **not** unpin the DSL. 4.5.2 is vLLM 0.25.1's own pin and what the
-flashinfer `4_5_2-perf-fix` branch is validated against; the codegen is version-
-sensitive enough that an unpinned `--upgrade` makes a sweep unattributable. (On
-4.5.2 *without* that branch's MR!27 mainloop WAR the kernels ran 34-54% slower —
-the reason a 4.6.1 compatibility chain once existed. With the WAR, 4.5.2 matches
-the 4.6.1 stack within 0.7%, so 4.6.1 is not needed.) `DSL_VERSION` overrides
-the version this payload installs.
+flashinfer `4_5_2-perf-fix` branch is validated against — the two move together,
+and the codegen is version-sensitive enough that an unpinned `--upgrade` makes a
+sweep unattributable. `DSL_VERSION` overrides the version this payload installs,
+and `CUDA_MAJOR` the `cuXX` wheel suffix if you do not want it derived from
+torch.
 
-> **The same pin is enforced at run time, and it will stop you.**
-> `bench_offline.py` and `eval_gsm8k.py` both call `assert_expected_dsl()`,
-> which aborts unless the installed `nvidia-cutlass-dsl` equals `EXPECT_DSL`
-> (default `4.5.2`). A venv left over from an older stack carrying 4.6.1 fails
-> every cell before it loads a model — that is the guard working, and the fix
-> is `FRESH=1 setup_container.sh` (§1.4c), not `EXPECT_DSL=4.6.1`. Set
-> `EXPECT_DSL` only when you are deliberately benching another runtime, or
-> `EXPECT_DSL=""` to disable the check entirely.
+> **The same pin is enforced again in §3 and §4, against the venv.** This
+> section installs the DSL itself, but `bench_offline.py` and `eval_gsm8k.py`
+> call `assert_expected_dsl()`, which aborts unless the venv's
+> `nvidia-cutlass-dsl` equals `EXPECT_DSL` (default `4.5.2`). An older venv
+> carrying 4.6.1 therefore fails every e2e cell before it loads a model — that
+> is the guard working, and the fix is `FRESH=1 setup_container.sh` (§1.4c),
+> not `EXPECT_DSL=4.6.1`. Set `EXPECT_DSL` only when deliberately benching
+> another runtime, or `EXPECT_DSL=""` to disable the check.
 
 The geometries come from `model_shapes/shapes.tsv`, whose MoE shapes mirror the
 cudnn-frontend SDPA training benchmark's model list (MoE-capable models only):
