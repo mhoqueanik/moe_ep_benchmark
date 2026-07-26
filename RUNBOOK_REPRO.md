@@ -167,7 +167,7 @@ NIXL-EP meson build, `BUILD_NIXL_EP=1` makes its missing build deps a hard
 error, `BUILD_NVEP=0` turns both backends off.
 
 > **The image is not the DSL source of truth.** `build_flashinfer_ep_pytorch.sh`
-> pins `nvidia-cutlass-dsl[cu13]==4.5.0`, but every recorded number is on
+> pins `nvidia-cutlass-dsl[${CU}]==4.5.0`, but every recorded number is on
 > **4.5.2**. The two paths reach it differently: §1.4 gets it for free because
 > `vllm==0.25.1` pins 4.5.2 and the venv shadows the image, while §2 does *not*
 > use the venv, so its payload must install and assert 4.5.2 explicitly over the
@@ -185,7 +185,7 @@ consumes natively, so fi_cutedsl skips a dequant/requant:
 |---|---|---|---|---|
 | Flash | native, fi_dg | `deepseek-ai/DeepSeek-V4-Flash` | `6e763230…` | 149 GB |
 | Flash | fi_cutedsl | `nvidia/DeepSeek-V4-Flash-NVFP4` | `48bfe38c…` | 174 GB |
-| Pro *(optional)* | native, fi_dg | `deepseek-ai/DeepSeek-V4-Pro` | `0366e4e` | 806 GB |
+| Pro *(optional)* | native, fi_dg | `deepseek-ai/DeepSeek-V4-Pro` | `0366e4e0…` | 806 GB |
 | Pro *(optional)* | fi_cutedsl | `nvidia/DeepSeek-V4-Pro-NVFP4` | `9e7e88ee…` | 851 GB |
 
 All four are public and ungated (verified 2026-07-25). **Flash alone (323 GB)
@@ -239,7 +239,7 @@ it. Same two-format policy, same pinning rule:
 ```bash
 # (c) mx-format original -- native and fi_dg          [optional]
 hf download deepseek-ai/DeepSeek-V4-Pro \
-    --revision 0366e4e \
+    --revision 0366e4e064385807ea86b088a5c6c878ff23343b \
     --local-dir $CKPT/deepseek-v4-pro
 
 # (d) NVFP4 cast -- fi_cutedsl                        [optional]
@@ -248,13 +248,16 @@ hf download nvidia/DeepSeek-V4-Pro-NVFP4 \
     --local-dir $CKPT/deepseek-v4-pro-nvfp4
 ```
 
-> **The Pro NVFP4 revision is the one that bites.** `main` on that repo is
-> currently `1449d1e6`, whose `hf_quant_config.json` is the **post-rewrite**
-> schema (`quant_algo: "MIXED_PRECISION"`, per-layer keys). fi_cutedsl loads it
-> without complaining and silently takes the dequant fallback, so you get
-> numbers that look plausible and mean nothing. `9e7e88ee` is the newest
-> revision whose schema is still prequantized — `vllm_e2e/setup/dl_nvfp4_pro.sh`
-> resolves that automatically instead of trusting `main`.
+> **`main` is poisoned on BOTH NVFP4 repos — the revisions are not optional.**
+> Checked 2026-07-25: Flash-NVFP4 `main` is `e3cd60e7` and Pro-NVFP4 `main` is
+> `1449d1e6`, and *both* carry the **post-rewrite** `hf_quant_config.json`
+> schema (`quant_algo: "MIXED_PRECISION"`, per-layer keys). fi_cutedsl loads
+> either without complaining and silently takes the dequant fallback, so you
+> get numbers that look plausible and mean nothing. The pinned `48bfe38c` and
+> `9e7e88ee` are the newest revisions on each whose schema is still
+> prequantized. `vllm_e2e/setup/dl_nvfp4_{flash,pro}.sh` resolve that
+> automatically rather than trusting `main`; if you paste the `hf download`
+> commands by hand, keep `--revision`.
 
 `vllm_e2e/setup/` wraps all four pulls if you would rather not paste:
 `dl_mx_originals.sh [flash|pro|both]`, `dl_nvfp4_flash.sh`, `dl_nvfp4_pro.sh`.
@@ -328,6 +331,11 @@ print('both checkpoints are at the pinned revisions')
 > |---|---|---|
 > | NVFP4 `hf_quant_config.json` | `quant_algo: null`, per-expert-tensor keys (`layers.0.ffn.experts.0.w1`), `awq_block_size: 16` | `quant_algo: "MIXED_PRECISION"`, per-layer keys (`layers.0.ffn.experts`), `group_size: 16` |
 > | mx `config.json` | no `expert_dtype` | `expert_dtype: "fp4"` |
+>
+> If you took Pro, run the same two checks against `$MODEL_NVFP4_PRO` and
+> `$MODEL_MX_PRO` — the assertions are identical, only the expected revisions
+> differ (`9e7e88ee` and `0366e4e0`). Pro's `main` carries the same rewritten
+> schema, so skipping this is the same silent failure.
 >
 > The NVFP4 rewrite landed in `7fc18be` (2026-06-10), two commits past the
 > pin. If fi_cutedsl's loader keys on the per-expert entries or on
