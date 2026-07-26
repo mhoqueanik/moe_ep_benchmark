@@ -633,19 +633,21 @@ no checkpoint is read. All six are recorded in
 
 ### 2a. Expected numbers
 
-EP8, DeepSeek-V4-Flash MoE geometry (4096 hidden / 2048 inter / 256 experts /
-top-6) — see [expected_results.md](expected_results.md) §3 for the
-full table and `model_shapes/results_ep8/` for the CSV it came from.
+[expected_results.md](expected_results.md) §3 has one table per shape — p50
+microseconds for every variant with its speedup against `deep_gemm_mega` —
+generated from the CSVs in `model_shapes/results_ep8/`.
 
-The DeepGEMM↔CuteDSL crossover sits at ~1024 tokens/rank: below it
-`deep_gemm_mega` wins, above it `nvfp4_cutedsl` pulls away to 1.20x at 8192,
-and `+combine_nvfp4` to 1.71x. That crossover is why the e2e decode cells gain
-less than the prefill ones.
+The DeepGEMM↔CuteDSL crossover sits between 512 and 1024 tokens/rank on every
+geometry: below it `deep_gemm_mega` wins, above it the CuteDSL variants pull
+away. On DeepSeek-V4-Flash that reaches 1.20x at 8192 for plain `nvfp4 bf16`
+and 1.71x for `+combine_nvfp4`. That crossover is why the e2e decode cells gain
+less than the prefill ones — decode runs far below it.
 
-`deep_gemm_mega` cannot run every shape — see §2b item 7 for why
-`gpt_oss_120b` comes back with no baseline row. Per-shape ratios for all six
-are in [expected_results.md](expected_results.md) §3a; V4-Flash, the shape the
-e2e sweeps use, is the least favourable of the five that have a baseline.
+Two things worth knowing before you compare your run: **V4-Flash is the least
+favourable of the five shapes that have a baseline**, so the e2e sweeps in §3
+sit on the geometry where the kernel wins least; and `deep_gemm_mega` cannot run
+`gpt_oss_120b` at all, so its `dg` column is empty by construction — see §2b
+item 7.
 
 ### 2b. Porting to another system, or another world size
 
@@ -778,6 +780,20 @@ fi_mega backends: `deep_gemm_mega | mxfp8_cutedsl | nvfp4_cutedsl`. The two
 `vllm_*` sections (`bench_moe_ep_vllm_mega.py`, `bench_moe_ep_nonmega.py`) are
 comparison baselines needing `vllm==0.20.0`, which the image does not ship —
 skip them unless you want the split-path comparison.
+
+The five columns in §2a's tables are `nvfp4_cutedsl` under two extra knobs,
+which you can set here to reproduce one variant on its own:
+
+| column | backend | knobs |
+|---|---|---|
+| `dg` | `deep_gemm_mega` | — |
+| `nvfp4 bf16` | `nvfp4_cutedsl` | `MEGA_IKR=0 MEGA_COMBINE_DTYPE=bf16` |
+| `+ikr` | `nvfp4_cutedsl` | `MEGA_IKR=1` (in-kernel fc2 reduce) |
+| `+combine_mxfp8` | `nvfp4_cutedsl` | `MEGA_COMBINE_DTYPE=mxfp8` |
+| `+combine_nvfp4` | `nvfp4_cutedsl` | `MEGA_COMBINE_DTYPE=nvfp4` |
+
+`run_model_shapes.sh` sets these per variant; `run.sh` does not, so pass them
+yourself if you are chasing a single column.
 
 > **Comparing against the kernel repo's tester** (`cutedsl_megamoe -m
 > tester.tester --mode Perf`): match BOTH the geometry and the timed region.
