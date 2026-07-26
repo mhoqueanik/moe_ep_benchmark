@@ -5,14 +5,22 @@
 set -euo pipefail
 
 ROOT=${ROOT:-/lustre/fsw/coreai_libraries_cudnn/mhoqueanik}
-IMG=${IMG:-$ROOT/flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh}
+IMG=${IMG:-$ROOT/flashinfer-ep.sqsh}
 W=${W:-$ROOT/moe_ep_benchmark/vllm_e2e}
 JOBID=${JOBID:?set JOBID to the hold job id}
+
+# Mount ROOT read-write. /lustre/share is a cluster-local read-only checkpoint
+# mirror -- only mount it where it exists, since enroot fails on a missing
+# bind source. EXTRA_MOUNTS appends anything else (e.g. checkpoints kept
+# outside ROOT).
+MOUNTS="$ROOT:$ROOT"
+[[ -d /lustre/share ]] && MOUNTS="$MOUNTS,/lustre/share:/lustre/share:ro"
+[[ -n "${EXTRA_MOUNTS:-}" ]] && MOUNTS="$MOUNTS,$EXTRA_MOUNTS"
 
 exec srun --overlap --jobid="$JOBID" --ntasks=1 \
   --container-image="$IMG" \
   --container-name=fivllm \
-  --container-mounts="$ROOT:$ROOT,/lustre/share:/lustre/share:ro" \
+  --container-mounts="$MOUNTS" \
   --container-workdir="$W" \
   bash -lc "
     export FLASHINFER_DISABLE_VERSION_CHECK=1

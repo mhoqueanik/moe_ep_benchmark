@@ -10,6 +10,8 @@
 set -uo pipefail
 
 ROOT="${ROOT:-/lustre/fsw/coreai_libraries_cudnn/mhoqueanik}"
+ACCOUNT="${ACCOUNT:-coreai_libraries_cudnn}"   # override for your cluster
+PARTITION="${PARTITION:-batch}"
 IMG="${IMG:-$ROOT/flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh}"
 BENCH=$ROOT/moe_ep_benchmark
 REPO=$ROOT/flashinfer-2/flashinfer-moe_ep
@@ -19,7 +21,7 @@ SHAPE_LIST="${SHAPE_LIST:-$(awk -F'\t' '!/^[[:space:]]*#/ && NF {print $1}' "$MS
 
 for shape in $SHAPE_LIST; do
     stamp="$(date +%Y%m%d_%H%M%S)_${shape}"
-    jobid=$(sbatch --parsable -A coreai_libraries_cudnn -p batch -N1 \
+    jobid=$(sbatch --parsable -A "$ACCOUNT" -p "$PARTITION" -N1 \
         --ntasks-per-node=1 --time=04:00:00 \
         -J "coreai_libraries_cudnn-fi.mshape.${shape}" \
         --output="${OUT_DIR:-$MS/results_ep8}/slurm_${shape}_%j.log" \

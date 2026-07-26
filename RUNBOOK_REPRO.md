@@ -31,26 +31,30 @@ Expected numbers for §2–§4 live in [expected_results.md](expected_results.md
 * One node with 8x SM100 (B200 or GB200 NVL8). Nothing here is multi-node.
   The measured configuration is TP8+EP8 throughout; `expected_results.md`
   is what you check against.
-* SLURM with pyxis/enroot, account `coreai_libraries_cudnn`.
-* Container image: `$ROOT/flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh`.
-  Ships torch 2.12, deep_gemm, triton, nvshmem, cutlass. Does **not** ship vLLM.
-  You build it yourself in §1.2c — the recipe lives in repo (2), so it cannot be
-  built before the clone, and it needs a SLURM allocation.
-* Disk for the checkpoints (§1.3), plus room for the venv and the JIT cache:
-  **~2.0 TB for all four**, or ~325 GB if you only run the Flash half — Flash
-  mx 149 GB + NVFP4 174 GB, Pro mx 806 GB + NVFP4 851 GB. §2 (the kernel
-  microbenchmark) needs none of them.
+* SLURM with pyxis/enroot, and an account and partition you can submit to.
+  Every `sbatch`/`srun` below shows `-A <account> -p <partition>` — substitute
+  yours; nothing in the repo depends on a particular one.
+* A container image, which you build in §1.2c — it is not downloadable. It
+  ships torch 2.12, deep_gemm, triton, nvshmem and cutlass, and does **not**
+  ship vLLM. The recipe lives in repo (2), so it cannot be built before the
+  clone, and it needs a SLURM allocation.
+* Disk for the checkpoints (§1.3), plus room for the venv and JIT cache:
+  **323 GB for Flash** (mx 149 + NVFP4 174), and **another 1.66 TB if you also
+  want V4-Pro** (mx 806 + NVFP4 851), which is optional. §2 (the kernel
+  microbenchmark) needs no checkpoints at all.
+
+Set these three once; every command below is written against them.
 
 ```bash
-export ROOT=/lustre/fsw/coreai_libraries_cudnn/mhoqueanik
-export W=$ROOT/moe_ep_benchmark/vllm_e2e
-export IMG=$ROOT/flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh
+export ROOT=/path/to/your/scratch          # any dir you own, ~2 TB free
+export W=$ROOT/moe_ep_benchmark/vllm_e2e   # derived; do not change
+export IMG=$ROOT/flashinfer-ep.sqsh        # the image §1.2c writes; any name
 ```
 
-`ROOT` may be any scratch dir you own, but **keep the directory layout below it
-exactly as shown** — including the `flashinfer-2/` parent. Several scripts
-hardcode these paths; see §1.5 for the full list of what to patch when `ROOT`
-differs.
+`ROOT` is yours to choose, but **keep the directory layout below it exactly as
+shown** — including the `flashinfer-2/` parent, which several scripts assume.
+They read `ROOT` from the environment, so nothing needs editing; §1.5 covers
+the two that also need an account/partition swap.
 
 ---
 
@@ -137,12 +141,11 @@ GB200 and is aarch64, so it cannot be copied to an x86_64 cluster. The recipe
 itself is arch-agnostic — it resolves wheels at build time — so the identical
 command produces a working image on either. See §2b for the check.
 
-Upstream source: `docs/design_docs/moe_ep_runbook.md` §"Create the container" in
-repo (2). It saves to the **undated** `flashinfer-ep-pt2605-mega_moe_ep.sqsh`;
-`--container-save=$IMG` above writes the dated name §1.1 pins instead. Same
-recipe — the date is just a rebuild stamp. If `$ROOT` already holds several
-`.sqsh` files, `-20260712` is the one the numbers were taken on;
-`-new-cutedsl` is a **later** sibling and is *not* it, so do not pick by mtime.
+Upstream source: `docs/design_docs/moe_ep_runbook.md` §"Create the container"
+in repo (2). Left to itself it saves as `flashinfer-ep-pt2605-mega_moe_ep.sqsh`;
+`--container-save=$IMG` above writes wherever you pointed `IMG`. Same recipe
+either way — the filename carries no meaning, so if you keep several images
+around, name them so you can tell which is which rather than relying on mtime.
 
 Build flags are tri-state (unset = on, best-effort): `BUILD_NIXL_EP=0` skips the
 NIXL-EP meson build, `BUILD_NIXL_EP=1` makes its missing build deps a hard
@@ -167,13 +170,12 @@ consumes natively, so fi_cutedsl skips a dequant/requant:
 |---|---|---|---|---|
 | Flash | native, fi_dg | `deepseek-ai/DeepSeek-V4-Flash` | `6e763230…` | 149 GB |
 | Flash | fi_cutedsl | `nvidia/DeepSeek-V4-Flash-NVFP4` | `48bfe38c…` | 174 GB |
-| Pro | native, fi_dg | `deepseek-ai/DeepSeek-V4-Pro` | `0366e4e` | 806 GB |
-| Pro | fi_cutedsl | `nvidia/DeepSeek-V4-Pro-NVFP4` | `9e7e88ee…` | 851 GB |
+| Pro *(optional)* | native, fi_dg | `deepseek-ai/DeepSeek-V4-Pro` | `0366e4e` | 806 GB |
+| Pro *(optional)* | fi_cutedsl | `nvidia/DeepSeek-V4-Pro-NVFP4` | `9e7e88ee…` | 851 GB |
 
-All four are public and ungated (verified 2026-07-25). `vllm_e2e/setup/` wraps
-the pulls — `dl_mx_originals.sh [flash|pro|both]`, `dl_nvfp4_flash.sh`,
-`dl_nvfp4_pro.sh`, all taking `ROOT` from the environment. Flash alone is
-enough for §3 and §4's Flash rows; Pro adds ~1.7 TB.
+All four are public and ungated (verified 2026-07-25). **Flash alone (323 GB)
+is enough for §2, §3's Flash sweep and §4's Flash rows** — Pro is optional and
+adds 1.66 TB.
 
 Run this **on a host with outbound network**, not inside the container and not
 on a compute node — nothing here needs a GPU, and compute nodes are commonly
@@ -214,6 +216,33 @@ hf download nvidia/DeepSeek-V4-Flash-NVFP4 \
     --local-dir $CKPT/deepseek-v4-flash-nvfp4
 ```
 
+**DeepSeek-V4-Pro — optional, 1.66 TB.** Skip it unless you want the §3e
+throughput sweep and the Pro half of §4; §2 and everything Flash work without
+it. Same two-format policy, same pinning rule:
+
+```bash
+# (c) mx-format original -- native and fi_dg          [optional]
+hf download deepseek-ai/DeepSeek-V4-Pro \
+    --revision 0366e4e \
+    --local-dir $CKPT/deepseek-v4-pro
+
+# (d) NVFP4 cast -- fi_cutedsl                        [optional]
+hf download nvidia/DeepSeek-V4-Pro-NVFP4 \
+    --revision 9e7e88ee2a2677a2c4d2bc6c18d0e328769b555e \
+    --local-dir $CKPT/deepseek-v4-pro-nvfp4
+```
+
+> **The Pro NVFP4 revision is the one that bites.** `main` on that repo is
+> currently `1449d1e6`, whose `hf_quant_config.json` is the **post-rewrite**
+> schema (`quant_algo: "MIXED_PRECISION"`, per-layer keys). fi_cutedsl loads it
+> without complaining and silently takes the dequant fallback, so you get
+> numbers that look plausible and mean nothing. `9e7e88ee` is the newest
+> revision whose schema is still prequantized — `vllm_e2e/setup/dl_nvfp4_pro.sh`
+> resolves that automatically instead of trusting `main`.
+
+`vllm_e2e/setup/` wraps all four pulls if you would rather not paste:
+`dl_mx_originals.sh [flash|pro|both]`, `dl_nvfp4_flash.sh`, `dl_nvfp4_pro.sh`.
+
 On huggingface_hub older than 0.34 the command is `huggingface-cli download`
 with the same arguments. `hf download` resumes, so re-run it after an
 interruption rather than starting over.
@@ -225,8 +254,8 @@ into `bench_offline.py`, which do not exist on another machine:
 ```bash
 export MODEL_MX_FLASH=$CKPT/deepseek-v4-flash
 export MODEL_NVFP4_FLASH=$CKPT/deepseek-v4-flash-nvfp4
-export MODEL_MX_PRO=$CKPT/deepseek-v4-pro                  # only for §3e / §4
-export MODEL_NVFP4_PRO=$CKPT/deepseek-v4-pro-nvfp4
+export MODEL_MX_PRO=$CKPT/deepseek-v4-pro                  # optional, §3e / §4
+export MODEL_NVFP4_PRO=$CKPT/deepseek-v4-pro-nvfp4         # optional
 ```
 
 > **Do not export `MODEL`.** `resolve_model` ranks `--model` > `$MODEL` >
@@ -293,19 +322,13 @@ ungated, 46 shards, 156.7 GiB (NVFP4) and 148.6 GiB (mx). The lowercase
 spellings redirect to the canonical casing, so either form downloads the same
 tree.
 
-> **The CI mirror's NVFP4 copy is now off-pin — do not use it for fi_cutedsl.**
-> `bench_offline.py:29`'s `DEFAULT_MODEL_NVFP4` points at
-> `nvidia_deepseek-v4-flash-nvfp4/hf/hf-48bfe38_orig`, but as of 2026-07-25 that
-> path no longer exists on `/lustre/share/coreai_dlalgo_ci`; the mirror advanced
-> to `hf-e3cd60e_orig`, whose `hf_quant_config.json` is the **post-rewrite
-> schema** (`quant_algo: "MIXED_PRECISION"`, per-layer keys, `group_size`) — the
-> exact silent-dequant-fallback case above. So the "unset MODEL_NVFP4 falls back
-> to the compiled-in mirror default" path is broken: you must download the
-> pinned `48bfe38` NVFP4 (above) and pass `MODEL_NVFP4` explicitly. The **mx**
-> mirror, by contrast, IS still at the pin (`deepseek-ai_deepseek-v4-flash/hf/
-> hf-6e76323_orig`, 46 shards), so `DEFAULT_MODEL` for native/fi_dg is fine. The
-> same is true of the V4-Pro mirror: mx `hf-0366e4e_orig` is pinned, but both
-> NVFP4-Pro revisions (`hf-1449d1e`, `hf-d6acf0c`) are post-rewrite.
+> **Ignore the paths compiled into `bench_offline.py`.** Its `DEFAULT_MODEL`
+> and `DEFAULT_MODEL_NVFP4` point at a mirror on the machine these numbers were
+> measured on, and that mirror has since drifted off-pin — its NVFP4 copy now
+> carries the post-rewrite schema, i.e. exactly the silent-dequant case above.
+> Those defaults exist only as a convenience there; on any other machine set
+> the four `MODEL_*` variables and they are never consulted. The job scripts
+> require them and fail at submit time if they are missing.
 
 If you cannot reach the Hub, the fallback is to copy the 157 GB directory from
 a cluster that has it. Regenerating the cast is not an option here — no repo in
@@ -323,9 +346,9 @@ numbers were all measured on the prequantized path.
 #### 1.4a. Hold a node
 
 ```bash
-JOBID=$(sbatch --parsable -A coreai_libraries_cudnn -p batch -N1 \
+JOBID=$(sbatch --parsable -A <account> -p <partition> -N1 \
     --ntasks-per-node=1 --time=04:00:00 \
-    -J coreai_libraries_cudnn-fi.vllm_pr.hold \
+    -J moe_ep.hold \
     --output=$W/logs/hold_%j.log --wrap "sleep 14400")
 echo "hold job $JOBID"
 ```
@@ -337,8 +360,9 @@ JOBID=$JOBID bash $W/in_container.sh '<command>'
 ```
 
 `in_container.sh` runs `srun --overlap --jobid=$JOBID` into `$IMG` under the
-container name `fivllm`, mounts `$ROOT` read-write and `/lustre/share`
-read-only, and exports:
+container name `fivllm`, mounts `$ROOT` read-write (plus `/lustre/share`
+read-only *if that path exists* — it is a cluster-local checkpoint mirror, and
+`EXTRA_MOUNTS` adds anything else), and exports:
 
 ```bash
 export FLASHINFER_DISABLE_VERSION_CHECK=1
@@ -471,32 +495,28 @@ site-packages wheel.
 
 ### 1.5. Running with a different ROOT
 
-`in_container.sh`, `setup_container.sh` and `bench_offline.py` all take
-overrides (`ROOT`, `REPO`, `VENV`, `MODEL`, `MODEL_NVFP4`), so §1.3, §1.4 and §3
-need no edits. The microbenchmark in §2 does — these three lines hardcode the
-original path:
+**No file needs editing.** Every script reads its paths from the environment:
+`ROOT`, and where relevant `REPO`, `VENV`, `IMG`, `W`, and the four `MODEL_*`
+checkpoint paths. That includes the microbenchmark — `submit_jobs.sh` and
+`job_payload.sh` both take `ROOT`, and the import-path assert compares against
+`$REPO` rather than a baked-in prefix.
 
-| file | line | what |
-|---|---|---|
-| `model_shapes/submit_jobs.sh` | 12 | `ROOT=/lustre/fsw/.../mhoqueanik` |
-| `model_shapes/job_payload.sh` | 7 | `ROOT=/lustre/fsw/.../mhoqueanik` |
-| `model_shapes/job_payload.sh` | 28 | `assert m.__file__.startswith(".../flashinfer-2")` |
+What you do have to supply is a SLURM account and partition, since the defaults
+are this cluster's:
 
 ```bash
-OLD=/lustre/fsw/coreai_libraries_cudnn/mhoqueanik
-sed -i "s#$OLD#$ROOT#g" $ROOT/moe_ep_benchmark/model_shapes/submit_jobs.sh \
-                        $ROOT/moe_ep_benchmark/model_shapes/job_payload.sh
+# microbenchmark (§2)
+ACCOUNT=<account> PARTITION=<partition> bash model_shapes/submit_jobs.sh
+
+# e2e and accuracy (§3, §4) -- the CLI overrides the #SBATCH lines
+sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_ep8.sh
 ```
 
-Also swap `-A coreai_libraries_cudnn` / `-p batch` for your account and
-partition in `submit_jobs.sh`, `job_payload.sh`, and the §1.4a hold job.
-`job_vllm_pr_runbook_sweep_ep8.sh` needs no edit for either — it takes `ROOT` from
-the environment, and `sbatch -A … -p …` on the command line overrides its
-`#SBATCH` lines.
-
-The line-28 assert is why the `flashinfer-2/` parent directory has to stay:
-it checks the resolved `flashinfer.__file__` prefix, so renaming the checkout
-makes the microbenchmark fail after the install rather than before it.
+The `flashinfer-2/` parent directory still has to stay: `job_payload.sh` checks
+that the resolved `flashinfer.__file__` sits under `$REPO`, so a checkout
+somewhere else makes the microbenchmark fail after the editable install rather
+than before it. That check is what stops a stray wheel-installed flashinfer
+from being benchmarked instead of your branch.
 
 ---
 
