@@ -8,13 +8,13 @@ copied from the scripts that produced the recorded numbers.
 Provenance: the numbers live in [expected_results.md](expected_results.md) and
 come from the 2026-07-25 verification pass on one 1x8 B200 node — jobs
 **2337617** (microbenchmark), **2337646** (Flash e2e), **2337637** (V4-Pro e2e)
-and **2337638** (GSM8K), on vLLM 0.25.1 with cutlass-dsl 4.5.2.
+and **2337638** (GSM8K), on vLLM 0.25.1, flashinfer `4_5_2-perf-fix` @
+`1ee41bcd`, cutlass-dsl 4.5.2.
 
 This is the only runbook on the branch. The one other document you may want is
 in the flashinfer checkout — `docs/design_docs/moe_ep_runbook.md`, which owns
 the container recipe (§1.2c) and the guide to adding a new mega-kernel backend.
 The chronological run log (`vllm_e2e/RUNS.md`) lives on the `vllm-pr` branch.
-
 
 **Four sections.** [§1 Prep](#1-prep) — clone, image, checkpoints, venv, patch.
 [§2 Kernel microbenchmark](#2-kernel-microbenchmark-16-min) — no vLLM, no
@@ -29,9 +29,12 @@ Expected numbers for §2–§4 live in [expected_results.md](expected_results.md
 
 ### 1.1. Prerequisites
 
-* One node with 8x SM100 (B200 or GB200 NVL8). Nothing here is multi-node.
-  The measured configuration is TP8+EP8 throughout; `expected_results.md`
-  is what you check against.
+* One node with **8x SM100** (cc 10.0) on NVLink — B200 or GB200 NVL8.
+  Nothing here is multi-node. The measured configuration is TP8+EP8 throughout;
+  `expected_results.md` is what you check against.
+* **CUDA 13.** The EP runtime wheels are cu13-only, so a CUDA 12 host cannot
+  install them at all — this is the prerequisite most likely to stop you before
+  you start. **NCCL >= 2.30.7.**
 * SLURM with pyxis/enroot, and an account and partition you can submit to.
   Every `sbatch`/`srun` below shows `-A <account> -p <partition>` — substitute
   yours; nothing in the repo depends on a particular one.
@@ -52,11 +55,11 @@ export W=$ROOT/moe_ep_benchmark/vllm_e2e   # derived; do not change
 export IMG=$ROOT/flashinfer-ep.sqsh        # the image §1.2c writes; any name
 ```
 
-`ROOT` is yours to choose. The layout below it is what the scripts default to
-— notably `$ROOT/flashinfer-2/flashinfer-moe_ep` — but every path is an
-environment override, so a different arrangement only costs you a `REPO=`.
-They read `ROOT` from the environment, so no file needs editing — §1.5 has
-the details, including the account and partition you do have to supply.
+`ROOT` is yours to choose, and the layout below it is only what the scripts
+default to — notably `$ROOT/flashinfer-2/flashinfer-moe_ep`. Every path is an
+environment override, so no file needs editing; a different arrangement costs
+you a `REPO=`. §1.5 has the details, including the account and partition you do
+have to supply.
 
 ---
 
@@ -107,9 +110,15 @@ Commits the recorded numbers were taken at:
 
 | repo | branch | commit |
 |---|---|---|
-| `moe_ep_benchmark` | `vllm_repro_8_gpu` | the branch tip |
+| `moe_ep_benchmark` | `vllm_repro_8_gpu` | `5810ef1` or later |
 | `flashinfer-2/flashinfer-moe_ep` | `4_5_2-perf-fix` | `1ee41bcd` |
 | `vllm-fi-moe-ep` (optional) | `fi-moe-ep-v4` | `c019433` |
+
+> The job scripts echo `git log --oneline -1` at startup, which reports the last
+> *commit* rather than the working tree. The verification logs therefore say
+> `399cb3c` even though they ran the scripts as of `5810ef1` — the edits were
+> uncommitted when the jobs were submitted. If you are matching a log against
+> the repo, trust the script contents, not that line.
 
 #### 1.2c. Build the container image
 
