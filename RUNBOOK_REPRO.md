@@ -367,12 +367,17 @@ the prequantized path.
 #### 1.4a. Hold a node
 
 ```bash
+mkdir -p $W/logs          # sbatch fails if --output's directory does not exist
+
 JOBID=$(sbatch --parsable -A <account> -p <partition> -N1 \
     --ntasks-per-node=1 --time=04:00:00 \
     -J moe_ep.hold \
     --output=$W/logs/hold_%j.log --wrap "sleep 14400")
 echo "hold job $JOBID"
 ```
+
+Four hours is the wall clock everything in §1.4 and §4 runs against; §2 and §3
+submit their own jobs and do not use it.
 
 #### 1.4b. Every later command goes through the container wrapper
 
@@ -397,8 +402,9 @@ without it the JIT cache lands in `/root/.cache` inside the overlay, dies with
 the hold job, and every new job repays the full nvcc/`cute.compile` cost — over
 30 minutes for the trtllm moe module alone.
 
-If your checkpoints live outside `$ROOT`, add them to `--container-mounts` or
-`in_container.sh` will not see them.
+If your checkpoints live outside `$ROOT`, pass them via `EXTRA_MOUNTS` —
+e.g. `EXTRA_MOUNTS=/data/ckpt:/data/ckpt:ro` — or the container will not see
+them. No need to edit `in_container.sh`.
 
 Those four are the **only** variables the wrapper sets. Everything else —
 `CKPT` and the four `MODEL_*` paths — reaches the container solely through
@@ -410,7 +416,7 @@ Skipping it is not silent-but-wrong, it just fails to find the model:
 bites most often the day *after* setup, when the 4h hold job is still alive but
 your terminal is not.
 
-#### 1.4c. One command
+#### 1.4c. Build it
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'bash setup_container.sh'
@@ -419,11 +425,10 @@ JOBID=$JOBID bash $W/in_container.sh 'bash setup_container.sh'
 JOBID=$JOBID bash $W/in_container.sh 'FRESH=1 bash setup_container.sh'
 ```
 
-`FRESH=1` is what you want if a venv is already there and you are unsure of its
-provenance — an older venv carrying DSL 4.6.1 will fail every cell on the guard
-in §2. §1.4d and §1.4e
-are what the script does, and §1.4f checks it landed; run those by hand only if
-you are debugging the setup.
+`FRESH=1` wipes the venv first; use it whenever one is already there and you
+are unsure of its provenance, since an older venv carrying DSL 4.6.1 will fail
+every cell on the guard in §2. §1.4d and §1.4e describe what the script does and
+§1.4f checks it landed — run those by hand only if you are debugging setup.
 
 #### 1.4d. What that actually runs
 
@@ -452,8 +457,8 @@ BUILD_NIXL_EP=0 python -m pip install --no-build-isolation --no-deps \
 bash $W/patch_0251/apply.sh
 ```
 
-**No cubin download is needed, and there is no step for one.** Both backends in
-this PR are JIT-compiled from `flashinfer/moe_ep/kernel_src/cutedsl_megamoe`
+**No cubin download is needed, and there is no step for one.** Both backends
+are JIT-compiled from `flashinfer/moe_ep/kernel_src/cutedsl_megamoe`
 through CuteDSL; nothing under `flashinfer/moe_ep/` reads a cubin. The
 ~25-minute `flashinfer --download-cubin` fetch pulls `TRTLLM_GEN_FMHA/GEMM/BMM`
 artifacts for the trtllm-gen split path, which this work never selects.
@@ -482,10 +487,10 @@ Idempotent; re-running prints `kernel.py: backends already registered (no-op)`.
    whole-file copy, so it does not roll the rest of that config module back to
    whatever vLLM version the patch was snapshotted from.
 4. Drops stale bytecode, then greps the patched tree and **fails** if anything
-   still imports `deepseek_v4.nvidia.fi_utils`. That guard exists because a
-   function-local import survived the module move once; since it sat in the
-   *native* experts' `forward()`, all three fi columns passed and it surfaced
-   only 45 minutes into a sweep, as a missing baseline.
+   still imports `deepseek_v4.nvidia.fi_utils`. A function-local import of the
+   pre-move path can hide in the *native* experts' `forward()`, where every fi
+   column still passes and only the baseline breaks — an hour into a sweep,
+   as a missing native column rather than an import error.
 
 Expected:
 
@@ -509,8 +514,10 @@ print("GUARD PASS: cutlass-dsl 4.5.2")
 PY'
 ```
 
-`flashinfer.__file__` must resolve under `$ROOT/flashinfer-2`, not to a
-site-packages wheel.
+`flashinfer.__file__` must resolve under your flashinfer checkout (`$REPO`,
+by default `$ROOT/flashinfer-2/flashinfer-moe_ep`), not to a site-packages
+wheel. If it points at site-packages the editable install did not take, and
+you would be benchmarking a released flashinfer instead of the branch.
 
 ---
 
