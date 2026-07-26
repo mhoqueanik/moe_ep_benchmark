@@ -1,0 +1,57 @@
+{
+ "tag": "fi_nvfp4",
+ "workload": "decode",
+ "input_len": 128,
+ "output_len": 256,
+ "num_prompts": 128,
+ "eager": false,
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-pro/hf/hf-0366e4e_orig",
+ "cutlass_dsl_version": "4.6.1",
+ "fi_moe_ep": "1",
+ "fi_megakernel": "nvfp4_cutedsl",
+ "median_total_tok_per_s": 5395.040607759743,
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 9.849564957083203,
+   "total_tok_per_s": 4990.271165697821,
+   "output_tok_per_s": 3326.847443798547
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 8.983893151045777,
+   "total_tok_per_s": 5471.124731072567,
+   "output_tok_per_s": 3647.4164873817112
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 9.053446310106665,
+   "total_tok_per_s": 5429.092780406725,
+   "output_tok_per_s": 3619.3951869378166
+  },
+  {
+   "round": 3,
+   "warmup": false,
+   "elapsed_s": 9.545070621999912,
+   "total_tok_per_s": 5149.464257154079,
+   "output_tok_per_s": 3432.9761714360525
+  },
+  {
+   "round": 4,
+   "warmup": false,
+   "elapsed_s": 9.114529241109267,
+   "total_tok_per_s": 5392.70857548075,
+   "output_tok_per_s": 3595.1390503205002
+  },
+  {
+   "round": 5,
+   "warmup": false,
+   "elapsed_s": 9.110589441959746,
+   "total_tok_per_s": 5395.040607759743,
+   "output_tok_per_s": 3596.693738506495
+  }
+ ]
+}

@@ -32,9 +32,10 @@ Expected numbers for §2–§4 live in [expected_results.md](expected_results.md
 * One node with **8x SM100** (cc 10.0) on NVLink — B200 or GB200 NVL8.
   Nothing here is multi-node. The measured configuration is TP8+EP8 throughout;
   `expected_results.md` is what you check against.
-* **CUDA 13.** The EP runtime wheels are cu13-only, so a CUDA 12 host cannot
-  install them at all — this is the prerequisite most likely to stop you before
-  you start. **NCCL >= 2.30.7.**
+* **CUDA 12 or 13.** `moe_ep` is CUDA-major agnostic: the image build and the
+  DSL install both derive the `cuXX` wheel suffix from `torch.version.cuda`
+  (override with `CUDA_MAJOR=<n>`), and the build enforces the NCCL floor
+  (>= 2.30.7) for whichever major it picks. The recorded numbers are on 13.
 * SLURM with pyxis/enroot, and an account and partition you can submit to.
   Every `sbatch`/`srun` below shows `-A <account> -p <partition>` — substitute
   yours; nothing in the repo depends on a particular one.

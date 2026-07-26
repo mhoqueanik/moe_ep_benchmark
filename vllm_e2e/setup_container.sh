@@ -53,7 +53,8 @@ if [[ "${DSL_461:-0}" == "1" ]]; then
     # quack to 0.6.1 (imports fine on 4.6.1 despite its ==4.6.0 metadata pin),
     # then force every dsl component to 4.6.1.
     python -m pip install --upgrade "quack-kernels==0.6.1"
-    python -m pip install --upgrade "nvidia-cutlass-dsl[cu13]==4.6.1"
+    CU="cu${CUDA_MAJOR:-$(python -c 'import torch; v=torch.version.cuda or ""; print(v.split(".")[0])')}"
+    python -m pip install --upgrade "nvidia-cutlass-dsl[$CU]==4.6.1"
     # dsl 4.6.1's tvm_ffi_provider needs make_kwargs_wrapper(map_dataclass_to_tuple=),
     # absent from the apache-tvm-ffi 0.1.9 wheel vllm resolves; tilelang (vllm's mhc
     # kernels) breaks on tvm-ffi 0.1.12's new registry. The intersection that keeps

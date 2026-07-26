@@ -17,7 +17,11 @@ PIP_CONSTRAINT="" BUILD_NIXL_EP=0 python -m pip install --no-build-isolation -e 
 # 4_5_2-perf-fix branch is validated against -- the two move together. An
 # unpinned --upgrade makes a sweep unattributable.
 DSL_VERSION="${DSL_VERSION:-4.5.2}"
-python -m pip install "nvidia-cutlass-dsl[cu13]==${DSL_VERSION}" 2>&1 | tail -2
+# Derive the cuXX extra from torch rather than hardcoding cu13, matching
+# build_flashinfer_ep_pytorch.sh: moe_ep itself is CUDA-major agnostic and
+# works on 12 and 13. Override with CUDA_MAJOR=<n>.
+CU="cu${CUDA_MAJOR:-$(python -c 'import torch; v=torch.version.cuda or ""; print(v.split(".")[0])')}"
+python -m pip install "nvidia-cutlass-dsl[$CU]==${DSL_VERSION}" 2>&1 | tail -2
 python -c "from importlib.metadata import version; v=version('nvidia-cutlass-dsl'); \
 assert v=='${DSL_VERSION}', f'DSL {v} != ${DSL_VERSION}'; print(f'GUARD PASS: cutlass-dsl {v}')" || exit 1
 
