@@ -1187,6 +1187,34 @@ largest, is the first to fail outright with "No available memory for the cache
 blocks". Every cell in §3c pins it. Full mechanism and the measured numbers:
 [expected_results.md](expected_results.md) §5.1.
 
+**A failed cell reads `MISSING`, not a wrong number.** Each sweep stamps a
+start time and its summary only accepts result JSONs written after it, so a cell
+that dies leaves `MISSING` in the table rather than silently reprinting the
+committed result from a previous run. If you see `MISSING`, the per-cell output
+above it has the traceback. A job can exit 0 with cells missing — read the
+summary, not the exit code.
+
+**A noisy node produces plausible-but-wrong microbenchmark numbers.** The
+harness reports p50 over the timed iterations, and interference inflates it
+without touching `e2e_us_min`. Compare the two columns before trusting a CSV:
+
+```bash
+python -c "
+import csv,sys
+for f in sys.argv[1:]:
+    for r in csv.DictReader(open(f)):
+        p50, mn = float(r['e2e_us_p50']), float(r['e2e_us_min'])
+        if mn and p50/mn > 1.5:
+            print('%s %s tok=%s p50=%.1f min=%.1f (%.1fx)' %
+                  (f.split('/')[-1], r['compute_kernel'], r['tokens_per_rank'], p50, mn, p50/mn))
+" model_shapes/results_ep8/*.csv
+```
+
+A clean run prints nothing. Anything above ~1.5x is contaminated, and it does
+not look like an error — it looks like a kernel that got slower at one size,
+which is exactly the shape of a real finding. Rerun the shape on another node
+rather than reasoning about the number.
+
 **The venv keeps whatever was applied last.** `apply.sh` writes into the
 installed wheel, so the venv reflects the last patch applied to it rather than
 whatever you have checked out. For a full revert, copy `kernel.py.orig` and
@@ -1207,3 +1235,8 @@ whatever you have checked out. For a full revert, copy `kernel.py.orig` and
   three backends agree, it is a property of the model and this eval, not of
   `moe_ep`; what gates a perf claim is the native-vs-fi_cutedsl delta, not the
   absolute.
+* Only EP8 is measured here. The microbenchmark and both sweeps run at world
+  size 8 throughout; a different world size is a different measurement (§2b
+  item 5), and no EP4 numbers are carried on this branch.
+* The `vllm_*` microbenchmark sections (split-path baselines) are not run —
+  they need `vllm==0.20.0`, which the image does not ship (§2c).
