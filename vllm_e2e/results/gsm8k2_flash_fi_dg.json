@@ -2,10 +2,12 @@
  "tag": "flash_fi_dg",
  "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-flash/hf/hf-6e76323_orig",
  "num_questions": 200,
- "accuracy": 0.96,
- "correct": 192,
+ "accuracy": 0.965,
+ "correct": 193,
  "invalid": 0,
- "elapsed_s": 43.68829401998664,
+ "truncated": 2,
+ "max_tokens": 512,
+ "elapsed_s": 47.54545345398947,
  "eager": true,
  "moe_backend": "flashinfer_moe_ep_mega_deep_gemm"
 }

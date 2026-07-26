@@ -5,7 +5,9 @@
  "accuracy": 0.88,
  "correct": 176,
  "invalid": 0,
- "elapsed_s": 112.7075989729783,
+ "truncated": 15,
+ "max_tokens": 512,
+ "elapsed_s": 119.3888823739835,
  "eager": true,
  "moe_backend": "deep_gemm_mega_moe"
 }

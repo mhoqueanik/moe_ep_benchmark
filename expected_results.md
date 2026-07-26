@@ -30,31 +30,32 @@ cross-checkpoint, which is why §4 exists and is not optional.
 
 ## 1. vLLM e2e — DeepSeek-V4-Flash, EP8
 
-`sbatch vllm_e2e/job_vllm_pr_runbook_sweep_ep8.sh` (~1 h). Job 2337204;
-decode-1k re-measured in 2337549 after the fix in §5.1.
+`sbatch vllm_e2e/job_vllm_pr_runbook_sweep_ep8.sh` (~1 h). Job **2337646**.
 
 | cell | native tok/s | fi_dg | fi_cutedsl |
 |---|---|---|---|
-| prefill-8k | 39012 | 39824 (1.021x) | 46774 (**1.199x**) |
-| decode-1k | 30724 | 31517 (1.026x) | 32695 (**1.064x**) |
-| 100K ISL / 1K | 29642 | 30265 (1.021x) | 32940 (**1.111x**) |
-| 32K ISL / 32 | 35714 | 36604 (1.025x) | 42078 (**1.178x**) |
+| prefill-8k | 38986 | 40225 (1.032x) | 46584 (**1.195x**) |
+| decode-1k | 30845 | 31494 (1.021x) | 32741 (**1.061x**) |
+| 100K ISL / 1K | 29632 | 30230 (1.020x) | 32913 (**1.111x**) |
+| 32K ISL / 32 | 35700 | 36597 (1.025x) | 42028 (**1.177x**) |
 
 Latency on the interactivity cells (`REQUIRE_LATENCY=1`), fi_cutedsl vs native:
-TTFT 42.1s vs 49.3s at 100K, 12.8s vs 15.1s at 32K; ITL p50 51.8ms vs 56.1ms
-and 190.9ms vs 226.4ms.
+TTFT 42.2s vs 49.3s at 100K, 12.8s vs 15.1s at 32K; ITL p50 51.9ms vs 56.1ms
+and 191.2ms vs 226.5ms.
 
 ## 2. vLLM e2e — DeepSeek-V4-Pro, EP8
 
-`sbatch vllm_e2e/job_vllm_pr_runbook_sweep_pro.sh` (~2 h). Job 2337438;
-decode-1k from 2337487.
+`sbatch vllm_e2e/job_vllm_pr_runbook_sweep_pro.sh` (~2 h). Job **2337637**.
 
 | cell | native tok/s | fi_dg | fi_cutedsl |
 |---|---|---|---|
-| prefill-8k | 15178 | 15666 (1.032x) | 19873 (**1.309x**) |
-| decode-1k | 12872 | 13143 (1.021x) | 15327 (**1.191x**) |
-| 100K ISL / 1K | 12174 | 12404 (1.019x) | 14995 (**1.232x**) |
-| 32K ISL / 32 | 14051 | 14365 (1.022x) | 18162 (**1.293x**) |
+| prefill-8k | 15240 | 15630 (1.026x) | 20074 (**1.317x**) |
+| decode-1k | 12897 | 13157 (1.020x) | 15368 (**1.192x**) |
+| 100K ISL / 1K | 12223 | 12453 (1.019x) | 15053 (**1.231x**) |
+| 32K ISL / 32 | 14117 | 14435 (1.023x) | 18250 (**1.293x**) |
+
+Latency, fi_cutedsl vs native: TTFT 95.0s vs 122.3s at 100K and 29.5s vs 38.4s
+at 32K; ITL p50 111.8ms vs 134.3ms and 441.3ms vs 573.9ms.
 
 **The fi_cutedsl win grows with model size** — 1.19-1.31x on Pro against
 1.06-1.20x on Flash, on identical cells. fi_dg is at parity (1.02x) everywhere,
@@ -63,8 +64,8 @@ on both models. If you see fi_dg far from 1.02x, read §5.1 before believing it.
 ## 3. Kernel microbenchmark — no vLLM, no checkpoints
 
 `GPUS=8 ./run.sh` for the ad-hoc sweep, or
-`model_shapes/submit_jobs.sh` for the shape table. Job 2337199;
-`model_shapes/results_ep8/model_shapes_20260725_045752_deepseek_v4_flash.csv`.
+`model_shapes/submit_jobs.sh` for the shape table. Job **2337617**;
+`model_shapes/results_ep8/model_shapes_20260725_154623_deepseek_v4_flash.csv`.
 
 DSV4-Flash geometry (hidden 4096, inter 2048, 256 experts, top-6). `e2e_pipelined`
 p50 microseconds per rank, with the same numbers as speedup vs
@@ -72,13 +73,13 @@ p50 microseconds per rank, with the same numbers as speedup vs
 
 | tok/rank | deep_gemm_mega | nvfp4_cutedsl | +combine_mxfp8 | +combine_nvfp4 |
 |---|---|---|---|---|
-| 8 | 108.6 µs | 121.8 (0.89x) | 128.1 (0.85x) | 128.0 (0.85x) |
-| 64 | 125.0 µs | 134.2 (0.93x) | 146.4 (0.85x) | 146.5 (0.85x) |
-| 512 | 155.7 µs | 191.5 (0.81x) | 175.1 (0.89x) | 169.1 (0.92x) |
-| 1024 | 237.7 µs | 232.4 (**1.02x**) | 207.9 (1.14x) | 197.5 (1.20x) |
-| 2048 | 381.0 µs | 336.7 (1.13x) | 289.8 (1.31x) | 275.4 (1.38x) |
-| 4096 | 693.4 µs | 578.6 (1.20x) | 471.9 (1.47x) | 425.0 (1.63x) |
-| 8192 | 1321.4 µs | 1100.8 (1.20x) | 880.7 (1.50x) | **779.2 (1.70x)** |
+| 8 | 108.5 µs | 119.8 (0.91x) | 128.0 (0.85x) | 126.0 (0.86x) |
+| 64 | 124.9 µs | 132.2 (0.94x) | 144.4 (0.86x) | 146.4 (0.85x) |
+| 512 | 154.7 µs | 189.4 (0.82x) | 173.1 (0.89x) | 168.9 (0.92x) |
+| 1024 | 233.5 µs | 232.4 (**1.00x**) | 205.9 (1.13x) | 197.5 (1.18x) |
+| 2048 | 379.1 µs | 334.8 (1.13x) | 287.7 (1.32x) | 273.4 (1.39x) |
+| 4096 | 680.0 µs | 578.5 (1.18x) | 472.0 (1.44x) | 422.9 (1.61x) |
+| 8192 | 1320.4 µs | 1104.8 (1.20x) | 887.3 (1.49x) | **772.2 (1.71x)** |
 
 The crossover is near 1024 tokens/rank: below it deep_gemm_mega wins, above it
 the cutedsl kernels pull away, reaching 1.70x at 8192. This is the kernel-level
@@ -90,12 +91,12 @@ number. Model quality is §4.
 
 ## 4. Accuracy gate — GSM8K, both checkpoints
 
-`sbatch vllm_e2e/job_gsm8k_flash_pro.sh` (~35 min, both models). Job 2337476;
-token-budget probe 2337550.
+`sbatch vllm_e2e/job_gsm8k_flash_pro.sh` (~35 min, both models, both at TP8).
+Job **2337638**; token-budget probe 2337550.
 
 | model | native | fi_dg | fi_cutedsl (NVFP4 cast) | delta |
 |---|---|---|---|---|
-| Flash | 0.960 | 0.960 | **0.970** | +0.010 |
+| Flash | 0.965 | 0.965 | **0.965** | +0.000 |
 | Pro | 0.880 | 0.880 | **0.890** | +0.010 |
 
 **The delta is the number that gates a perf claim.** Because fi_cutedsl runs a
@@ -103,7 +104,8 @@ different checkpoint, its throughput is only comparable if its accuracy is —
 ±0.010 on 200 questions is 2 questions, i.e. noise. Both models pass.
 
 **Do not read Pro's 0.880 as a regression.** All three backends agree exactly
-(176/176/178 correct), so it is a property of the model and this eval, not of
+(176/176/178 correct; Flash is 193/193/193), so it is a property of the model
+and this eval, not of
 `moe_ep`. It is not a truncation artifact either: raising `--max-tokens`
 512 -> 1024 -> 2048 moves accuracy 0.8800 -> 0.8750 -> 0.8750 while truncated
 completions only fall 15 -> 14 -> 13, i.e. a handful never terminate at any
@@ -165,6 +167,12 @@ session** — native's decode drifts round-over-round, so cross-session ratios
 are not trustworthy. GSM8K on 200 questions has a granularity of 0.005, so
 treat anything inside ±0.02 as agreement.
 
-Provenance for every number: jobs 2337199, 2337204, 2337438, 2337473, 2337476,
-2337487, 2337549, 2337550. The full chronological log lives on the `vllm-pr`
+Provenance: every table above is the **verification pass of 2026-07-25
+evening**, run from this branch's own scripts against a freshly rebuilt venv —
+microbenchmark **2337617**, Flash e2e **2337646**, Pro e2e **2337637**, GSM8K
+**2337638**. It reproduced the original measurement pass (2337199 / 2337204 /
+2337438 / 2337487 / 2337476) to within **0.5% on absolute throughput and
+0.008x on every ratio**, which is where the ±0.02x tolerance above comes from.
+The diagnostic jobs behind §5 are 2337473 (root cause), 2337549 (Flash fix) and
+2337550 (token budget). The full chronological log lives on the `vllm-pr`
 branch in `vllm_e2e/RUNS.md` (runs 43-50).

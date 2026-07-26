@@ -2,10 +2,12 @@
  "tag": "flash_fi_cutedsl",
  "model": "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/scratch_runbook/checkpoints/deepseek-v4-flash-nvfp4",
  "num_questions": 200,
- "accuracy": 0.97,
- "correct": 194,
+ "accuracy": 0.965,
+ "correct": 193,
  "invalid": 0,
- "elapsed_s": 44.331350505992305,
+ "truncated": 0,
+ "max_tokens": 512,
+ "elapsed_s": 22.374416937993374,
  "eager": true,
  "moe_backend": "flashinfer_moe_ep_mega_cutedsl"
 }

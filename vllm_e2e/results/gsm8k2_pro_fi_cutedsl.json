@@ -5,7 +5,9 @@
  "accuracy": 0.89,
  "correct": 178,
  "invalid": 0,
- "elapsed_s": 72.99230508797336,
+ "truncated": 18,
+ "max_tokens": 512,
+ "elapsed_s": 74.45202264699037,
  "eager": true,
  "moe_backend": "flashinfer_moe_ep_mega_cutedsl"
 }
