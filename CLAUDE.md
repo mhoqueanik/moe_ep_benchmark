@@ -42,8 +42,11 @@ The venv gets 4.5.2 from vLLM's pin; `model_shapes/job_payload.sh` installs and
 asserts it explicitly because it does not use the venv. The container image
 pins 4.5.0 and is *not* the source of truth.
 
-**World size = DP = EP** (`run.sh:33`). `GPUS=8` is EP8, which is what every
-number here was measured at.
+**EP8 everywhere, but not the same parallelism.** The microbenchmark shards
+nothing — `run.sh:33` makes world size = DP = EP, so `GPUS=8` is DP8/EP8/TP1.
+The vLLM e2e sweeps set `TP=8` and leave `DP` at 1, giving TP8/EP8/DP1. Expert
+parallelism is 8 in both; do not carry the microbenchmark's DP into an e2e
+claim, or vice versa.
 
 **`make_tables.py` ignores the `gpus` column.** It keys cells on
 `(geometry, tokens/rank, variant)`, so CSVs from different world sizes in one

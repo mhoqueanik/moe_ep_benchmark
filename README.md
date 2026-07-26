@@ -56,8 +56,12 @@ vllm_e2e/
   to work around. With the WAR, 4.5.2 matches the old 4.6.1 stack to within
   0.7% and 4.6.1 is unnecessary. `model_shapes/job_payload.sh` asserts the
   version because it does not use the venv.
-* **World size = DP = EP** (`run.sh`). `GPUS=8` is EP8; a different world size
-  is a different measurement, not a better estimate of the same one.
+* **The two levels reach EP8 differently.** The microbenchmark (`run.sh`,
+  `model_shapes/`) has no model to shard, so it runs one process per GPU:
+  world size = DP = EP, and `GPUS=8` means DP8/EP8/TP1. The vLLM e2e sweeps
+  shard one engine instead: **TP8/EP8/DP1**. Expert parallelism is 8 in both —
+  that is the axis under test — but they are not the same configuration, and a
+  different world size is a different measurement either way.
 * **`make_tables.py` ignores the `gpus` column** — it keys on
   `(geometry, tokens/rank, variant)`, so results from two world sizes in one
   directory silently overwrite each other. Use a separate `OUT_DIR` per EP

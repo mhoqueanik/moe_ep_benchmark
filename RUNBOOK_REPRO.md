@@ -711,8 +711,8 @@ Set **both**. `GPUS` alone leaves the device list at the 8-GPU default on any
 cluster that does not populate `CUDA_VISIBLE_DEVICES` itself; conversely, if you
 do request `--gres`, SLURM sets `CUDA_VISIBLE_DEVICES` in the job environment
 and that wins over the exported value — harmless when it lists all 8, wrong if
-it lists fewer than `GPUS`. `world size = DP = EP` (`run.sh:33`), so `GPUS=8`
-*is* EP8.
+it lists fewer than `GPUS`. For the microbenchmark `world size = DP = EP`
+(`run.sh:33`), so `GPUS=8` *is* EP8 — with TP1, unlike the e2e sweeps.
 
 **5. A different world size is a different measurement.** §2a is EP8, and
 world size sets the expert split — at 8-way each rank holds 32 of
