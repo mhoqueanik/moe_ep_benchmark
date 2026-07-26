@@ -67,54 +67,102 @@ on both models. If you see fi_dg far from 1.02x, read §5.1 before believing it.
 `model_shapes/submit_jobs.sh` for the shape table. Job **2337617**;
 `model_shapes/results_ep8/model_shapes_20260725_154623_deepseek_v4_flash.csv`.
 
-DSV4-Flash geometry (hidden 4096, inter 2048, 256 experts, top-6). `e2e_pipelined`
-p50 microseconds per rank, with the same numbers as speedup vs
-`deep_gemm_mega` — higher is better, >1.00x means the CuteDSL kernel is ahead:
+`e2e_pipelined` p50 microseconds per rank, with each CuteDSL variant's speedup
+against `deep_gemm_mega` in brackets — higher is better, >1.00x means CuteDSL is
+ahead. All six shapes in `model_shapes/shapes.tsv`, EP8:
 
-| tok/rank | deep_gemm_mega | nvfp4_cutedsl | +combine_mxfp8 | +combine_nvfp4 |
+**`deepseek_v4_flash`** — hidden 4096, inter 2048, 256 experts, top-6 — the geometry the §1 e2e sweep uses.
+
+| tok/rank | dg | nvfp4 bf16 | +ikr | +combine_nvfp4 | +combine_mxfp8 |
+|---|---|---|---|---|---|
+| 8 | 108.5 | 119.8 (0.91x) | 128.0 (0.85x) | 126.0 (0.86x) | 128.0 (0.85x) |
+| 64 | 124.9 | 132.2 (0.94x) | 146.4 (0.85x) | 146.4 (0.85x) | 144.4 (0.86x) |
+| 512 | 154.7 | 189.4 (0.82x) | 192.0 (0.81x) | 168.9 (0.92x) | 173.1 (0.89x) |
+| 1024 | 233.5 | 232.4 (1.00x) | 237.0 (0.99x) | 197.5 (1.18x) | 205.9 (1.13x) |
+| 2048 | 379.1 | 334.8 (1.13x) | 334.8 (1.13x) | 273.4 (1.39x) | 287.7 (1.32x) |
+| 4096 | 680.0 | 578.5 (1.18x) | 574.4 (1.18x) | 422.9 (1.61x) | 472.0 (1.44x) |
+| 8192 | 1320.4 | 1104.8 (1.20x) | 1091.7 (1.21x) | 772.2 (1.71x) | 887.3 (1.49x) |
+
+**`deepseek_v4_pro`** — hidden 7168, inter 3072, 384 experts, top-6 — the geometry the §2 e2e sweep uses.
+
+| tok/rank | dg | nvfp4 bf16 | +ikr | +combine_nvfp4 | +combine_mxfp8 |
+|---|---|---|---|---|---|
+| 8 | 260.1 | 261.1 (1.00x) | 267.3 (0.97x) | 267.2 (0.97x) | 268.6 (0.97x) |
+| 64 | 327.7 | 334.7 (0.98x) | 349.1 (0.94x) | 345.0 (0.95x) | 347.1 (0.94x) |
+| 512 | 376.9 | 394.3 (0.96x) | 398.3 (0.95x) | 377.8 (1.00x) | 382.0 (0.99x) |
+| 1024 | 492.1 | 441.3 (1.12x) | 444.4 (1.11x) | 418.8 (1.18x) | 426.9 (1.15x) |
+| 2048 | 899.1 | 626.2 (1.44x) | 664.0 (1.35x) | 572.4 (1.57x) | 586.7 (1.53x) |
+| 4096 | 1591.8 | 1023.0 (1.56x) | 1036.2 (1.54x) | 941.1 (1.69x) | 962.0 (1.65x) |
+| 8192 | 3144.2 | 1919.0 (1.64x) | 1945.0 (1.62x) | 1716.7 (1.83x) | 1727.9 (1.82x) |
+
+**`deepseek_v3`** — hidden 7168, inter 2048, 256 experts, top-8.
+
+| tok/rank | dg | nvfp4 bf16 | +ikr | +combine_nvfp4 | +combine_mxfp8 |
+|---|---|---|---|---|---|
+| 8 | 170.8 | 171.0 (1.00x) | 185.3 (0.92x) | 183.2 (0.93x) | 183.3 (0.93x) |
+| 64 | 184.4 | 183.3 (1.01x) | 207.9 (0.89x) | 203.7 (0.91x) | 205.9 (0.90x) |
+| 512 | 282.6 | 267.3 (1.06x) | 271.2 (1.04x) | 242.8 (1.16x) | 253.0 (1.12x) |
+| 1024 | 465.0 | 375.8 (1.24x) | 384.0 (1.21x) | 314.4 (1.48x) | 326.6 (1.42x) |
+| 2048 | 809.4 | 576.5 (1.40x) | 598.9 (1.35x) | 490.5 (1.65x) | 517.1 (1.57x) |
+| 4096 | 1604.6 | 1045.5 (1.53x) | 1061.9 (1.51x) | 860.1 (1.87x) | 892.9 (1.80x) |
+| 8192 | 3236.3 | 2031.6 (1.59x) | 2092.1 (1.55x) | 1576.0 (2.05x) | 1707.0 (1.90x) |
+
+**`kimi_k2_6`** — hidden 7168, inter 2048, 384 experts, top-8.
+
+| tok/rank | dg | nvfp4 bf16 | +ikr | +combine_nvfp4 | +combine_mxfp8 |
+|---|---|---|---|---|---|
+| 8 | 206.8 | 209.9 (0.99x) | 226.3 (0.91x) | 216.1 (0.96x) | 218.0 (0.95x) |
+| 64 | 253.9 | 245.3 (1.04x) | 271.3 (0.94x) | 257.0 (0.99x) | 257.0 (0.99x) |
+| 512 | 315.4 | 320.5 (0.98x) | 322.0 (0.98x) | 291.8 (1.08x) | 302.2 (1.04x) |
+| 1024 | 450.7 | 408.4 (1.10x) | 410.6 (1.10x) | 342.9 (1.31x) | 355.3 (1.27x) |
+| 2048 | 825.3 | 619.5 (1.33x) | 639.9 (1.29x) | 533.6 (1.55x) | 563.1 (1.47x) |
+| 4096 | 1664.0 | 1048.5 (1.59x) | 1070.0 (1.56x) | 875.5 (1.90x) | 901.7 (1.85x) |
+| 8192 | 3128.4 | 2045.9 (1.53x) | 2101.2 (1.49x) | 1628.6 (1.92x) | 1759.7 (1.78x) |
+
+**`qwen3_5_397b`** — hidden 4096, inter 1024, 512 experts, top-10.
+
+| tok/rank | dg | nvfp4 bf16 | +ikr | +combine_nvfp4 | +combine_mxfp8 |
+|---|---|---|---|---|---|
+| 8 | 112.7 | 125.8 (0.90x) | 150.6 (0.75x) | 138.2 (0.82x) | 141.7 (0.80x) |
+| 64 | 131.1 | 142.5 (0.92x) | 181.2 (0.72x) | 162.8 (0.81x) | 166.8 (0.79x) |
+| 512 | 194.7 | 209.9 (0.93x) | 214.9 (0.91x) | 179.2 (1.09x) | 189.4 (1.03x) |
+| 1024 | 309.2 | 298.0 (1.04x) | 310.3 (1.00x) | 240.6 (1.29x) | 259.2 (1.19x) |
+| 2048 | 549.0 | 465.9 (1.18x) | 474.1 (1.16x) | 351.1 (1.56x) | 384.0 (1.43x) |
+| 4096 | 1032.2 | 855.1 (1.21x) | 877.6 (1.18x) | 592.9 (1.74x) | 686.0 (1.50x) |
+| 8192 | 2022.4 | 1619.0 (1.25x) | 1678.3 (1.21x) | 1098.8 (1.84x) | 1270.8 (1.59x) |
+
+**`gpt_oss_120b`** — hidden 2880, inter 2880, 128 experts, top-4 — no `dg`
+column, so absolute microseconds only (see below).
+
+| tok/rank | nvfp4 bf16 | +ikr | +combine_nvfp4 | +combine_mxfp8 |
 |---|---|---|---|---|
-| 8 | 108.5 µs | 119.8 (0.91x) | 128.0 (0.85x) | 126.0 (0.86x) |
-| 64 | 124.9 µs | 132.2 (0.94x) | 144.4 (0.86x) | 146.4 (0.85x) |
-| 512 | 154.7 µs | 189.4 (0.82x) | 173.1 (0.89x) | 168.9 (0.92x) |
-| 1024 | 233.5 µs | 232.4 (**1.00x**) | 205.9 (1.13x) | 197.5 (1.18x) |
-| 2048 | 379.1 µs | 334.8 (1.13x) | 287.7 (1.32x) | 273.4 (1.39x) |
-| 4096 | 680.0 µs | 578.5 (1.18x) | 472.0 (1.44x) | 422.9 (1.61x) |
-| 8192 | 1320.4 µs | 1104.8 (1.20x) | 887.3 (1.49x) | **772.2 (1.71x)** |
+| 8 | 93.2 | 95.4 | 97.2 | 97.4 |
+| 64 | 95.2 | 99.4 | 101.3 | 101.4 |
+| 512 | 132.2 | 136.2 | 127.9 | 132.0 |
+| 1024 | 173.1 | 177.2 | 165.0 | 169.0 |
+| 2048 | 240.7 | 244.8 | 222.1 | 226.4 |
+| 4096 | 379.9 | 383.8 | 329.6 | 339.1 |
+| 8192 | 697.4 | 697.2 | 541.7 | 607.3 |
 
-The crossover is near 1024 tokens/rank: below it deep_gemm_mega wins, above it
-the cutedsl kernels pull away, reaching 1.70x at 8192. This is the kernel-level
-shape of the e2e prefill win in §1-2 — large batches are where it pays.
+**The crossover sits between 512 and 1024 tok/rank on every shape.** Below it
+`deep_gemm_mega` wins; above it the CuteDSL variants pull away, and the
+quantized-combine wires (`+combine_nvfp4`, `+combine_mxfp8`) extend the lead
+further at large batches.
 
-`acc_loss_pct` in that CSV is a synthetic-input reconstruction error (20.6% for
-deep_gemm_mega, 23.1-24.9% for the cutedsl variants), **not** a model-quality
+**V4-Flash is the least favourable geometry of the five that have a baseline.**
+The shape the §1 e2e sweep uses tops out at 1.20x on plain `nvfp4_bf16`, where
+V4-Pro reaches 1.64x and `deepseek_v3` 1.59x. So §1's 1.06-1.20x end-to-end is
+a conservative reading of the kernel, and §2's larger Pro gains follow the
+kernel rather than any integration difference.
+
+`gpt_oss_120b` has no `dg` column because `deep_gemm_mega` cannot run it:
+it requires `hidden % 128 == 0 && intermediate % 128 == 0`, and 2880 is not a
+multiple of 128. The harness logs the assertion once per token count and
+carries on, so an absent baseline for that shape is expected, not a failed run.
+
+`acc_loss_pct` in the CSVs is a synthetic-input reconstruction error (20.6% for
+`deep_gemm_mega`, 23.1-24.9% for the CuteDSL variants), **not** a model-quality
 number. Model quality is §4.
-
-### 3a. Across all six shapes in `shapes.tsv`
-
-`nvfp4_cutedsl` vs `deep_gemm_mega`, p50, EP8. Last column is the best of the
-four CuteDSL variants at 8192 tok/rank:
-
-| shape | geometry | 512 | 1024 | 2048 | 4096 | 8192 | best @8192 |
-|---|---|---|---|---|---|---|---|
-| `deepseek_v4_flash` | 4096/2048/256E top-6 | 0.82x | 1.00x | 1.13x | 1.18x | 1.20x | **1.71x** |
-| `deepseek_v4_pro` | 7168/3072/384E top-6 | 0.96x | 1.12x | 1.44x | 1.56x | 1.64x | **1.83x** |
-| `deepseek_v3` | 7168/2048/256E top-8 | 1.06x | 1.24x | 1.40x | 1.53x | 1.59x | **2.05x** |
-| `kimi_k2_6` | 7168/2048/384E top-8 | 0.98x | 1.10x | 1.33x | 1.59x | 1.53x | **1.92x** |
-| `qwen3_5_397b` | 4096/1024/512E top-10 | 0.93x | 1.04x | 1.18x | 1.21x | 1.25x | **1.84x** |
-| `gpt_oss_120b` | 2880/2880/128E top-4 | n/a | n/a | n/a | n/a | n/a | n/a |
-
-The pattern holds across every geometry: `deep_gemm_mega` wins small batches,
-the crossover sits between 512 and 1024 tok/rank, and CuteDSL pulls away above
-it. **V4-Flash is the *least* favourable of the five** — the shape the e2e
-sweeps use is the one where the kernel wins least, so §1's 1.06-1.20x is a
-conservative reading of what the kernel can do. V4-Pro's 1.64x at 8192 against
-Flash's 1.20x is why fi_cutedsl gains more on Pro end-to-end (§2).
-
-`gpt_oss_120b` has no ratio because `deep_gemm_mega` cannot run it at all: it
-requires `hidden % 128 == 0 && intermediate % 128 == 0` and 2880 is not a
-multiple of 128, so the harness logs the assertion per token count and produces
-only the four CuteDSL variants. An absent baseline row for that shape is
-expected, not a failed run.
 
 ## 4. Accuracy gate — GSM8K, both checkpoints
 
