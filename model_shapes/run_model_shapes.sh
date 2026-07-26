@@ -20,7 +20,7 @@
 #       SEQ_LENS="8 2048" bash model_shapes/run_model_shapes.sh
 #
 # Knobs inherited from run.sh: GPUS, WARMUP, ITERS, MEGA_KNOBS, MEGA_TIMING
-# (default here: e2e_pipelined, the methodology of the 2026-07-15 tables).
+# (default here: e2e_pipelined, the methodology behind expected_results.md 3).
 set -uo pipefail
 
 MS_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

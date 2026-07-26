@@ -267,6 +267,9 @@ hf download nvidia/DeepSeek-V4-Pro-NVFP4 \
 
 `vllm_e2e/setup/` wraps all four pulls if you would rather not paste:
 `dl_mx_originals.sh [flash|pro|both]`, `dl_nvfp4_flash.sh`, `dl_nvfp4_pro.sh`.
+If the Pro NVFP4 pull dies partway — likely at 851 GB — `dl_nvfp4_resume.sh`
+restarts it against the revision already recorded, so the shards on disk stay
+consistent.
 
 On huggingface_hub older than 0.34 the command is `huggingface-cli download`
 with the same arguments. `hf download` resumes, so re-run it after an

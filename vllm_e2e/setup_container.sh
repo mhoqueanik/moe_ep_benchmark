@@ -38,7 +38,7 @@ python -m pip uninstall -y -q flashinfer-python || true
 BUILD_NIXL_EP=0 python -m pip install --no-build-isolation --no-deps -e "$REPO"
 
 # 3) CuTe-DSL runtime: vllm pins nvidia-cutlass-dsl==4.5.2, and since the
-#    MR!27 mainloop WAR (fi branch 4_5_2-perf-fix, 2026-07-22) the cutedsl
+#    MR!27 mainloop WAR (fi branch 4_5_2-perf-fix) the cutedsl
 #    mega kernels run at full 4.6.1 parity on 4.5.2 (TUNING.md "CuTe-DSL
 #    runtime sensitivity" follow-up) — so the default is now to KEEP vllm's
 #    own pin, which drops the entire 4.6.1 compat chain (quack 0.6.1,

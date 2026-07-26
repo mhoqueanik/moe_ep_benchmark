@@ -12,7 +12,7 @@
 #   Flash EP8/TP8 : native, fi_dg (mx)  +  fi_cutedsl (NVFP4 cast)
 #   Pro   EP8/TP8 : native, fi_dg (mx)  +  fi_cutedsl (NVFP4 cast)
 #
-# WHY THIS IS NOT A RERUN OF THE 2026-07-25 03:42 GSM8K (job 2337127 step 5):
+# WHY --model IS PASSED PER CELL RATHER THAN VIA THE MODEL ENV:
 # that run exported MODEL=<mx path> for the whole container. resolve_model()
 # gives MODEL priority over the per-backend NVFP4 default:
 #
@@ -34,11 +34,11 @@
 #
 # Usage:
 #   cd <repo>/vllm_e2e && sbatch job_gsm8k_flash_pro.sh
-#   (submit via scratch_runbook_submit_gsm8k.sh, which sets the four paths)
+#   with the four MODEL_* paths exported (RUNBOOK_REPRO.md 1.3)
 
 ROOT=${ROOT:-/lustre/fsw/coreai_libraries_cudnn/mhoqueanik}
 W=$ROOT/moe_ep_benchmark/vllm_e2e
-IMG=${IMG:-$ROOT/flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh}
+IMG=${IMG:-$ROOT/flashinfer-ep.sqsh}
 NQ=${NQ:-200}
 MIN_ACC=${MIN_ACC:-0.93}
 MOUNTS="$ROOT:$ROOT,/lustre/share:/lustre/share:ro"
@@ -46,7 +46,7 @@ MOUNTS="$ROOT:$ROOT,/lustre/share:/lustre/share:ro"
 
 FWD=""
 for v in MODEL_MX_FLASH MODEL_NVFP4_FLASH MODEL_MX_PRO MODEL_NVFP4_PRO; do
-    [[ -n "${!v:-}" ]] || { echo "$v is unset -- submit via scratch_runbook_submit_gsm8k.sh"; exit 2; }
+    [[ -n "${!v:-}" ]] || { echo "$v is unset -- export the four MODEL_* paths first, see RUNBOOK_REPRO.md 1.3"; exit 2; }
     [[ -d "${!v}" ]]   || { echo "$v=${!v} is not a directory"; exit 2; }
     FWD+="export $v='${!v}'; "
 done
@@ -105,9 +105,9 @@ gcell() {
 
 # Stale-result guard: the summary below only accepts JSONs written after
 # this point. Without it, a run whose cells all fail still prints a full
-# plausible table from the result files committed in the repo (observed:
-# job 2337618, 12/12 cells failed on the DSL guard, rc=0, summary looked
-# perfect). Committed results must never masquerade as a fresh run.
+# plausible table from the result files committed in the repo -- every cell
+# can fail, the job still exit 0, and the summary still look perfect.
+# Committed results must never masquerade as a fresh run.
 export RUN_T0=\$(date +%s)
 
 echo; echo '########## DSV4-FLASH  (EP8/TP8)'

@@ -12,7 +12,7 @@ set -uo pipefail
 ROOT="${ROOT:-/lustre/fsw/coreai_libraries_cudnn/mhoqueanik}"
 ACCOUNT="${ACCOUNT:-coreai_libraries_cudnn}"   # override for your cluster
 PARTITION="${PARTITION:-batch}"
-IMG="${IMG:-$ROOT/flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh}"
+IMG="${IMG:-$ROOT/flashinfer-ep.sqsh}"
 BENCH=$ROOT/moe_ep_benchmark
 REPO=$ROOT/flashinfer-2/flashinfer-moe_ep
 MS=$BENCH/model_shapes

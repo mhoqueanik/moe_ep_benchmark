@@ -1,10 +1,11 @@
 #!/bin/bash
-# Resume the interrupted V4-Pro NVFP4 download. The first run
-# (scratch_runbook_dl_pro_nvfp4.sh) died at 2026-07-25 06:29 with 49/64 shards
-# and no model.safetensors.index.json.
+# Resume an interrupted V4-Pro NVFP4 download (dl_nvfp4_pro.sh). At 851 GB the
+# pull is long enough that a killed process or a dropped connection is likely;
+# hf download resumes, so re-running is safe.
 #
-# Pins the revision recorded by that run rather than re-resolving it: a newer
-# good commit would hand us shards that do not match the 49 already on disk.
+# Uses the revision dl_nvfp4_pro.sh recorded in checkpoints/.pro_nvfp4_rev
+# rather than re-resolving it. Re-resolving could pick a newer commit whose
+# shards do not match the ones already on disk, leaving a mixed checkpoint.
 set -uo pipefail
 export ROOT=${ROOT:?set ROOT to your checkout root}
 export HF_HOME=$ROOT/.cache/huggingface

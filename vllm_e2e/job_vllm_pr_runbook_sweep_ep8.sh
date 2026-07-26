@@ -21,11 +21,9 @@
 # The 0.6.15 venv is below the new flashinfer floor, so the version gate is
 # explicitly skipped -- that is the documented pre-release escape hatch.
 #
-# Provenance: this is the script that produced job 2337204 -- the Flash rows of
-# expected_results.md §1 and RUNBOOK_REPRO.md §3c. Its decode-1k cell was
-# re-measured as job 2337549 after CAPTURE_SIZES was pinned (see the comment on
-# that cell below). Keep the cells byte-identical to those jobs or the recorded
-# numbers stop being a baseline.
+# This is the script behind the Flash rows of expected_results.md 1 and
+# RUNBOOK_REPRO.md 3c. Keep the cells as they are, or the recorded numbers stop
+# being a baseline.
 #
 # Usage:
 #   cd <repo>/vllm_e2e && sbatch job_vllm_pr_runbook_sweep.sh
@@ -46,7 +44,7 @@ set -uo pipefail
 # script to a spool dir, so the script's own location is not the checkout.
 ROOT=${ROOT:-/lustre/fsw/coreai_libraries_cudnn/mhoqueanik}
 W=$ROOT/moe_ep_benchmark/vllm_e2e
-IMG=${IMG:-$ROOT/flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh}
+IMG=${IMG:-$ROOT/flashinfer-ep.sqsh}
 ROUNDS=${ROUNDS:-3}
 MOUNTS="$ROOT:$ROOT,/lustre/share:/lustre/share:ro"
 [[ -n "${EXTRA_MOUNTS:-}" ]] && MOUNTS="$MOUNTS,$EXTRA_MOUNTS"
@@ -120,9 +118,9 @@ cell() {
 
 # Stale-result guard: the summary below only accepts JSONs written after
 # this point. Without it, a run whose cells all fail still prints a full
-# plausible table from the result files committed in the repo (observed:
-# job 2337618, 12/12 cells failed on the DSL guard, rc=0, summary looked
-# perfect). Committed results must never masquerade as a fresh run.
+# plausible table from the result files committed in the repo -- every cell
+# can fail, the job still exit 0, and the summary still look perfect.
+# Committed results must never masquerade as a fresh run.
 export RUN_T0=\$(date +%s)
 
 echo; echo '########## PREFILL-8K (headline)'
@@ -130,17 +128,15 @@ cell pre8k 'ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 CAPTURE_SIZ
     --workload prefill:1024:1 --num-prompts 256 --rounds $ROUNDS
 
 echo; echo '########## DECODE-1K (headline)'
-# CAPTURE_SIZES pinned 2026-07-25 (measured in jobs 2337473 / 2337487). Without
-# it this was the only cell setting MAX_CAPTURE while inheriting vLLM's dense
+# CAPTURE_SIZES is mandatory here. Without it this is the only cell setting MAX_CAPTURE while inheriting vLLM's dense
 # default capture ladder, and the cudagraph memory profiler then reserved
 # ~48 GiB/GPU for the flashinfer backends against a real capture cost of
 # ~6 GiB -- the same ~6 GiB it estimates correctly for native. The phantom
 # reservation came out of the KV cache: on V4-Pro EP8, fi_dg held only 189 of
 # the 1024 requested sequences (0.44x native, with *better* ITL because the
 # batches were tiny) and fi_cutedsl could not allocate a KV cache at all.
-# Pinning restores fi_dg to 1.02x and fi_cutedsl to 1.19x.
-# NB: this changes the cell. Native loses ~3% to padding, so dec1k numbers
-# recorded before 2026-07-25 are not comparable with ones recorded after.
+# Pinning restores fi_dg to 1.02x and fi_cutedsl to 1.19x, and costs native
+# ~3% to batch padding (batches round up to the nearest captured size).
 cell dec1k 'ENFORCE_EAGER=0 MAX_CAPTURE=4096 MAX_NUM_SEQS=1024 CAPTURE_SIZES=256,1024,2048,4096' \
     --workload decode:128:256 --num-prompts 1024 --rounds $ROUNDS
 

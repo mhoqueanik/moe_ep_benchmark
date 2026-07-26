@@ -1,9 +1,18 @@
 #!/bin/bash
+# EP8 knob retune for DeepSeek-V4-Pro (RUNBOOK_REPRO.md §3a). The branch
+# already ships the result as results/knob_cache_pro_ep8.json, so this only needs
+# rerunning if your geometry or world size differs -- at EP8 each rank holds
+# 48 of 384 experts, which changes the winning tiles.
+#
+#   ROOT=... IMG=... JOBID=<hold job> bash tune_knobs_pro_ep8.sh
+#
+# Synthetic weights, no checkpoint required. ~10 min.
 set -uo pipefail
-export ROOT=${ROOT:?set ROOT to your checkout root (the dir holding moe_ep_benchmark/, the container image and checkpoints/)}
-export IMG=$ROOT/flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh
+export ROOT=${ROOT:?set ROOT to your checkout root}
+export IMG=${IMG:?set IMG to the container image built in §1.2c}
+export JOBID=${JOBID:?set JOBID to the §1.4a hold job id}
 export W=$ROOT/moe_ep_benchmark/vllm_e2e
-export JOBID=$(cat "$ROOT/holdjob2.id")
+
 bash "$W/in_container.sh" "
 set -uo pipefail
 source venv0251/bin/activate
@@ -14,6 +23,6 @@ echo '##### V4-Pro EP8 tune (nvfp4, 8192 bucket, world=8) #####'
 torchrun --nproc_per_node=8 -m flashinfer.moe_ep.tune --dtype nvfp4 \
     --hidden 7168 --intermediate 3072 --num-experts 384 --topk 6 \
     --max-tokens 8192
-echo '##### PRO EP8 TUNE DONE (rc='\$?') #####'
+echo '##### V4-Pro EP8 TUNE DONE (rc='\$?') #####'
 ls -l $W/results/knob_cache_pro_ep8.json 2>&1
 "
