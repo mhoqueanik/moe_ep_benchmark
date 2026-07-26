@@ -40,7 +40,8 @@ cheaper than the rest — start there if you only want to see the kernels move.
 ### 1.1. Prerequisites
 
 * One node with **8x SM100** (cc 10.0) on NVLink — B200 or GB200 NVL8.
-  Nothing here is multi-node. The measured configuration is TP8+EP8 throughout;
+  Nothing here is multi-node. Expert parallelism is 8 everywhere; the e2e
+  sweeps pair it with TP8/DP1 and the microbenchmark with DP8/TP1 (§2).
   `expected_results.md` is what you check against.
 * **CUDA 12 or 13.** `moe_ep` is CUDA-major agnostic: the image build and the
   DSL install both derive the `cuXX` wheel suffix from `torch.version.cuda`
@@ -569,6 +570,11 @@ follows `REPO` wherever you put it.
 Drives the FlashInfer kernels directly, no vLLM, so it isolates kernel work
 from integration overhead. Submits its own SLURM job — it does not use the hold
 job from §1.4a, and it installs into the container overlay rather than the venv.
+
+**Parallelism differs from §3 and §4.** With no model to shard there is no
+tensor parallelism: this runs one process per GPU, so `DP=8, EP=8, TP=1`. The
+e2e sweeps run `TP=8, EP=8, DP=1`. Expert parallelism is 8 either way — that is
+the axis being measured — but the two are not the same configuration.
 
 **Only §1.2 is a prerequisite.** The geometries come from
 `model_shapes/shapes.tsv` (hidden / inter / experts / top-k) and the weights are
@@ -1241,7 +1247,8 @@ whatever you have checked out. For a full revert, copy `kernel.py.orig` and
 
 ## 6. Not covered
 
-* No multi-node run. Single node, TP8+EP8.
+* No multi-node run. Single node, EP8 — TP8/DP1 for the e2e sweeps, DP8/TP1
+  for the microbenchmark.
 * Building the vLLM PR from source is unverified; everything here patches a
   0.25.1 wheel (§1.4e).
 * `--min-acc 0.93` is calibrated for DSV4-Flash. **V4-Pro scores ~0.88 on all

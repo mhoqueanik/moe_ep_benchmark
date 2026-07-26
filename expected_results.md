@@ -6,9 +6,17 @@ lists the two ways that has actually happened.
 
 **Configuration.** vLLM 0.25.1 (wheel + `vllm_e2e/patch_0251/`), flashinfer
 branch `4_5_2-perf-fix` @ `1ee41bcd`, nvidia-cutlass-dsl **4.5.2** (vLLM
-0.25.1's own pin), TP8 + EP8, DP1, kv fp8, block 256,
-prefix caching off, round 0 discarded as warmup, median of the timed rounds
-(3 for every cell except the 100K one, which runs 2).
+0.25.1's own pin).
+
+**EP8 throughout, but the two levels reach it differently.** The e2e sweeps
+(§1, §2, §4) run **TP8 + EP8, DP1** — one engine sharded eight ways. The kernel
+microbenchmark (§3) runs **DP8 + EP8, TP1** — one process per GPU via
+`torch.multiprocessing`, no tensor sharding, since there is no model to shard.
+Expert parallelism is 8 in both, which is the axis under test; do not read the
+two levels as the same parallel configuration in every respect.
+
+e2e also: kv fp8, block 256, prefix caching off, round 0 discarded as warmup,
+median of the timed rounds (3 for every cell except the 100K one, which runs 2).
 
 **The three backends, and what a ratio between them means.**
 
