@@ -1,0 +1,40 @@
+{
+ "version": 1,
+ "entries": [
+  {
+   "device": "NVIDIA B200",
+   "dtype": "nvfp4",
+   "world_size": 8,
+   "hidden": 7168,
+   "intermediate": 6144,
+   "num_experts": 384,
+   "topk": 6,
+   "combine_dtype": "bf16",
+   "max_tokens": 512,
+   "knobs": {
+    "mma_tiler_mnk": [
+     256,
+     128,
+     256
+    ],
+    "cluster_shape_mnk": [
+     2,
+     1,
+     1
+    ],
+    "group_hint": 512,
+    "flag_batch": 1,
+    "epi_flag_batch": [
+     1,
+     4
+    ],
+    "token_back_mode": "standalone_warps",
+    "load_balance_mode": "atomic_counter",
+    "in_kernel_fc2_reduce": true
+   },
+   "p50_us": 425.51651131361723,
+   "source": "autotune",
+   "tuned_at": "2026-07-27T13:29:32"
+  }
+ ]
+}
