@@ -54,5 +54,7 @@ assert not dirty, f"flashinfer checkout at {top} has local modifications:\n{dirt
 print("GUARD PASS: flashinfer commit")
 PY
 
+# DRIVER selects the in-container driver (run_tune512.sh or
+# run_tune512_schedule.sh); both take the same SHAPE_NAME/TOKENS/OUT_DIR env.
 GPUS="${GPUS:-8}" CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}" \
-    bash "$BENCH/model_shapes/run_tune512.sh"
+    bash "$BENCH/model_shapes/${DRIVER:-run_tune512.sh}"

@@ -16,16 +16,18 @@ MS=$BENCH/model_shapes
 
 SHAPE_NAME="${SHAPE_NAME:-deepseek_v4_pro}"
 TOKENS="${TOKENS:-512}"
+DRIVER="${DRIVER:-run_tune512.sh}"
 OUT_DIR="${OUT_DIR:-$MS/results_tune512}"
 mkdir -p "$OUT_DIR"
 
-stamp="$(date +%Y%m%d_%H%M%S)_${SHAPE_NAME}_t${TOKENS}"
+tag="${DRIVER#run_tune512}"; tag="${tag%.sh}"; tag="${tag#_}"   # '' | 'schedule'
+stamp="$(date +%Y%m%d_%H%M%S)_${SHAPE_NAME}_t${TOKENS}${tag:+_$tag}"
 jobid=$(sbatch --parsable -A "$ACCOUNT" -p "$PARTITION" -N1 \
     --ntasks-per-node=1 --time=04:00:00 \
-    -J "coreai_libraries_cudnn-fi.tune512.${SHAPE_NAME}" \
-    --output="$OUT_DIR/slurm_tune512_${SHAPE_NAME}_%j.log" \
+    -J "coreai_libraries_cudnn-fi.tune512${tag:+.$tag}.${SHAPE_NAME}" \
+    --output="$OUT_DIR/slurm_tune512${tag:+_$tag}_${SHAPE_NAME}_%j.log" \
     --wrap "srun --container-image='$IMG' \
         --container-mounts='$ROOT:$ROOT' \
         --container-workdir='$REPO' \
-        bash -lc 'SHAPE_NAME=\"$SHAPE_NAME\" TOKENS=\"$TOKENS\" STAMP=\"$stamp\" OUT_DIR=\"$OUT_DIR\" bash $MS/job_payload_tune512.sh'")
+        bash -lc 'SHAPE_NAME=\"$SHAPE_NAME\" TOKENS=\"$TOKENS\" STAMP=\"$stamp\" OUT_DIR=\"$OUT_DIR\" DRIVER=\"$DRIVER\" bash $MS/job_payload_tune512.sh'")
 echo "submitted tune512 ${SHAPE_NAME}@${TOKENS}: job ${jobid} (stamp ${stamp})"
