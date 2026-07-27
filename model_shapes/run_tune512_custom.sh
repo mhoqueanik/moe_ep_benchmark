@@ -95,6 +95,7 @@ cell () {
         --num-experts "$NUM_EXPERTS" --topk "$TOPK" \
         --max-tokens "$TOKENS" \
         "${knob_args[@]}" \
+        ${NO_CURATED:+--no-curated} \
         || { echo "[error] custom sweep failed"; exit 1; }
 
     echo ""
