@@ -56,7 +56,10 @@ RUNBOOK_REPRO.md §1; nothing below works without it. All submit scripts take
 ACCOUNT=<account> PARTITION=<partition> IMG=<flashinfer-ep image> \
     bash model_shapes/submit_jobs.sh
 
-# turn the CSVs into the per-shape markdown tables
+# turn the CSVs into the per-shape markdown tables — works standalone on the
+# shipped results_ep8/ CSVs, no GPU needed. One table per shape:
+#   | tok/rank | dg | nvfp4 bf16 | +ikr | +combine_nvfp4 | +combine_mxfp8 |
+# (p50 us; fp4-family cells carry a speedup-vs-dg ratio)
 python model_shapes/make_tables.py \
     model_shapes/results_ep8/model_shapes_*.csv -o RESULTS.md
 
