@@ -42,6 +42,98 @@ vllm_e2e/
   results/                 only the JSONs expected_results.md cites
 ```
 
+## Running the benchmarks
+
+Setup first — container image, venv, vLLM patch, checkpoints — is
+RUNBOOK_REPRO.md §1; nothing below works without it. All submit scripts take
+`ROOT`/`ACCOUNT`/`PARTITION`/`IMG` overrides from the environment.
+
+**Microbenchmark** (no vLLM, no checkpoints; RUNBOOK §2):
+
+```bash
+# full model-shape sweep: one SLURM job per shape in shapes.tsv (~20 min each,
+# parallel nodes), CSVs land in model_shapes/results_ep8/ (override OUT_DIR)
+ACCOUNT=<account> PARTITION=<partition> IMG=<flashinfer-ep image> \
+    bash model_shapes/submit_jobs.sh
+
+# turn the CSVs into the per-shape markdown tables
+python model_shapes/make_tables.py \
+    model_shapes/results_ep8/model_shapes_*.csv -o RESULTS.md
+
+# one cell by hand, inside the container on an 8-GPU node
+MEGA_LIST=nvfp4_cutedsl TOKENS=512 SECTION=fi_mega bash run.sh
+SECTION=fi_mega bash run_sweep.sh          # token sweep, one backend list
+```
+
+Resubmit a single shape to fill gaps (`SHAPE_LIST=qwen3_5_397b bash
+model_shapes/submit_jobs.sh` — compiles are cached, later CSVs win). Two
+transient failure modes seen in practice, both fixed by resubmitting the
+shape: a pip network error installing cutlass-dsl (the DSL guard aborts the
+job), and an editable-install race when many jobs start at once
+(`ModuleNotFoundError: flashinfer`, every cell warns and the CSV is empty).
+
+**vLLM e2e** (RUNBOOK §3-§4; needs the §1 venv, patch and checkpoints):
+
+```bash
+cd vllm_e2e
+sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_ep8.sh   # Flash, 4 cells x 3 backends, ~1 h
+sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_pro.sh   # V4-Pro, same cells, ~2 h
+sbatch -A <account> -p <partition> job_gsm8k_flash_pro.sh             # accuracy gate, ~35 min
+```
+
+Run all three backends of a cell in one session, and check the
+`[fi_moe_ep] ep_rank=…` banner before believing any fi number (see below).
+
+## Tuning
+
+The cutedsl kernel picks its schedule (mma tile, cluster shape, token-back
+mode, …) through three tiers, highest priority first:
+
+1. **Explicit knobs** — `MEGA_KNOBS='{"mma_tiler_mnk": [256,128,256], ...}'`
+   (microbenchmark only; lists become tuples).
+2. **Knob cache** — a JSON file keyed by (device, dtype, world size, geometry,
+   combine wire, token bucket), pointed to by `FLASHINFER_MOE_EP_KNOB_CACHE`
+   (default `~/.cache/flashinfer/moe_ep_knob_cache.json`; `0` disables). An
+   untuned geometry falls through — the cache never borrows a neighbour's
+   knobs.
+3. **Built-in heuristic** — token-count-bucketed profiles hardcoded in the
+   flashinfer checkout at
+   `flashinfer/moe_ep/kernel_src/cutedsl_megamoe/shim/tuner.py`
+   (`default_knobs`: <512 / 512-1023 / 1024-2047 / >=2048 for nvfp4, two
+   buckets for mxfp8). Editing the heuristic means editing that file, not
+   this repo.
+
+Who uses what: the **microbenchmark tables resolve tier 3** (the sweep sets no
+cache and no `MEGA_KNOBS`) — deliberately, so they measure what an untuned
+user gets. The **e2e sweeps resolve tier 2** from caches this branch ships:
+`vllm_e2e/results/knob_cache_ep8.json` (Flash) and `knob_cache_pro_ep8.json`
+(Pro). Mind the gap when comparing levels: at deepseek_v4_pro @ 512 tok/rank
+the heuristic runs ~394 us where the tuned schedule reaches ~377 us — parity
+with deep_gemm (jobs 2340421/2340445).
+
+To retune:
+
+```bash
+# e2e caches (only needed if your geometry or world size differs from EP8 —
+# synthetic weights, no checkpoint, ~10 min each; see RUNBOOK §3a)
+ROOT=... IMG=... JOBID=<hold job> bash vllm_e2e/setup/tune_knobs_flash_ep8.sh
+ROOT=... IMG=... JOBID=<hold job> bash vllm_e2e/setup/tune_knobs_pro_ep8.sh
+
+# microbenchmark, online: autotune at the first forward, winner kept for the
+# session and recorded to the knob cache by rank 0
+MEGA_KNOBS=auto SECTION=fi_mega bash run.sh
+
+# microbenchmark, offline sweep for one shape/token point (SLURM, one node):
+# run_tune512.sh = curated sweep; _schedule / _custom = wider searches
+SHAPE_NAME=deepseek_v4_pro TOKENS=512 bash model_shapes/submit_tune512.sh
+DRIVER=run_tune512_custom.sh bash model_shapes/submit_tune512.sh
+```
+
+Tune-job winners land in `model_shapes/results_tune512/knob_cache_*.json`;
+nothing consumes them unless you point `FLASHINFER_MOE_EP_KNOB_CACHE` at one.
+A sweep run against a cache is a *different measurement* than the published
+heuristic-resolved tables — keep it in a separate `OUT_DIR`.
+
 ## Benchmark levels and timing methodology
 
 Two levels, two meanings of "benchmark":
