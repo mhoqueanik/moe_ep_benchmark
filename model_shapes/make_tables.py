@@ -6,7 +6,7 @@ Usage:
 Rows are grouped by geometry (hidden, inter, num_experts, top_k) and mapped
 back to model names via shapes.tsv. Each shape gets a table:
 
-    tokens/rank | fi_dg | fi_fp4 (vs dg) | fi_ikr | fi_combine_fp8 | fi_combine_fp4
+    tok/rank | dg | nvfp4 bf16 (vs dg) | +ikr | +combine_nvfp4 | +combine_mxfp8
 
 Cells are e2e p50 microseconds (MEGA_TIMING region); fp4-family cells carry a
 speedup-vs-dg ratio. Later CSVs win on duplicate cells (re-runs supersede).
@@ -27,7 +27,16 @@ KERNEL_TO_VARIANT = {
     "nvfp4_cutedsl+combine_mxfp8": "fi_combine_fp8",
     "nvfp4_cutedsl+combine_nvfp4": "fi_combine_fp4",
 }
-VARIANTS = ["fi_dg", "fi_fp4", "fi_ikr", "fi_combine_fp8", "fi_combine_fp4"]
+# Column order and display labels of the emitted tables (matches the variant
+# naming of RUNBOOK_REPRO.md §2a: the CSV keeps the fi_* names).
+VARIANTS = ["fi_dg", "fi_fp4", "fi_ikr", "fi_combine_fp4", "fi_combine_fp8"]
+VARIANT_LABELS = {
+    "fi_dg": "dg",
+    "fi_fp4": "nvfp4 bf16",
+    "fi_ikr": "+ikr",
+    "fi_combine_fp4": "+combine_nvfp4",
+    "fi_combine_fp8": "+combine_mxfp8",
+}
 
 
 def load_shape_names():
@@ -71,7 +80,7 @@ def main():
         "# Model-shape microbenchmark results",
         "",
         "e2e_pipelined p50 latency in microseconds per variant; fp4-family "
-        "cells show speedup vs `fi_dg` at the same point. `tok/s` and "
+        "cells show speedup vs `dg` at the same point. `tok/s` and "
         "accuracy-loss columns are in the raw CSVs.",
         "",
     ]
@@ -84,9 +93,11 @@ def main():
         )
         lines.append("")
         lines.append(
-            "| tok/rank | fi_dg | fi_fp4 | fi_ikr | fi_combine_fp8 | fi_combine_fp4 |"
+            "| tok/rank | "
+            + " | ".join(VARIANT_LABELS[v] for v in VARIANTS)
+            + " |"
         )
-        lines.append("|---|---|---|---|---|---|")
+        lines.append("|---|" + "---|" * len(VARIANTS))
         for tokens in sorted(cells[geom]):
             byvar = cells[geom][tokens]
             dg = byvar.get("fi_dg")
