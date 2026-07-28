@@ -70,6 +70,50 @@ at 32K; ITL p50 111.8ms vs 134.3ms and 441.3ms vs 573.9ms.
 1.06-1.20x on Flash, on identical cells. fi_dg is at parity (1.02x) everywhere,
 on both models. If you see fi_dg far from 1.02x, read §5.1 before believing it.
 
+## 2b. vLLM serving mode — server + client, both models
+
+`sbatch vllm_e2e/job_vllm_serving_sweep_ep8.sh` (Flash, ~40 min) and
+`job_vllm_serving_sweep_pro.sh` (Pro, ~1.5 h); RUNBOOK §3g. One process runs
+`vllm serve --moe-backend <be>`, a second runs `vllm bench serve` against it —
+random dataset, ISL 8 / OSL 1024 fixed, `num-prompts = 5 x C`. Decode-
+dominated by construction, so read it against the decode-1k row of §1/§2, not
+prefill-8k. Output tok/s (client-measured, over HTTP); ratio vs native:
+
+**DeepSeek-V4-Flash** (job 2344503):
+
+| concurrency | native out tok/s | fi_dg | fi_cutedsl |
+|---|---|---|---|
+| 32 | 1732 | 1743 (1.006x) | 1563 (0.902x) |
+| 128 | 6991 | 7303 (1.045x) | 6490 (0.928x) |
+| 1024 | 26786 | 29171 (1.089x) | 29413 (**1.098x**) |
+
+ITL p50 is 17-20 ms at conc 32/128 on all three backends and ~33 ms at 1024;
+TTFT p50 at conc 1024 is 2.7 s native / 1.6 s fi_dg / 0.7 s fi_cutedsl.
+
+**DeepSeek-V4-Pro** (job 2344523):
+
+| concurrency | native out tok/s | fi_dg | fi_cutedsl |
+|---|---|---|---|
+| 32 | 739 | 746 (1.009x) | 727 (0.984x) |
+| 128 | 3010 | 3081 (1.024x) | 2933 (0.975x) |
+| 1024 | 12654 | 12840 (1.015x) | 14230 (**1.125x**) |
+
+Pro ITL p50 is 41-44 ms at conc 32/128 on all three backends; at conc 1024
+fi_cutedsl has both the best ITL (70.2 vs native's 77.1 ms) and the best TTFT
+(0.9 vs 1.9 s).
+
+Two things this table is *supposed* to show, so do not "fix" them:
+
+* **fi_cutedsl loses at low concurrency.** At conc 32/128 the decode step
+  feeds ~32-128 tokens into an EP8 dispatch — far below the 512-1024
+  tokens/rank DeepGEMM↔CuteDSL crossover of §3. 0.90-0.93x on Flash is the
+  kernel behaving as measured in the microbenchmark, not a misconfiguration.
+  The win appears where the batch does (conc 1024).
+* **Serving absolutes sit below the offline cells.** The client measures
+  over HTTP, including tokenize/detokenize and streaming; the offline harness
+  times `llm.generate()` in-process. Compare serving to serving; the
+  fi-vs-native ratio is what carries across harnesses.
+
 ## 3. Kernel microbenchmark — no vLLM, no checkpoints
 
 `GPUS=8 ./run.sh` for the ad-hoc sweep, or

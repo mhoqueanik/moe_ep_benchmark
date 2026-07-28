@@ -17,7 +17,7 @@ backend.
 **Four sections.** [§1 Prep](#1-prep) — clone, image, checkpoints, venv, patch.
 [§2 Kernel microbenchmark](#2-kernel-microbenchmark-25-min-per-shape) — no vLLM,
 no checkpoints. [§3 vLLM e2e — throughput](#3-vllm-e2e--throughput) — the four
-headline cells, both models. [§4 Accuracy](#4-accuracy) — correctness smoke and
+headline cells, both models, plus the serving-mode server+client sweep (§3g). [§4 Accuracy](#4-accuracy) — correctness smoke and
 the GSM8K cross-checkpoint gate. Then [§5](#5-things-that-will-bite-you) gotchas
 and [§6](#6-not-covered) what is not covered. Expected numbers for §2–§4 live in
 [expected_results.md](expected_results.md).
@@ -1225,6 +1225,105 @@ cannot run `lc100k` at all, and changing `--workload` to fit means you are
 measuring a new cell, not reproducing a row. A single row for a new model is a
 valid measurement of that model; it only becomes comparable to this table
 cell-for-cell, on the same node type, with the invariants of §3c intact.
+
+### 3g. Serving mode — server + client
+
+Everything above runs the engine in-process (`bench_offline.py` times
+`llm.generate()`). This section is the same three-backend comparison run the
+way a deployment sees it: one process serves an OpenAI-compatible endpoint,
+a second process benchmarks it over HTTP. Backend selection is a **server CLI
+flag** here — `--moe-backend <be>` on `vllm serve` — not the `MOE_BACKEND`
+environment variable the offline harness uses, which is the point of the
+demonstration: the backend is an ordinary deployment knob.
+
+**Server** (one per backend, sequentially — the next cannot boot until the
+previous has released the GPUs):
+
+```bash
+# baseline: --moe-backend deep_gemm_mega_moe             (mx checkpoint)
+# compared: --moe-backend flashinfer_moe_ep_mega_deep_gemm   (mx checkpoint)
+# compared: --moe-backend flashinfer_moe_ep_mega_cutedsl     (NVFP4 checkpoint,
+#           plus FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_ep8.json)
+FI_MOE_EP_SKIP_VERSION_CHECK=1 vllm serve $MODEL_MX_FLASH \
+    --trust-remote-code \
+    --tokenizer-mode deepseek_v4 \
+    --tensor-parallel-size 8 \
+    --enable-expert-parallel \
+    --moe-backend deep_gemm_mega_moe \
+    --kv-cache-dtype fp8 \
+    --block-size 256 \
+    --max-model-len 1536 \
+    --max-num-seqs 1024 \
+    --max-num-batched-tokens 4096 \
+    --no-enable-prefix-caching \
+    --compilation-config '{"max_cudagraph_capture_size": 4096, "cudagraph_capture_sizes": [256, 1024, 2048, 4096]}' \
+    --host 127.0.0.1 --port 30000
+```
+
+**Client** (against the running server; `C` in {32, 128, 1024},
+`num-prompts = 5 x C`):
+
+```bash
+vllm bench serve \
+    --backend vllm --host 127.0.0.1 --port 30000 \
+    --model $MODEL_MX_FLASH --tokenizer-mode deepseek_v4 \
+    --dataset-name random \
+    --random-input-len 8 --random-output-len 1024 --random-range-ratio 0 \
+    --num-prompts $((5 * C)) --max-concurrency $C \
+    --ignore-eos --seed 0 --save-result
+```
+
+ISL 8 / OSL 1024 fixed (`--random-range-ratio 0` *is* the fixed-length
+setting in vLLM's client — its ratio widens a sampling window, unlike
+sglang's, where `1.0` means fixed) makes the workload decode-dominated: the
+serving analogue of the offline decode-1k cell, so expect ratios in that
+cell's neighbourhood, not prefill-8k's.
+
+The server flags carry the same invariants as §3c, and they are just as
+load-bearing over HTTP: the sparse `cudagraph_capture_sizes` ladder (never
+`max_cudagraph_capture_size` alone — §5), prefix caching off, fi_cutedsl on
+the NVFP4 checkpoint with the EP8 knob cache. The client's `--seed 0` fixes
+the prompt set across backends and concurrencies.
+
+**All nine cells at once** (3 backends x 3 concurrencies, ~1.5 h, its own
+exclusive node — the mechanics live in `serving_payload.sh`, which the job
+script runs inside the container):
+
+```bash
+cd $W && sbatch -A <account> -p <partition> job_vllm_serving_sweep_ep8.sh
+# V4-Pro (optional checkpoints, §1.3):
+cd $W && sbatch -A <account> -p <partition> job_vllm_serving_sweep_pro.sh
+```
+
+`MODEL_MX_FLASH`/`MODEL_NVFP4_FLASH` (Pro: `MODEL_MX_PRO`/`MODEL_NVFP4_PRO`)
+reach it via `--export=ALL` and are checked at submit time, exactly like the
+offline sweeps. `ISL`/`OSL`/`CONCS`/`PROMPTS_PER_CONC`/`PORT` override the
+workload. Results land in `results/serving_ep8_c<C>_<backend>.json` (Pro:
+`serving_pro_*`) — nine files per model, `vllm bench serve --save-result`
+JSONs, with `output_throughput` as the headline field. The summary table the
+job prints has the same stale-result guard as the offline sweeps: a dead cell
+reads `MISSING` rather than reprinting a committed number.
+
+Per backend the payload also enforces the §4a routing proof before any client
+run counts: the fi server logs must carry the `[fi_moe_ep] ep_rank=` banner
+once per rank (eight lines, `world=8`), the native log none — and one warmup
+client pass (64 prompts @ conc 32) is run and discarded, the serving analogue
+of the offline round 0.
+
+To run a single backend by hand instead, paste the server command above into
+one `in_container.sh` shell and the client into a second (§1.4b rule 2 —
+each call is a fresh shell, so exports do not travel between them):
+
+```bash
+JOBID=$JOBID bash $W/in_container.sh '<server command above>' &
+JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && <client command>'
+```
+
+Expected numbers: [expected_results.md](expected_results.md) §2b. Serving
+throughput is **not** comparable to the offline cells number-for-number —
+it includes HTTP, tokenization/detokenization and streaming overheads the
+offline path does not have. Compare serving to serving; the claim that
+carries across both harnesses is the fi-vs-native *ratio*.
 
 ## 4. Accuracy
 

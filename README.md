@@ -15,6 +15,8 @@ tolerances, and the two failure modes that produce plausible-but-wrong results.
 | Kernel microbenchmark | cutedsl vs deep_gemm_mega at DSV4 shapes. No vLLM, no checkpoints. | [RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) §2 | 20 min |
 | vLLM e2e, Flash | 4 cells x 3 backends, EP8 | `vllm_e2e/job_vllm_pr_runbook_sweep_ep8.sh` | 1 h |
 | vLLM e2e, Pro | same cells, V4-Pro | `vllm_e2e/job_vllm_pr_runbook_sweep_pro.sh` | 2 h |
+| vLLM serving, Flash | `vllm serve` + `vllm bench serve`, 3 backends x conc {32,128,1024} | `vllm_e2e/job_vllm_serving_sweep_ep8.sh` | 1.5 h |
+| vLLM serving, Pro | same cells, V4-Pro | `vllm_e2e/job_vllm_serving_sweep_pro.sh` | 2.5 h |
 | Accuracy gate | GSM8K, both models, both checkpoints | `vllm_e2e/job_gsm8k_flash_pro.sh` | 35 min |
 
 Setup — container, venv, patch, checkpoints — is
@@ -32,12 +34,13 @@ plot*.py, tests/          chart rendering, dense-reference correctness test
 model_shapes/              per-shape kernel sweep + results_ep8/ (the CSV §2 cites)
 vllm_e2e/
   patch_0251/              the vLLM patch (apply.sh / reset.sh)
-  bench_offline.py         the e2e throughput harness
+  bench_offline.py         the e2e throughput harness (offline, in-process)
+  serving_payload.sh       serving-mode harness: vllm serve + vllm bench serve
   eval_gsm8k.py            accuracy gate (records the checkpoint it loaded)
   smoke_infer.py           routing smoke + logprobs
   compare_outputs.py       logprob diff between two smoke runs
   test_backend_registration.py   tier-1 config checks, no model
-  job_*.sh                 the three SLURM jobs above
+  job_*.sh                 the five SLURM jobs above
   setup/                   checkpoint downloads (4) + knob retune (2)
   results/                 only the JSONs expected_results.md cites
 ```
@@ -81,8 +84,15 @@ job), and an editable-install race when many jobs start at once
 cd vllm_e2e
 sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_ep8.sh   # Flash, 4 cells x 3 backends, ~1 h
 sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_pro.sh   # V4-Pro, same cells, ~2 h
+sbatch -A <account> -p <partition> job_vllm_serving_sweep_ep8.sh      # Flash serving mode, ~1.5 h
+sbatch -A <account> -p <partition> job_vllm_serving_sweep_pro.sh      # V4-Pro serving mode, ~2.5 h
 sbatch -A <account> -p <partition> job_gsm8k_flash_pro.sh             # accuracy gate, ~35 min
 ```
+
+The two `serving` jobs are the server+client counterpart of the offline
+sweeps: one process runs `vllm serve --moe-backend <be>` per backend, a
+second drives it with `vllm bench serve` (random dataset, ISL 8 / OSL 1024,
+concurrency 32/128/1024, num-prompts = 5xC). RUNBOOK §3g.
 
 Run all three backends of a cell in one session, and check the
 `[fi_moe_ep] ep_rank=…` banner before believing any fi number (see below).
