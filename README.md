@@ -42,6 +42,59 @@ vllm_e2e/
   results/                 only the JSONs expected_results.md cites
 ```
 
+## Benchmark levels and timing methodology
+
+Two levels, two meanings of "benchmark":
+
+* **Microbenchmark** (`run.sh`, `bench_moe_ep_*.py`, `model_shapes/`): the MoE
+  layer alone — synthetic tokens, deterministic per-rank weights, no vLLM, no
+  checkpoints. One process per GPU (DP8/EP8/TP1). Answers "what does one
+  forward of the mega path cost at this geometry."
+* **vLLM e2e** (`vllm_e2e/`): the same kernels inside a real engine
+  (TP8/EP8/DP1), measured as request throughput. Answers "does the kernel win
+  survive the serving stack."
+
+Within the microbenchmark, `MEGA_TIMING` picks the timed region:
+
+* **`e2e`** (default) — the full FI forward path (arg prep, workspace reset,
+  kernel, sync, output copy), every iteration launched from a global barrier
+  with an idle GPU. Cold-start latency: what a single isolated call costs.
+* **`e2e_pipelined`** — the same full forward, but iterations enqueued
+  back-to-back with no per-iteration barrier or sync. Steady-state latency,
+  like consecutive layers in a serving pipeline. This is the methodology
+  behind the `model_shapes/` tables. `e2e` minus `e2e_pipelined` isolates the
+  barrier-cold collective start skew.
+* **`kernel`** — a prebuilt bare kernel launch, back-to-back, 300 MB L2 flush
+  outside the event window. Parity with the kernel repo's own tester
+  (`cutedsl_megamoe tester/solver.py perf_run`), for comparing against
+  kernel-development numbers.
+
+All three are timed with **CUDA events** (median over 50 iters, 20 warmup),
+not `torch.profiler`/CUPTI kernel time. That is a deliberate choice, not an
+oversight:
+
+* An event pair brackets the stream and counts everything between — including
+  the time the megakernel spends spin-waiting on peer ranks at its in-kernel
+  symmetric-memory rendezvous. That wait *is* the latency a serving engine
+  experiences; a per-kernel device-time sum answers a different question
+  (kernel residency) and treats the gaps between a multi-kernel backend's
+  launches as free, which is unfair to compare against a fused kernel.
+* Profiler instrumentation is not skew-neutral. CUPTI's per-launch
+  interception and buffer management add a *variable, per-rank* delay on the
+  launch path; the megakernel's duration depends on the relative arrival of
+  all 8 ranks, so that jitter is transduced into longer kernels on every rank
+  — the tool inflates the quantity it measures. Measured on
+  deepseek_v4_pro @ 512 tok/rank (job 2340556): profiler-summed kernel time
+  p50 = 541–570 us against 377 us by CUDA events, with the profiler run's
+  *minimum* (372 us) matching the event numbers — the gap is
+  instrumentation-induced arrival skew, not compute.
+* Events are the methodology everyone else already uses for this kernel: the
+  kernel repo's tester times per-stage CUDA events the same way
+  (`MEGA_TIMING=kernel` mirrors it). The cudnn-frontend SDPA training
+  benchmark's profiler-based procedure is sound for single-GPU attention
+  kernels, where residency ≈ wall time; it does not transfer to a
+  communication-fused multi-GPU kernel.
+
 ## Things that will bite you
 
 * **`FI_MOE_EP` is a hard error.** Any non-empty `FI_MOE_EP` or
