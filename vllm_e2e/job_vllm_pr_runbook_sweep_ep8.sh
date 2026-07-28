@@ -26,7 +26,7 @@
 # being a baseline.
 #
 # Usage:
-#   cd <repo>/vllm_e2e && sbatch job_vllm_pr_runbook_sweep.sh
+#   cd <repo>/vllm_e2e && sbatch job_vllm_pr_runbook_sweep_ep8.sh
 #
 #   The %j log lands in the submit directory, so cd here first.
 #

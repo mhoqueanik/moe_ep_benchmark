@@ -16,7 +16,7 @@ backend.
 
 **Four sections.** [§1 Prep](#1-prep) — clone, image, checkpoints, venv, patch.
 [§2 Kernel microbenchmark](#2-kernel-microbenchmark-25-min-per-shape) — no vLLM,
-no checkpoints. [§3 vLLM e2e — throughput](#3-vllm-e2e-throughput) — the four
+no checkpoints. [§3 vLLM e2e — throughput](#3-vllm-e2e--throughput) — the four
 headline cells, both models. [§4 Accuracy](#4-accuracy) — correctness smoke and
 the GSM8K cross-checkpoint gate. Then [§5](#5-things-that-will-bite-you) gotchas
 and [§6](#6-not-covered) what is not covered. Expected numbers for §2–§4 live in
@@ -431,6 +431,36 @@ Skipping it is not silent-but-wrong, it just fails to find the model:
 `CKPT` is unset, and the job scripts' guards reject it at submit time. This
 bites most often the day *after* setup, when the 4h hold job is still alive but
 your terminal is not.
+
+**Running commands manually — three rules.** Every manual command in §1.4,
+§3b, §4a and §4b follows the same mechanics; knowing them is the difference
+between reproducing cleanly and chasing quoting ghosts:
+
+1. **Single-quote the command.** The quotes pass it *literally* to the
+   wrapper; expansion happens inside the container, against the environment
+   srun forwarded. That is why `--model $MODEL_NVFP4_FLASH` works inside
+   single quotes — and why the variable must be **exported** in your shell,
+   not merely set: srun forwards the exported environment only.
+2. **Each call is a fresh shell.** Nothing exported inside one
+   `in_container.sh` call survives to the next, and nothing exported in a §3c
+   interactive session survives into a later one-liner. Anything a command
+   needs beyond the wrapper's four exports rides inline — which is why the
+   §4a/§4b one-liners carry `TP=8`, `ENFORCE_EAGER=1` and
+   `FI_MOE_EP_SKIP_VERSION_CHECK=1` on the command itself.
+3. **Multi-command blocks need one persistent shell.** The `cell()`/`row()`
+   blocks of §3c/§3f define functions and exports that must live across three
+   backend runs, so they cannot be a sequence of one-liners. The clean form is
+   to save the block to a file and pipe it through the wrapper, which keeps
+   the four exports above:
+
+   ```bash
+   JOBID=$JOBID bash $W/in_container.sh 'bash -s' < myblock.sh
+   ```
+
+   An interactive shell (`srun --overlap --jobid=$JOBID --pty ... bash`,
+   bypassing the wrapper) also works, but then **you** own the wrapper's four
+   exports — forget `FLASHINFER_WORKSPACE_BASE` and the JIT cache dies with
+   the hold job (the 30-minute recompile above). Prefer the pipe form.
 
 #### 1.4c. Build it
 
@@ -888,12 +918,19 @@ round-over-round, so cross-session ratios are not trustworthy.
 
 Everything below runs **inside the container on the held node**, with `$W` as
 the working directory — `bench_offline.py` and `results/` are referenced
-relatively, exactly as the sweep job does it. Either paste it into an
-interactive shell there, or save it as `cells.sh` and pipe it in:
+relatively, exactly as the sweep job does it. It is one block with functions
+and exports that must persist across the three backend runs, so it needs one
+persistent shell, not a sequence of one-liners (§1.4b rule 3): save the whole
+thing — common setup, `cell()`, and the cell calls you want — as `cells.sh`
+and pipe it in:
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'bash -s' < cells.sh
 ```
+
+Prerequisites, all from §1: a live hold job (`JOBID`, §1.4a), the §1.3
+checkpoint exports in the shell you run this from, and the venv built and
+patched (§1.4c).
 
 Common setup:
 
@@ -912,6 +949,9 @@ export MODEL_NVFP4_FLASH=$CKPT/deepseek-v4-flash-nvfp4
 export FI_MOE_EP_SKIP_VERSION_CHECK=1   # the 0.6.15 venv is below the new
                                         # flashinfer floor: documented
                                         # pre-release escape hatch
+export TP=8   # bench_offline defaults --tp to 4 without it; the sweep job
+              # exports this, so an interactive run must too or it silently
+              # measures TP4/EP4 -- a different configuration, not this table
 
 DG=flashinfer_moe_ep_mega_deep_gemm
 CUTEDSL=flashinfer_moe_ep_mega_cutedsl
@@ -1060,6 +1100,132 @@ The Pro NVFP4 checkpoint is 45 GiB *larger* than its mx one (850.4 vs
 805.3 GiB), which is why fi_cutedsl is the first thing to run out of KV cache
 if a cell is misconfigured — see §5.
 
+### 3f. One table row at a time, for any model
+
+Each row of the §3d table is one cell run against all three backends. This
+section generates a single row on its own, parameterized by model, so you can
+reproduce (or extend the table with) exactly the row you care about without the
+full ~1 h sweep. A row is still **three backends in one session** — that is the
+minimum trustworthy unit, because the ratios are what the table claims and the
+native baseline drifts across sessions (§3c). What you cannot shrink further is
+the row; what you can skip is the other three.
+
+Runs the same way as §3c: one persistent shell inside the container on the
+held node, `$W` as the working directory — save the setup block, the `row`
+function and the `row` calls you want as one file and pipe it in
+(`JOBID=$JOBID bash $W/in_container.sh 'bash -s' < myrow.sh`, §1.4b rule 3).
+Same prerequisites as §3c. Setup, parameterized by model instead of
+hardcoding Flash:
+
+```bash
+cd $W
+source venv0251/bin/activate
+bash patch_0251/apply.sh
+export FI_MOE_EP_SKIP_VERSION_CHECK=1
+export TP=8
+
+# The model, in both formats a row needs (see §1.3; never export MODEL):
+export ROW_MX=$CKPT/deepseek-v4-flash            # native + fi_dg
+export ROW_NVFP4=$CKPT/deepseek-v4-flash-nvfp4   # fi_cutedsl
+export ROW_PREFIX=flash                          # output filename prefix
+# Knob cache for fi_cutedsl. Shipped: knob_cache_ep8.json (Flash geometry),
+# knob_cache_pro_ep8.json (Pro). Any other geometry or world size: retune
+# first (§3a) -- on a mistuned cache the fi_cutedsl column is understated,
+# not wrong.
+export ROW_KNOB_CACHE=$W/results/knob_cache_ep8.json
+```
+
+The `row` function — cell parameters identical to §3c and the sweep jobs, keep
+them that way or the result stops being comparable to the recorded numbers:
+
+```bash
+row() {
+    local name=$1 envs args
+    case $name in
+        pre8k)  envs='ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 CAPTURE_SIZES=256,2048,4096,8192'
+                args='--workload prefill:1024:1 --num-prompts 256 --rounds 3' ;;
+        dec1k)  envs='ENFORCE_EAGER=0 MAX_CAPTURE=4096 MAX_NUM_SEQS=1024 CAPTURE_SIZES=256,1024,2048,4096'
+                args='--workload decode:128:256 --num-prompts 1024 --rounds 3' ;;
+        lc100k) envs='ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 CAPTURE_SIZES=32,256,2048,8192 MAX_NUM_SEQS=32 MAX_MODEL_LEN=102400 GPU_MEM_UTIL=0.93 REQUIRE_LATENCY=1'
+                args='--workload longctx:100000:1024 --num-prompts 32 --rounds 2' ;;
+        ctx32k) envs='ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 CAPTURE_SIZES=32,256,2048,8192 MAX_NUM_SEQS=32 MAX_MODEL_LEN=33792 GPU_MEM_UTIL=0.93 REQUIRE_LATENCY=1'
+                args='--workload longctx:32768:32 --num-prompts 32 --rounds 3' ;;
+        *) echo "unknown cell: $name (pre8k|dec1k|lc100k|ctx32k)" >&2; return 2 ;;
+    esac
+    local be short model cache
+    for be in deep_gemm_mega_moe flashinfer_moe_ep_mega_deep_gemm \
+              flashinfer_moe_ep_mega_cutedsl; do
+        short=native; model=$ROW_MX; cache=''
+        [[ $be == flashinfer_moe_ep_mega_deep_gemm ]] && short=fi_dg
+        if [[ $be == flashinfer_moe_ep_mega_cutedsl ]]; then
+            short=fi_cutedsl; model=$ROW_NVFP4
+            [[ -n ${ROW_KNOB_CACHE:-} ]] && \
+                cache=FLASHINFER_MOE_EP_KNOB_CACHE=$ROW_KNOB_CACHE
+        fi
+        echo "--- $name / $short (model=$(basename $model)) ---"
+        env $envs MOE_BACKEND=$be $cache \
+            python bench_offline.py --model "$model" \
+            --tag ${ROW_PREFIX}_${name}_${short} $args \
+            --out results/row_${ROW_PREFIX}_${name}_${short}.json || return 1
+    done
+    python - "$name" <<'PY'
+import json, os, sys
+name, pre = sys.argv[1], os.environ["ROW_PREFIX"]
+v = {}
+for short in ("native", "fi_dg", "fi_cutedsl"):
+    p = f"results/row_{pre}_{name}_{short}.json"
+    v[short] = json.load(open(p))["median_total_tok_per_s"] if os.path.exists(p) else None
+base = v["native"]
+def fmt(short):
+    x = v[short]
+    if x is None:
+        return "MISSING"
+    return f"{x:.0f}" + (f" ({x/base:.3f}x)" if short != "native" and base else "")
+print(f"\n{name:8s} native {fmt('native'):>8s}   "
+      f"fi_dg {fmt('fi_dg'):>18s}   fi_cutedsl {fmt('fi_cutedsl')}")
+PY
+}
+```
+
+Then one call per table row:
+
+```bash
+row pre8k    # prefill-8k       ~15 min
+row dec1k    # decode-1k        ~15 min
+row lc100k   # 100K ISL / 1K    ~15 min
+row ctx32k   # 32K ISL / 32     ~10 min
+```
+
+Each call runs native → fi_dg → fi_cutedsl back to back and finishes by
+printing the row in the shape of the §3d table:
+
+```
+pre8k    native    38986   fi_dg    40225 (1.032x)   fi_cutedsl 46584 (1.195x)
+```
+
+Output goes to `results/row_${ROW_PREFIX}_<cell>_<backend>.json` — a `row_`
+namespace deliberately distinct from the sweeps' `sweep_ep8_*` /
+`sweep_pro_*` files, so an ad-hoc row never overwrites a committed result or
+masquerades as a full sweep.
+
+For **V4-Pro**, only the setup block changes:
+
+```bash
+export ROW_MX=$CKPT/deepseek-v4-pro
+export ROW_NVFP4=$CKPT/deepseek-v4-pro-nvfp4
+export ROW_PREFIX=pro
+export ROW_KNOB_CACHE=$W/results/knob_cache_pro_ep8.json
+```
+
+For a **model outside the table**, the same block with your checkpoint pair —
+plus two caveats. First, retune the knob cache for its geometry (§3a) before
+trusting the fi_cutedsl column. Second, the workload lengths are part of the
+cell definition: a model whose `max_position_embeddings` is below 102400
+cannot run `lc100k` at all, and changing `--workload` to fit means you are
+measuring a new cell, not reproducing a row. A single row for a new model is a
+valid measurement of that model; it only becomes comparable to this table
+cell-for-cell, on the same node type, with the invariants of §3c intact.
+
 ## 4. Accuracy
 
 Three verification tiers, cheapest first. Each one catches something the one
@@ -1086,13 +1252,22 @@ accuracy is; tiers 1 and 2 say nothing about that.
 
 ### 4a. Tier 2 — correctness smoke (~12 min)
 
+Each command below is a fresh shell (§1.4b rule 2), so nothing exported in a
+§3c session survives into it. Two settings therefore ride along inline: `TP=8`, because
+`smoke_infer.py` defaults `--tp` to 4 — without it the smoke runs `world=4`,
+the exact mis-configuration this tier exists to catch — and, on the fi
+backends, `FI_MOE_EP_SKIP_VERSION_CHECK=1`, because the 0.6.15 venv is below
+the flashinfer floor the patch asserts (§3c) and the engine aborts at the
+version gate otherwise.
+
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  ENFORCE_EAGER=1 MOE_BACKEND=deep_gemm_mega_moe \
+  ENFORCE_EAGER=1 TP=8 MOE_BACKEND=deep_gemm_mega_moe \
   python smoke_infer.py --tag native --out results/pr_native.json'
 
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  ENFORCE_EAGER=1 MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm \
+  ENFORCE_EAGER=1 TP=8 FI_MOE_EP_SKIP_VERSION_CHECK=1 \
+  MOE_BACKEND=flashinfer_moe_ep_mega_deep_gemm \
   python smoke_infer.py --tag fi_dg --out results/pr_fi_dg.json'
 
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
@@ -1135,7 +1310,8 @@ benchmark fi_cutedsl on the mx checkpoint:
 
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  ENFORCE_EAGER=1 MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
+  ENFORCE_EAGER=1 TP=8 FI_MOE_EP_SKIP_VERSION_CHECK=1 \
+  MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
   python smoke_infer.py --tag fi_cutedsl --model $MODEL_NVFP4_FLASH \
     --out results/pr_fi_cutedsl.json'
 
@@ -1160,12 +1336,16 @@ is an apples-to-apples claim.
 > `--model` explicitly and check the `model` field the eval records in each
 > result JSON.
 
+`TP=8` and the version-gate skip ride along inline for the same reason as in
+§4a: `eval_gsm8k.py` defaults `--tp` to 4, and the recorded numbers are TP8.
+
 ```bash
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-  python eval_gsm8k.py --tag native --model $MODEL_MX_FLASH \
+  TP=8 python eval_gsm8k.py --tag native --model $MODEL_MX_FLASH \
     --out results/gsm8k_native.json'
 
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
+  TP=8 FI_MOE_EP_SKIP_VERSION_CHECK=1 \
   MOE_BACKEND=flashinfer_moe_ep_mega_cutedsl \
   python eval_gsm8k.py --tag fi_cutedsl --model $MODEL_NVFP4_FLASH --min-acc 0.93 \
     --out results/gsm8k_fi_cutedsl.json'
