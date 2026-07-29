@@ -1310,13 +1310,37 @@ once per rank (eight lines, `world=8`), the native log none — and one warmup
 client pass (64 prompts @ conc 32) is run and discarded, the serving analogue
 of the offline round 0.
 
-To run a single backend by hand instead, paste the server command above into
-one `in_container.sh` shell and the client into a second (§1.4b rule 2 —
-each call is a fresh shell, so exports do not travel between them):
+To run a single backend by hand instead, run the server in one
+`in_container.sh` shell and the client in a second (§1.4b rule 2 — each call
+is a fresh shell, so exports do not travel between them). Three things the
+job script does for you that you now own, all verified the hard way:
+
+1. **Both shells must activate the venv** — the image does not ship vLLM, so
+   a bare `vllm serve` dies with `command not found`.
+2. **Warm the server before the timed run.** The first requests after boot
+   pay one-time JIT/tuning costs *inside* the measured window. Measured, on
+   fi_cutedsl at conc 1024: 26101 tok/s cold vs 28122 warm, TTFT p50 2.8 s vs
+   0.8 s — a cold ratio reads ~1.00x where the table says ~1.10x. Run the
+   client once with `--num-prompts 64 --max-concurrency 32`, discard the
+   output, then run the timed command. Warm **every** backend the same way,
+   native included, or the ratio mixes a warm numerator with a cold
+   denominator.
+3. **The server command holds single-quoted JSON** (`--compilation-config`),
+   so it cannot ride inside another pair of single quotes. Save it to a file
+   and pipe it in (§1.4b rule 3) instead of quote-escaping:
 
 ```bash
-JOBID=$JOBID bash $W/in_container.sh '<server command above>' &
-JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && <client command>'
+cat > serve_one.sh <<'EOF'
+source venv0251/bin/activate
+<server command above>
+EOF
+JOBID=$JOBID bash $W/in_container.sh 'bash -s' < serve_one.sh &
+
+# wait for "Application startup complete", then warmup (discard), then time:
+JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
+    <client command, --num-prompts 64 --max-concurrency 32>'
+JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
+    C=1024 && <client command above>'
 ```
 
 Expected numbers: [expected_results.md](expected_results.md) §2b. Serving

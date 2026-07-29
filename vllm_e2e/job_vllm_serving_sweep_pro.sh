@@ -33,7 +33,7 @@ for v in MODEL_MX_PRO MODEL_NVFP4_PRO; do
     [[ -d "${!v}" ]]   || { echo "$v=${!v} is not a directory"; exit 2; }
     FWD+="export $v='${!v}'; "
 done
-for v in ISL OSL CONCS PROMPTS_PER_CONC PORT HEALTH_TIMEOUT_S; do
+for v in ISL OSL CONCS PROMPTS_PER_CONC ROUNDS PORT HEALTH_TIMEOUT_S; do
     [[ -n "${!v:-}" ]] && FWD+="export $v='${!v}'; "
 done
 

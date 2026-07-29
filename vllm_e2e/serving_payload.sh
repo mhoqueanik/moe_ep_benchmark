@@ -23,11 +23,20 @@
 #   ISL/OSL           random dataset lengths     (default 8 / 1024)
 #   CONCS             concurrency sweep          (default "32 128 1024")
 #   PROMPTS_PER_CONC  num-prompts = this * C     (default 5)
+#   ROUNDS            timed client rounds/cell   (default 3; median reported)
 #   PORT              server port                (default 30000)
 #   HEALTH_TIMEOUT_S  server-boot budget         (default 2400)
 #
-# Output: results/serving_${SERVE_PREFIX}_c${C}_${backend}.json (9 files),
-# server logs in logs/serving_${SERVE_PREFIX}_${backend}_<jobid>.log.
+# Output: results/serving_${SERVE_PREFIX}_c${C}_${backend}_r${round}.json,
+# ROUNDS files per cell; the summary reports the per-cell median of
+# output_throughput. Server logs in
+# logs/serving_${SERVE_PREFIX}_${backend}_<jobid>.log.
+#
+# ROUNDS exists for the same reason bench_offline repeats rounds in one
+# engine: the native decode baseline drifts run-over-run. Measured at conc
+# 1024 on Flash, two single rounds on two nodes put native at 26786 and
+# 28997 tok/s (8%) under an identical protocol — larger than the fi-vs-native
+# effect itself, so a single-round ratio is not trustworthy.
 set -uo pipefail
 
 : "${SERVE_MX:?see header}" "${SERVE_NVFP4:?see header}" "${SERVE_PREFIX:?see header}"
@@ -36,6 +45,7 @@ ISL=${ISL:-8}
 OSL=${OSL:-1024}
 CONCS=${CONCS:-32 128 1024}
 PROMPTS_PER_CONC=${PROMPTS_PER_CONC:-5}
+ROUNDS=${ROUNDS:-3}
 PORT=${PORT:-30000}
 HEALTH_TIMEOUT_S=${HEALTH_TIMEOUT_S:-2400}
 JOBTAG=${SLURM_JOB_ID:-manual}
@@ -156,14 +166,16 @@ serve_bench() {
     echo "[serving] $short: warmup (64 prompts @ conc 32, discarded)"
     bench_client 32 64 "$model" >/dev/null 2>&1
 
-    local C rc=0
+    local C r rc=0
     for C in $CONCS; do
         local n=$((PROMPTS_PER_CONC * C))
-        local out=serving_${SERVE_PREFIX}_c${C}_${short}.json
-        echo; echo "--- $SERVE_PREFIX / $short / conc $C ($n prompts, ${ISL}in/${OSL}out) ---"
-        bench_client "$C" "$n" "$model" \
-            --save-result --result-dir results --result-filename "$out" \
-            || { echo "[serving] $short conc $C FAILED"; rc=1; }
+        for r in $(seq 1 "$ROUNDS"); do
+            local out=serving_${SERVE_PREFIX}_c${C}_${short}_r${r}.json
+            echo; echo "--- $SERVE_PREFIX / $short / conc $C round $r/$ROUNDS ($n prompts, ${ISL}in/${OSL}out) ---"
+            bench_client "$C" "$n" "$model" \
+                --save-result --result-dir results --result-filename "$out" \
+                || { echo "[serving] $short conc $C round $r FAILED"; rc=1; }
+        done
     done
 
     stop_server "$spid"
@@ -175,28 +187,36 @@ serve_bench fi_dg      flashinfer_moe_ep_mega_deep_gemm "$SERVE_MX"    || echo "
 serve_bench fi_cutedsl flashinfer_moe_ep_mega_cutedsl   "$SERVE_NVFP4" || echo "[serving] fi_cutedsl FAILED (continuing)"
 
 echo; echo '########## SUMMARY'
-SERVE_PREFIX=$SERVE_PREFIX CONCS=$CONCS python - <<'PY'
+SERVE_PREFIX=$SERVE_PREFIX CONCS=$CONCS ROUNDS=$ROUNDS python - <<'PY'
 import json, os
 
 RUN_T0 = float(os.environ.get("RUN_T0", 0))
 prefix = os.environ["SERVE_PREFIX"]
 concs = os.environ["CONCS"].split()
+rounds = int(os.environ["ROUNDS"])
 
 def fresh(p):
     return os.path.exists(p) and os.path.getmtime(p) >= RUN_T0
 
+def med(xs):
+    xs = sorted(xs)
+    return xs[len(xs) // 2]
+
 for C in concs:
-    print(f"\nconcurrency {C}")
+    print(f"\nconcurrency {C}  (median of {rounds} rounds; spread = min..max out tok/s)")
     print(f"  {'backend':11s} {'out tok/s':>10s} {'total tok/s':>11s} {'vs native':>10s} "
-          f"{'TTFT p50':>9s} {'ITL p50':>8s} {'ITL p99':>8s}")
+          f"{'TTFT p50':>9s} {'ITL p50':>8s} {'ITL p99':>8s}  spread")
     base = None
     for short in ("native", "fi_dg", "fi_cutedsl"):
-        p = f"results/serving_{prefix}_c{C}_{short}.json"
-        if not fresh(p):
+        ds = [json.load(open(p))
+              for r in range(1, rounds + 1)
+              if fresh(p := f"results/serving_{prefix}_c{C}_{short}_r{r}.json")]
+        if not ds:
             print(f"  {short:11s} MISSING")
             continue
-        d = json.load(open(p))
-        v = d["output_throughput"]
+        outs = [d["output_throughput"] for d in ds]
+        v = med(outs)
+        d = next(x for x in ds if x["output_throughput"] == v)  # median round
         if base is None:
             base = v
         def g(k, s=1.0):
@@ -204,7 +224,9 @@ for C in concs:
             return f"{x * s:8.1f}" if x is not None else f"{'-':>8s}"
         print(f"  {short:11s} {v:10.0f} {d['total_token_throughput']:11.0f} "
               f"{v / base:9.3f}x {g('median_ttft_ms', 1e-3):>9s} "
-              f"{g('median_itl_ms')} {g('p99_itl_ms')}")
+              f"{g('median_itl_ms')} {g('p99_itl_ms')}  "
+              f"{min(outs):.0f}..{max(outs):.0f}")
 print("\n  output tok/s is the headline (decode-dominated workload; ratio is")
-print("  fi vs native on it). TTFT seconds, ITL milliseconds.")
+print("  fi vs native on it, median round vs median round). TTFT seconds,")
+print("  ITL milliseconds; latency columns come from the median round.")
 PY

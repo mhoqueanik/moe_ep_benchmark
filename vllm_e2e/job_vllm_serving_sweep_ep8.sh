@@ -30,7 +30,7 @@
 #   ROOT=/my/scratch          checkout root; default below
 #   IMG=/path/to.sqsh         container image
 #   MODEL_MX_FLASH=... MODEL_NVFP4_FLASH=...   required; see RUNBOOK §1.3
-#   ISL=8 OSL=1024 CONCS='32 128 1024' PROMPTS_PER_CONC=5 PORT=30000
+#   ISL=8 OSL=1024 CONCS='32 128 1024' PROMPTS_PER_CONC=5 ROUNDS=3 PORT=30000
 #   EXTRA_MOUNTS=a:a,b:b      appended to --container-mounts
 #   sbatch -A <acct> -p <part> ...   CLI flags override the #SBATCH lines above
 set -uo pipefail
@@ -53,7 +53,7 @@ for v in MODEL_MX_FLASH MODEL_NVFP4_FLASH; do
 done
 # Workload overrides ride through only when set, so the payload defaults stay
 # the single source of truth.
-for v in ISL OSL CONCS PROMPTS_PER_CONC PORT HEALTH_TIMEOUT_S; do
+for v in ISL OSL CONCS PROMPTS_PER_CONC ROUNDS PORT HEALTH_TIMEOUT_S; do
     [[ -n "${!v:-}" ]] && FWD+="export $v='${!v}'; "
 done
 
