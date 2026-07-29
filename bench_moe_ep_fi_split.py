@@ -147,11 +147,23 @@ def _build_fused_moe_config(cfg: Cfg, rank: int, compute_max_tokens: int):
     execution = ExecutionConfig(tune_max_num_tokens=compute_max_tokens)
 
     if cfg.quant == "nvfp4":
+        # Exactly ONE candidate: materialize_fused_moe_weights prepares the
+        # weight view for the first matching backend only, while the MoELayer
+        # winner selection probes every candidate — a two-candidate list (as
+        # in flashinfer's own benchmarks/bench_moe_ep.py) dies with
+        # "Weights not prepared for backend 'trtllm_fp4_routed'" at the first
+        # forward. FI_SPLIT_NVFP4_BACKEND=trtllm selects the trtllm-gen
+        # kernel instead of cutedsl (the default).
+        nvfp4_backend = (
+            TrtllmFp4Config()
+            if os.environ.get("FI_SPLIT_NVFP4_BACKEND", "cutedsl") == "trtllm"
+            else CuteDslConfig()
+        )
         return MoEConfig(
             routing=routing,
             quant=QuantConfig(variant=QuantVariant.NVFP4),
             experts=experts,
-            backend=BackendOptions(candidates=(CuteDslConfig(), TrtllmFp4Config())),
+            backend=BackendOptions(candidates=(nvfp4_backend,)),
             execution=execution,
         )
     return MoEConfig(
