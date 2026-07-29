@@ -1236,8 +1236,22 @@ flag** here — `--moe-backend <be>` on `vllm serve` — not the `MOE_BACKEND`
 environment variable the offline harness uses, which is the point of the
 demonstration: the backend is an ordinary deployment knob.
 
-**Server** (one per backend, sequentially — the next cannot boot until the
-previous has released the GPUs):
+**The cells are §3c's four workloads, verbatim** — same lengths, same request
+counts, same per-cell engine settings — so each serving row corresponds 1:1
+to an offline row:
+
+| cell | client workload | server settings beyond the common set |
+|---|---|---|
+| pre8k | 1024 in / 1 out, 256 requests, all in flight | max-len 4096, batched 8192, capture 256,2048,4096,8192 |
+| dec1k | 128 in / 256 out, 1024 requests, all in flight | max-len 4096, seqs 1024, batched 4096, capture 256,1024,2048,4096 |
+| lc100k | 100000 in / 1024 out, 32 requests @ conc 32 | max-len 102400, seqs 32, batched 8192, mem-util 0.93, capture 32,256,2048,8192 |
+| ctx32k | 32768 in / 32 out, 32 requests @ conc 32 | max-len 33792, seqs 32, batched 8192, mem-util 0.93, capture 32,256,2048,8192 |
+
+Because the per-cell engine settings are part of the cell definition, a cell
+is **one server boot per backend** — 12 boots per model for the full sweep.
+
+**Server** (the dec1k cell shown; swap the last block of flags per the table
+above for the other cells):
 
 ```bash
 # baseline: --moe-backend deep_gemm_mega_moe             (mx checkpoint)
@@ -1252,42 +1266,38 @@ FI_MOE_EP_SKIP_VERSION_CHECK=1 vllm serve $MODEL_MX_FLASH \
     --moe-backend deep_gemm_mega_moe \
     --kv-cache-dtype fp8 \
     --block-size 256 \
-    --max-model-len 1536 \
+    --no-enable-prefix-caching \
+    --max-model-len 4096 \
     --max-num-seqs 1024 \
     --max-num-batched-tokens 4096 \
-    --no-enable-prefix-caching \
     --compilation-config '{"max_cudagraph_capture_size": 4096, "cudagraph_capture_sizes": [256, 1024, 2048, 4096]}' \
     --host 127.0.0.1 --port 30000
 ```
 
-**Client** (against the running server; `C` in {32, 128, 1024},
-`num-prompts = 5 x C`):
+**Client** (against the running server; dec1k again — take ISL/OSL,
+num-prompts and concurrency from the table for the other cells):
 
 ```bash
 vllm bench serve \
     --backend vllm --host 127.0.0.1 --port 30000 \
     --model $MODEL_MX_FLASH --tokenizer-mode deepseek_v4 \
     --dataset-name random \
-    --random-input-len 8 --random-output-len 1024 --random-range-ratio 0 \
-    --num-prompts $((5 * C)) --max-concurrency $C \
+    --random-input-len 128 --random-output-len 256 --random-range-ratio 0 \
+    --num-prompts 1024 --max-concurrency 1024 \
     --ignore-eos --seed 0 --save-result
 ```
 
-ISL 8 / OSL 1024 fixed (`--random-range-ratio 0` *is* the fixed-length
-setting in vLLM's client — its ratio widens a sampling window, unlike
-sglang's, where `1.0` means fixed) makes the workload decode-dominated: the
-serving analogue of the offline decode-1k cell, so expect ratios in that
-cell's neighbourhood, not prefill-8k's.
-
+`--random-range-ratio 0` *is* the fixed-length setting in vLLM's client (its
+ratio widens a sampling window — unlike sglang's, where `1.0` means fixed).
 The server flags carry the same invariants as §3c, and they are just as
 load-bearing over HTTP: the sparse `cudagraph_capture_sizes` ladder (never
 `max_cudagraph_capture_size` alone — §5), prefix caching off, fi_cutedsl on
 the NVFP4 checkpoint with the EP8 knob cache. The client's `--seed 0` fixes
-the prompt set across backends and concurrencies.
+the prompt set across backends and rounds.
 
-**All nine cells at once** (3 backends x 3 concurrencies, ~1.5 h, its own
-exclusive node — the mechanics live in `serving_payload.sh`, which the job
-script runs inside the container):
+**The full sweep in one job** (4 cells x 3 backends, ~2.5 h Flash / ~3.7 h
+Pro — the mechanics live in `serving_payload.sh`, which the job script runs
+inside the container):
 
 ```bash
 cd $W && sbatch -A <account> -p <partition> job_vllm_serving_sweep_ep8.sh
@@ -1297,18 +1307,25 @@ cd $W && sbatch -A <account> -p <partition> job_vllm_serving_sweep_pro.sh
 
 `MODEL_MX_FLASH`/`MODEL_NVFP4_FLASH` (Pro: `MODEL_MX_PRO`/`MODEL_NVFP4_PRO`)
 reach it via `--export=ALL` and are checked at submit time, exactly like the
-offline sweeps. `ISL`/`OSL`/`CONCS`/`PROMPTS_PER_CONC`/`PORT` override the
-workload. Results land in `results/serving_ep8_c<C>_<backend>.json` (Pro:
-`serving_pro_*`) — nine files per model, `vllm bench serve --save-result`
-JSONs, with `output_throughput` as the headline field. The summary table the
-job prints has the same stale-result guard as the offline sweeps: a dead cell
-reads `MISSING` rather than reprinting a committed number.
+offline sweeps. `CELLS` selects a subset of cells (each is self-contained, so
+a cut-off Pro run is resumed by resubmitting with the missing ones);
+`ROUNDS`/`ROUNDS_LC100K`/`PORT` are the other overrides. Results land in
+`results/serving_ep8_<cell>_<backend>_r<round>.json` (Pro: `serving_pro_*`);
+`r0` is the warmup. The headline field is `total_token_throughput` — the
+same total-tok/s headline as the offline tables. The summary the job prints
+reports the **median of the timed rounds with min..max spread** and has the
+same stale-result guard as the offline sweeps: a dead cell reads `MISSING`
+rather than reprinting a committed number.
 
-Per backend the payload also enforces the §4a routing proof before any client
-run counts: the fi server logs must carry the `[fi_moe_ep] ep_rank=` banner
-once per rank (eight lines, `world=8`), the native log none — and one warmup
-client pass (64 prompts @ conc 32) is run and discarded, the serving analogue
-of the offline round 0.
+Per (cell, backend) the payload also enforces the §4a routing proof before
+any client run counts: the fi server logs must carry the `[fi_moe_ep]
+ep_rank=` banner once per rank (eight lines, `world=8`), the native log none.
+Round 0 is a full client round, discarded — bench_offline's round 0, for the
+same two measured reasons: first requests after boot pay one-time JIT/tuning
+costs (fi_cutedsl decode read 26101 tok/s cold vs 28122 warm), and the native
+decode baseline drifts round-over-round (26786 vs 28997 tok/s on two nodes
+under an identical warm protocol — larger than the fi-vs-native effect, which
+is why one round is never enough).
 
 To run a single backend by hand instead, run the server in one
 `in_container.sh` shell and the client in a second (§1.4b rule 2 — each call
@@ -1317,14 +1334,14 @@ job script does for you that you now own, all verified the hard way:
 
 1. **Both shells must activate the venv** — the image does not ship vLLM, so
    a bare `vllm serve` dies with `command not found`.
-2. **Warm the server before the timed run.** The first requests after boot
-   pay one-time JIT/tuning costs *inside* the measured window. Measured, on
-   fi_cutedsl at conc 1024: 26101 tok/s cold vs 28122 warm, TTFT p50 2.8 s vs
-   0.8 s — a cold ratio reads ~1.00x where the table says ~1.10x. Run the
-   client once with `--num-prompts 64 --max-concurrency 32`, discard the
-   output, then run the timed command. Warm **every** backend the same way,
-   native included, or the ratio mixes a warm numerator with a cold
-   denominator.
+2. **Run the client at least twice and discard the first pass.** The first
+   requests after boot pay one-time JIT/tuning costs *inside* the measured
+   window. Measured, on fi_cutedsl decode: 26101 tok/s cold vs 28122 warm,
+   TTFT p50 2.8 s vs 0.8 s — a cold ratio reads ~1.00x where the table shows
+   a win. And run more than one timed pass: the native decode baseline
+   drifts round-over-round, so quote the median, not a single pass. Treat
+   **every** backend the same way, native included, or the ratio mixes a
+   warm numerator with a cold denominator.
 3. **The server command holds single-quoted JSON** (`--compilation-config`),
    so it cannot ride inside another pair of single quotes. Save it to a file
    and pipe it in (§1.4b rule 3) instead of quote-escaping:
@@ -1338,9 +1355,9 @@ JOBID=$JOBID bash $W/in_container.sh 'bash -s' < serve_one.sh &
 
 # wait for "Application startup complete", then warmup (discard), then time:
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-    <client command, --num-prompts 64 --max-concurrency 32>'
+    <client command above>'                      # round 0 -- discard
 JOBID=$JOBID bash $W/in_container.sh 'source venv0251/bin/activate && \
-    C=1024 && <client command above>'
+    <client command above>'                      # timed; repeat and median
 ```
 
 Expected numbers: [expected_results.md](expected_results.md) §2b. Serving

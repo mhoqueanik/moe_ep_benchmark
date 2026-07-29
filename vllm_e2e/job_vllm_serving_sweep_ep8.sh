@@ -10,18 +10,22 @@
 #
 # DeepSeek-V4-Flash serving-mode sweep at EP8/TP8 on one 8-GPU SM100 node —
 # the server+client counterpart of job_vllm_pr_runbook_sweep_ep8.sh. One
-# process launches `vllm serve --moe-backend <be>` per backend (native, fi_dg,
-# fi_cutedsl), a second drives it with `vllm bench serve`:
+# process launches `vllm serve --moe-backend <be>`, a second drives it with
+# `vllm bench serve` (random dataset, fixed lengths). The cells are the
+# offline sweep's four workloads, verbatim, so the rows correspond 1:1:
 #
-#   random dataset, ISL 8 / OSL 1024 fixed, concurrency C in {32, 128, 1024},
-#   num-prompts = 5 x C  — decode-dominated, the serving analogue of the
-#   offline decode-1k cell.
+#   pre8k   1024 in /    1 out, 256 requests                  [headline]
+#   dec1k    128 in /  256 out, 1024 requests                 [headline]
+#   lc100k 100000 in / 1024 out, 32 requests @ conc 32        [interactivity]
+#   ctx32k  32768 in /   32 out, 32 requests @ conc 32        [interactivity]
 #
-# Same invariants as the offline sweep: TP8/EP8/DP1, sparse CAPTURE_SIZES
-# ladder, prefix caching off, fi_cutedsl on the NVFP4 checkpoint with the EP8
-# knob cache, [fi_moe_ep] banner check per backend, warmup pass discarded.
-# The mechanics live in serving_payload.sh; this script is the allocation and
-# the environment.
+# One server boot per (cell, backend) — 12 boots — because the per-cell
+# engine settings are part of the cell definition. Same invariants as the
+# offline sweep: TP8/EP8/DP1, sparse capture ladder, prefix caching off,
+# fi_cutedsl on the NVFP4 checkpoint with the EP8 knob cache, [fi_moe_ep]
+# banner check per backend, round 0 discarded as warmup, median of the timed
+# rounds. The mechanics live in serving_payload.sh; this script is the
+# allocation and the environment.
 #
 # Usage:
 #   cd <repo>/vllm_e2e && sbatch job_vllm_serving_sweep_ep8.sh
@@ -30,7 +34,7 @@
 #   ROOT=/my/scratch          checkout root; default below
 #   IMG=/path/to.sqsh         container image
 #   MODEL_MX_FLASH=... MODEL_NVFP4_FLASH=...   required; see RUNBOOK §1.3
-#   ISL=8 OSL=1024 CONCS='32 128 1024' PROMPTS_PER_CONC=5 ROUNDS=3 PORT=30000
+#   CELLS='pre8k dec1k lc100k ctx32k' ROUNDS=3 ROUNDS_LC100K=2 PORT=30000
 #   EXTRA_MOUNTS=a:a,b:b      appended to --container-mounts
 #   sbatch -A <acct> -p <part> ...   CLI flags override the #SBATCH lines above
 set -uo pipefail
@@ -53,7 +57,7 @@ for v in MODEL_MX_FLASH MODEL_NVFP4_FLASH; do
 done
 # Workload overrides ride through only when set, so the payload defaults stay
 # the single source of truth.
-for v in ISL OSL CONCS PROMPTS_PER_CONC ROUNDS PORT HEALTH_TIMEOUT_S; do
+for v in CELLS ROUNDS ROUNDS_LC100K PORT HEALTH_TIMEOUT_S; do
     [[ -n "${!v:-}" ]] && FWD+="export $v='${!v}'; "
 done
 

@@ -15,8 +15,8 @@ tolerances, and the two failure modes that produce plausible-but-wrong results.
 | Kernel microbenchmark | cutedsl vs deep_gemm_mega at DSV4 shapes. No vLLM, no checkpoints. | [RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) §2 | 20 min |
 | vLLM e2e, Flash | 4 cells x 3 backends, EP8 | `vllm_e2e/job_vllm_pr_runbook_sweep_ep8.sh` | 1 h |
 | vLLM e2e, Pro | same cells, V4-Pro | `vllm_e2e/job_vllm_pr_runbook_sweep_pro.sh` | 2 h |
-| vLLM serving, Flash | `vllm serve` + `vllm bench serve`, 3 backends x conc {32,128,1024} | `vllm_e2e/job_vllm_serving_sweep_ep8.sh` | 1.5 h |
-| vLLM serving, Pro | same cells, V4-Pro | `vllm_e2e/job_vllm_serving_sweep_pro.sh` | 2.5 h |
+| vLLM serving, Flash | `vllm serve` + `vllm bench serve`, same 4 cells x 3 backends | `vllm_e2e/job_vllm_serving_sweep_ep8.sh` | 2.5 h |
+| vLLM serving, Pro | same cells, V4-Pro | `vllm_e2e/job_vllm_serving_sweep_pro.sh` | 3.7 h |
 | Accuracy gate | GSM8K, both models, both checkpoints | `vllm_e2e/job_gsm8k_flash_pro.sh` | 35 min |
 
 Setup — container, venv, patch, checkpoints — is
@@ -84,15 +84,16 @@ job), and an editable-install race when many jobs start at once
 cd vllm_e2e
 sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_ep8.sh   # Flash, 4 cells x 3 backends, ~1 h
 sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_pro.sh   # V4-Pro, same cells, ~2 h
-sbatch -A <account> -p <partition> job_vllm_serving_sweep_ep8.sh      # Flash serving mode, ~1.5 h
-sbatch -A <account> -p <partition> job_vllm_serving_sweep_pro.sh      # V4-Pro serving mode, ~2.5 h
+sbatch -A <account> -p <partition> job_vllm_serving_sweep_ep8.sh      # Flash serving mode, ~2.5 h
+sbatch -A <account> -p <partition> job_vllm_serving_sweep_pro.sh      # V4-Pro serving mode, ~3.7 h
 sbatch -A <account> -p <partition> job_gsm8k_flash_pro.sh             # accuracy gate, ~35 min
 ```
 
 The two `serving` jobs are the server+client counterpart of the offline
-sweeps: one process runs `vllm serve --moe-backend <be>` per backend, a
-second drives it with `vllm bench serve` (random dataset, ISL 8 / OSL 1024,
-concurrency 32/128/1024, num-prompts = 5xC). RUNBOOK §3g.
+sweeps, on the **same four workloads**: one process runs
+`vllm serve --moe-backend <be>` per (cell, backend), a second drives it with
+`vllm bench serve` (random dataset, fixed lengths, round 0 discarded, median
+of the timed rounds). RUNBOOK §3g.
 
 Run all three backends of a cell in one session, and check the
 `[fi_moe_ep] ep_rank=…` banner before believing any fi number (see below).
@@ -199,6 +200,90 @@ oversight:
   benchmark's profiler-based procedure is sound for single-GPU attention
   kernels, where residency ≈ wall time; it does not transfer to a
   communication-fused multi-GPU kernel.
+
+### The workloads, exactly
+
+#### Microbenchmark (`model_shapes/` tables, expected_results §3)
+
+One problem = one MoE layer forward at a fixed **tokens/rank** — the number
+of tokens each of the 8 DP ranks feeds into expert dispatch. No batch/seq
+distinction exists at this level; tokens/rank is the whole problem size.
+
+| parameter | value |
+|---|---|
+| parallelism | DP8 / EP8 / TP1 — one process per GPU, world size = EP |
+| geometry | per shape from `model_shapes/shapes.tsv` (hidden / moe_inter / experts / top-k), e.g. V4-Flash 4096/2048/256/top-6 |
+| tokens/rank sweep | 8, 64, 512, 1024, 2048, 4096, 8192 (`SEQ_LENS`) |
+| activations | `randn` bf16, per-rank seed |
+| routing | top-k over `randn` scores, per-rank seed — uniform expert load, no capacity dropping |
+| weights | synthetic, deterministically seeded per expert (no checkpoint) |
+| knobs | tier-3 heuristic (`MEGA_KNOBS` and knob cache unset) |
+
+Timing: per tokens/rank point, 20 warmup + 50 timed iterations; each
+iteration is one full FI forward bracketed by a CUDA event pair on the
+stream; the tables report the **p50 across the 50 iterations** of the
+`e2e_pipelined` region (iterations enqueued back-to-back, no per-iteration
+barrier — see the region definitions above). `e2e_us_min` is kept alongside
+p50 in the CSV as the noise tell (expected_results §5).
+
+#### Offline e2e (`bench_offline.py`, expected_results §1–§2)
+
+One engine boot per (cell, backend); `llm.generate()` over a fixed prompt
+set, repeated. Common to all cells: TP8/EP8/DP1, kv-cache fp8, block 256,
+prefix caching **off**, CUDA graphs on (`ENFORCE_EAGER=0`), greedy sampling
+(`temperature=0`), `ignore_eos`, prompts = random token ids at seed 0 (same
+prompts every round and backend).
+
+| cell | ISL:OSL | requests | concurrency cap | max batched tokens | capture sizes (max) | max-model-len | timed rounds |
+|---|---|---|---|---|---|---|---|
+| prefill-8k | 1024:1 | 256 | engine default | 8192 | 256,2048,4096,8192 (8192) | 4096 | 3 |
+| decode-1k | 128:256 | 1024 | `max_num_seqs=1024` | 4096 | 256,1024,2048,4096 (4096) | 4096 | 3 |
+| 100K ISL / 1K | 100000:1024 | 32 | `max_num_seqs=32` | 8192 | 32,256,2048,8192 (8192) | 102400 | 2 |
+| 32K ISL / 32 | 32768:32 | 32 | `max_num_seqs=32` | 8192 | 32,256,2048,8192 (8192) | 33792 | 3 |
+
+(The two interactivity cells also set `gpu_memory_utilization=0.93` and
+`REQUIRE_LATENCY=1`.)
+
+Timing: each round is one `llm.generate()` over the full prompt set,
+bracketed by `time.perf_counter()` wall clock — no profiler, no
+instrumentation inside the engine. **Total tok/s = (requests x ISL + output
+tokens) / elapsed.** Round 0 is a warmup, kept in the JSON but excluded from
+the headline; the headline is the **median across the timed rounds**.
+TTFT/ITL come from vLLM's own per-request `RequestOutput.metrics` (engine
+monotonic timestamps; ITL = (last_token_ts - first_token_ts)/(n-1)):
+percentiles are taken over all requests within a round, then the headline
+takes the median across rounds of each percentile.
+
+#### Serving e2e (`serving_payload.sh`, expected_results §2b)
+
+Same four cells, same per-cell engine settings — but the engine runs behind
+`vllm serve --moe-backend <be>` (one boot per cell x backend) and the
+measurement is `vllm bench serve` over HTTP `/v1/completions` from a second
+process on the same node. Client side: `--dataset-name random` with
+`--random-range-ratio 0` (fixed lengths), seed 0, `--ignore-eos`,
+`--max-concurrency` = the request count (all in flight, like the offline
+scheduler sees), request rate inf.
+
+| cell | ISL:OSL | requests = concurrency | server flags beyond the common set |
+|---|---|---|---|
+| prefill-8k | 1024:1 | 256 | as offline pre8k row above |
+| decode-1k | 128:256 | 1024 | as offline dec1k row above |
+| 100K ISL / 1K | 100000:1024 | 32 | as offline lc100k row above |
+| 32K ISL / 32 | 32768:32 | 32 | as offline ctx32k row above |
+
+Timing: entirely client-side wall clock — the duration from first request
+sent to last response finished, with per-request TTFT and ITL measured on
+the streaming HTTP responses. So serving numbers additionally include
+tokenize/detokenize, HTTP and scheduling gaps, which is the point of the
+level. Round 0 (a full client pass) is discarded as warmup; the headline is
+the **median total token throughput across the timed rounds** (3 per cell,
+2 for the 100K cell), with min..max spread printed — required because the
+native decode baseline drifts run-over-run by more than the fi-vs-native
+delta (expected_results §2b).
+
+Before any round counts, the payload checks routing per (cell, backend):
+eight `[fi_moe_ep] ep_rank=` banner lines in the fi server logs, zero in the
+native log.
 
 ## Things that will bite you
 

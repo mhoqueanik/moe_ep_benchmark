@@ -9,9 +9,12 @@
 #SBATCH --output=vllm_serving_sweep_pro_%j.log
 #
 # DeepSeek-V4-Pro serving-mode sweep at EP8/TP8 — identical cells to
-# job_vllm_serving_sweep_ep8.sh (see its header for the workload and the
-# invariants), on the Pro checkpoint pair and the Pro knob cache. Needs the
-# optional 1.66 TB Pro checkpoints from RUNBOOK §1.3.
+# job_vllm_serving_sweep_ep8.sh (see its header for the four offline-mirror
+# workloads and the invariants), on the Pro checkpoint pair and the Pro knob
+# cache. Needs the optional 1.66 TB Pro checkpoints from RUNBOOK §1.3.
+# 4 h wall (partition max): 12 server boots at Pro weight-load times
+# dominate, ~3.7 h total -- if the tail is cut, rerun the missing cells via
+# CELLS=... (each cell is self-contained).
 #
 # Usage:
 #   cd <repo>/vllm_e2e && sbatch job_vllm_serving_sweep_pro.sh
@@ -33,7 +36,7 @@ for v in MODEL_MX_PRO MODEL_NVFP4_PRO; do
     [[ -d "${!v}" ]]   || { echo "$v=${!v} is not a directory"; exit 2; }
     FWD+="export $v='${!v}'; "
 done
-for v in ISL OSL CONCS PROMPTS_PER_CONC ROUNDS PORT HEALTH_TIMEOUT_S; do
+for v in CELLS ROUNDS ROUNDS_LC100K PORT HEALTH_TIMEOUT_S; do
     [[ -n "${!v:-}" ]] && FWD+="export $v='${!v}'; "
 done
 
