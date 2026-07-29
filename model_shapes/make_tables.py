@@ -23,19 +23,38 @@ HERE = Path(__file__).resolve().parent
 KERNEL_TO_VARIANT = {
     "deep_gemm_mega": "fi_dg",
     "nvfp4_cutedsl": "fi_fp4",
+    "mxfp8_cutedsl": "fi_fp8",
     "nvfp4_cutedsl+ikr": "fi_ikr",
     "nvfp4_cutedsl+combine_mxfp8": "fi_combine_fp8",
     "nvfp4_cutedsl+combine_nvfp4": "fi_combine_fp4",
+    # FI split path (bench_moe_ep_fi_split.py; *_split.csv). NOTE: split cells
+    # are barrier-cold e2e forwards, mega cells the MEGA_TIMING region
+    # (default e2e_pipelined) — the speedup-vs-dg ratio crosses methodologies.
+    "fused_moe_nvfp4_cutedsl": "fi_split_fp4",
+    "fused_moe_nvfp4_trtllm": "fi_split_trtllm",
 }
 # Column order and display labels of the emitted tables (matches the variant
-# naming of RUNBOOK_REPRO.md §2a: the CSV keeps the fi_* names).
-VARIANTS = ["fi_dg", "fi_fp4", "fi_ikr", "fi_combine_fp4", "fi_combine_fp8"]
+# naming of RUNBOOK_REPRO.md §2a: the CSV keeps the fi_* names). Only the
+# variants actually present in the loaded CSVs become columns.
+VARIANTS = [
+    "fi_dg",
+    "fi_fp4",
+    "fi_fp8",
+    "fi_ikr",
+    "fi_combine_fp4",
+    "fi_combine_fp8",
+    "fi_split_fp4",
+    "fi_split_trtllm",
+]
 VARIANT_LABELS = {
     "fi_dg": "dg",
     "fi_fp4": "nvfp4 bf16",
+    "fi_fp8": "mxfp8",
     "fi_ikr": "+ikr",
     "fi_combine_fp4": "+combine_nvfp4",
     "fi_combine_fp8": "+combine_mxfp8",
+    "fi_split_fp4": "split nvfp4 cutedsl",
+    "fi_split_trtllm": "split nvfp4 trtllm",
 }
 
 
@@ -76,6 +95,14 @@ def main():
                 tokens = int(row["tokens_per_rank"])
                 cells.setdefault(geom, {}).setdefault(tokens, {})[variant] = row
 
+    present = {
+        v
+        for bytok in cells.values()
+        for byvar in bytok.values()
+        for v in byvar
+    }
+    variants = [v for v in VARIANTS if v in present]
+
     lines = [
         "# Model-shape microbenchmark results",
         "",
@@ -94,16 +121,16 @@ def main():
         lines.append("")
         lines.append(
             "| tok/rank | "
-            + " | ".join(VARIANT_LABELS[v] for v in VARIANTS)
+            + " | ".join(VARIANT_LABELS[v] for v in variants)
             + " |"
         )
-        lines.append("|---|" + "---|" * len(VARIANTS))
+        lines.append("|---|" + "---|" * len(variants))
         for tokens in sorted(cells[geom]):
             byvar = cells[geom][tokens]
             dg = byvar.get("fi_dg")
             dg_us = float(dg["e2e_us_p50"]) if dg else None
             out = [str(tokens)]
-            for v in VARIANTS:
+            for v in variants:
                 row = byvar.get(v)
                 if row is None:
                     out.append("—")

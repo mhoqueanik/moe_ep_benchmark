@@ -120,6 +120,16 @@ def parallel_launch(cfg: Cfg):
 # --------------------------------------------------------------------------
 # Backend helpers
 # --------------------------------------------------------------------------
+def _nvfp4_backend_name() -> str:
+    """FI_SPLIT_NVFP4_BACKEND=cutedsl|trtllm -> inner nvfp4 kernel."""
+    name = os.environ.get("FI_SPLIT_NVFP4_BACKEND", "cutedsl")
+    if name not in ("cutedsl", "trtllm"):
+        raise ValueError(
+            f"FI_SPLIT_NVFP4_BACKEND must be cutedsl|trtllm, got {name!r}"
+        )
+    return name
+
+
 def _build_fused_moe_config(cfg: Cfg, rank: int, compute_max_tokens: int):
     """MoEConfig for the inner fused_moe kernel (mirrors flashinfer
     benchmarks/bench_moe_ep.py::_build_compute, minus the weight creation —
@@ -156,7 +166,7 @@ def _build_fused_moe_config(cfg: Cfg, rank: int, compute_max_tokens: int):
         # kernel instead of cutedsl (the default).
         nvfp4_backend = (
             TrtllmFp4Config()
-            if os.environ.get("FI_SPLIT_NVFP4_BACKEND", "cutedsl") == "trtllm"
+            if _nvfp4_backend_name() == "trtllm"
             else CuteDslConfig()
         )
         return MoEConfig(
@@ -227,10 +237,16 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
         device=device,
     )
 
-    # Post-dispatch token budget the inner kernel must be tuned for (mirrors
-    # flashinfer benchmarks/bench_moe_ep.py): RANK_MAJOR receives each token
-    # once per source rank; EXPERT_MAJOR / HT-FLAT pad per local expert.
-    if ep_layout is EpLayout.RANK_MAJOR:
+    # Post-dispatch token budget the inner kernel must be tuned for: LL
+    # EXPERT_MAJOR pads one row per (local expert, source token) slot; LL
+    # RANK_MAJOR and HT FLAT receive each token once (recv buffer
+    # [world, max_tokens_per_rank, hidden] — see nccl_ep/handle.py HT
+    # dispatch), so their bound is m*world.  (flashinfer's own
+    # benchmarks/bench_moe_ep.py uses the padded bound for HT too, but at
+    # 8192 tokens/rank that is a 32x-oversized tune budget.)
+    if ep_algorithm is EpAlgorithm.HIGH_THROUGHPUT or (
+        ep_layout is EpLayout.RANK_MAJOR
+    ):
         compute_max_tokens = m * world
     else:
         compute_max_tokens = num_local * m * world
@@ -358,7 +374,7 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
                 act_compute_dtype = "bfloat16"
                 quant_timed = "no"
             elif cfg.quant == "nvfp4":
-                compute_kernel = "fused_moe_nvfp4"
+                compute_kernel = f"fused_moe_nvfp4_{_nvfp4_backend_name()}"
                 weight_dtype = "nvfp4_block16"
                 act_compute_dtype = "nvfp4_block16"
                 quant_timed = "yes"  # act quant runs inside the compute stage

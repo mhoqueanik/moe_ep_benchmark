@@ -11,8 +11,18 @@
 #   fi_combine_fp8 : nvfp4_cutedsl + MEGA_COMBINE_DTYPE=mxfp8
 #   fi_combine_fp4 : nvfp4_cutedsl + MEGA_COMBINE_DTYPE=nvfp4
 #
-# All rows land in ONE csv (geometry columns + compute_kernel suffix identify
-# each cell); model_shapes/make_tables.py turns it into RESULTS.md.
+# Extra variants, selectable via VARIANTS= (not in the default list):
+#
+#   fi_fp8          : mxfp8_cutedsl mega
+#   fi_split_fp4    : FI split path, NCCL-EP + fused_moe nvfp4 (cutedsl)
+#   fi_split_trtllm : FI split path, NCCL-EP + fused_moe nvfp4 (trtllm-gen)
+#
+# Mega rows land in ONE csv (geometry columns + compute_kernel suffix identify
+# each cell); split rows land in a sibling *_split.csv (their CSV carries
+# per-stage dispatch/compute/combine columns the mega header does not).
+# model_shapes/make_tables.py accepts both and turns them into RESULTS.md.
+# NOTE the timed regions differ: mega cells are MEGA_TIMING (default
+# e2e_pipelined), split cells are barrier-cold e2e forwards.
 #
 # Usage (inside the flashinfer-ep container on an 8-GPU node):
 #   bash model_shapes/run_model_shapes.sh
@@ -39,7 +49,11 @@ export MEGA_TIMING="${MEGA_TIMING:-e2e_pipelined}"
 
 STAMP="${STAMP:-$(date +%Y%m%d_%H%M%S)}"
 CSV="${OUT_DIR}/model_shapes_${STAMP}.csv"
+CSV_SPLIT="${OUT_DIR}/model_shapes_${STAMP}_split.csv"
 LOG="${OUT_DIR}/model_shapes_${STAMP}.log"
+# Split-path knobs: NCCL-EP algorithm (ht handles the full 1..8192 tokens/rank
+# sweep; the library clamps HT at 8192) and the LL receive layout.
+SPLIT_ALGO="${SPLIT_ALGO:-ht}"
 
 shape_selected () {
     local name="$1"
@@ -59,6 +73,15 @@ run_variant () {
         fi_ikr)         backend=nvfp4_cutedsl;  export MEGA_IKR=1 MEGA_COMBINE_DTYPE=bf16 ;;
         fi_combine_fp8) backend=nvfp4_cutedsl;  export MEGA_IKR=0 MEGA_COMBINE_DTYPE=mxfp8 ;;
         fi_combine_fp4) backend=nvfp4_cutedsl;  export MEGA_IKR=0 MEGA_COMBINE_DTYPE=nvfp4 ;;
+        fi_fp8)         backend=mxfp8_cutedsl;  export MEGA_IKR=0 MEGA_COMBINE_DTYPE=bf16 ;;
+        fi_split_fp4|fi_split_trtllm)
+            local fp4_be=cutedsl
+            [ "$variant" = "fi_split_trtllm" ] && fp4_be=trtllm
+            CSV="$CSV_SPLIT" ALGO="$SPLIT_ALGO" FI_SPLIT_NVFP4_BACKEND="$fp4_be" \
+                run_fi_split nvfp4 \
+                || echo "[warn] shape=${SHAPE_NAME} variant=${variant} tokens/rank=${TOKENS} failed (continuing)"
+            return
+            ;;
         *) echo "[error] unknown variant: $variant"; return 1 ;;
     esac
     run_mega "$backend" \
@@ -97,4 +120,9 @@ run_variant () {
     echo ""
     echo "=== raw csv (${CSV}) ==="
     cat "$CSV" 2>/dev/null || true
+    if [ -s "$CSV_SPLIT" ]; then
+        echo ""
+        echo "=== raw split csv (${CSV_SPLIT}) ==="
+        cat "$CSV_SPLIT"
+    fi
 } 2>&1 | tee "$LOG"
