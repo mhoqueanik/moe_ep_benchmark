@@ -1,8 +1,9 @@
 #!/bin/bash
 # Standalone MoE-EP benchmark launcher -- single node, N GPUs.
-# Runs three subsections (select with SECTION= or run all by default):
+# Runs four subsections (select with SECTION= or run all by default):
 #   vllm_split : vLLM split-path (dispatch/combine + local compute) via bench_moe_ep_nonmega.py
 #   vllm_mega  : vLLM fused mega path via bench_moe_ep_vllm_mega.py
+#   fi_split   : FlashInfer split path (NCCL-EP + fused_moe) via bench_moe_ep_fi_split.py
 #   fi_mega    : FlashInfer fused mega backends via bench_moe_ep_mega.py
 # Each subsection writes its own suffixed .log and .csv.
 # One process is spawned per GPU inside each run (torch.multiprocessing),
@@ -12,6 +13,11 @@
 #   algo=ll : DeepEP low-latency all2all    + DeepGEMM batched (masked) grouped GEMM
 #   algo=ht : DeepEP high-throughput all2all + DeepGEMM contiguous grouped GEMM
 #   trtllm  : DeepEP high-throughput all2all + TRT-LLM-gen fp8 block-scale GEMM (HT-only)
+#
+# Split path (FlashInfer, NCCL-EP dispatch/combine + fused_moe local compute):
+#   quant=bf16     : NCCL-EP all2all + trtllm-gen bf16 routed GEMM
+#   quant=nvfp4    : NCCL-EP all2all + cutedsl/trtllm-gen nvfp4 GEMM
+#   quant=identity : comm-only baseline (dispatch/combine roundtrip)
 #
 # Mega path (fused dispatch+GEMM+combine):
 #   vLLM : vllm_deep_gemm_mega (DeepseekV4MegaMoEExperts / deep_gemm.fp8_fp4_mega_moe)
@@ -42,9 +48,12 @@ WARMUP="${WARMUP:-20}"
 ITERS="${ITERS:-50}"
 EXPERTS_LIST="${EXPERTS_LIST:-deepgemm trtllm}"   # local MoE compute variants to sweep
 MEGA_LIST="${MEGA_LIST:-deep_gemm_mega mxfp8_cutedsl nvfp4_cutedsl}"
+FI_SPLIT_LIST="${FI_SPLIT_LIST:-bf16 nvfp4}"      # fi_split quant variants (add "identity" for comm-only)
+FI_SPLIT_LAYOUT="${FI_SPLIT_LAYOUT:-expert_major}" # LL receive layout (ht ignores it)
 VLLM_MEGA="${VLLM_MEGA:-1}"                       # 1 = include vllm_mega subsection when running all
+FI_SPLIT="${FI_SPLIT:-1}"                         # 1 = include fi_split subsection when running all
 EXCLUDE_QUANT="${EXCLUDE_QUANT:-1}"               # 1 = lift input act-quant out of timing (HT)
-# SECTION: vllm_split | vllm_mega | fi_mega | all (default)
+# SECTION: vllm_split | vllm_mega | fi_split | fi_mega | all (default)
 SECTION="${SECTION:-all}"
 
 QUANT_FLAG=(--exclude-quant)
@@ -97,6 +106,26 @@ run_mega () {
         "$@"
 }
 
+run_fi_split () {
+    local quant="$1"; shift
+    echo ""
+    echo ">>> RUN path=fi_split  quant=${quant}  algo=${ALGO}  tokens/rank=${TOKENS}  gpus=${GPUS}"
+    CUDA_VISIBLE_DEVICES="$DEVS" "$FI_PYTHON" "$HERE/bench_moe_ep_fi_split.py" \
+        --world-size "$GPUS" \
+        --algorithm "$ALGO" \
+        --layout "$FI_SPLIT_LAYOUT" \
+        --quant "$quant" \
+        --tokens-per-rank "$TOKENS" \
+        --num-experts "$NUM_EXPERTS" \
+        --top-k "$TOPK" \
+        --hidden "$HIDDEN" \
+        --intermediate "$INTER" \
+        --warmup "$WARMUP" \
+        --iters "$ITERS" \
+        --out-csv "$CSV" \
+        "$@"
+}
+
 run_vllm_mega () {
     echo ""
     echo ">>> RUN path=vllm_mega  backend=vllm_deep_gemm_mega  tokens/rank=${TOKENS}  gpus=${GPUS}"
@@ -130,6 +159,13 @@ run_vllm_mega_bench () {
         || echo "[warn] vllm mega variant failed (continuing)"
 }
 
+run_fi_split_bench () {
+    for quant in $FI_SPLIT_LIST; do
+        run_fi_split "$quant" "$@" \
+            || echo "[warn] fi_split variant quant=${quant} failed (continuing)"
+    done
+}
+
 run_fi_mega_bench () {
     for backend in $MEGA_LIST; do
         run_mega "$backend" "$@" \
@@ -145,6 +181,9 @@ sections_to_run () {
     echo vllm_split
     if [ "$VLLM_MEGA" = "1" ]; then
         echo vllm_mega
+    fi
+    if [ "$FI_SPLIT" = "1" ]; then
+        echo fi_split
     fi
     echo fi_mega
 }
@@ -170,11 +209,14 @@ run_section () {
             vllm_mega)
                 run_vllm_mega_bench "$@"
                 ;;
+            fi_split)
+                run_fi_split_bench "$@"
+                ;;
             fi_mega)
                 run_fi_mega_bench "$@"
                 ;;
             *)
-                echo "[error] unknown section: ${sec} (expected vllm_split, vllm_mega, fi_mega, or all)"
+                echo "[error] unknown section: ${sec} (expected vllm_split, vllm_mega, fi_split, fi_mega, or all)"
                 return 1
                 ;;
         esac

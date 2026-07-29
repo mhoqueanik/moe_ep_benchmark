@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sweep tokens/rank (per-rank seq_len) from 1 to 8k and run the MoE-EP suite
-# at each point.  Each subsection (vllm_split, vllm_mega, fi_mega) appends to
-# its own suffixed sweep CSV/log.
+# at each point.  Each subsection (vllm_split, vllm_mega, fi_split, fi_mega)
+# appends to its own suffixed sweep CSV/log.
 #
 # Default sweep points are powers of two: 1 2 4 8 ... 8192.
 # Override with a space-separated list:
@@ -71,6 +71,10 @@ run_sweep_section () {
                     ;;
                 vllm_mega)
                     run_vllm_mega_bench \
+                        || echo "[warn] sweep section=${sec} tokens/rank=${TOKENS} had failures (continuing)"
+                    ;;
+                fi_split)
+                    run_fi_split_bench \
                         || echo "[warn] sweep section=${sec} tokens/rank=${TOKENS} had failures (continuing)"
                     ;;
                 fi_mega)

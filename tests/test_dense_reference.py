@@ -57,7 +57,7 @@ def _problem(rank=0):
     )
 
 
-def _naive_reference(problem, *, gate_up_clamp):
+def _naive_reference(problem, *, gate_up_clamp, gate_second_half=False):
     """Per-token/per-slot loop, structured unlike the vectorized reference."""
     device = _device()
     w13_all, w2_all = [], []
@@ -79,7 +79,10 @@ def _naive_reference(problem, *, gate_up_clamp):
             e = int(problem.topk_ids[t, k])
             src, local = e // NUM_LOCAL, e % NUM_LOCAL
             g1 = x[t] @ w13_all[src][local].t()  # (2I,)
-            gate, up = g1[:INTER], g1[INTER:]
+            if gate_second_half:
+                gate, up = g1[INTER:], g1[:INTER]
+            else:
+                gate, up = g1[:INTER], g1[INTER:]
             if gate_up_clamp is not None:
                 limit = abs(float(gate_up_clamp))
                 gate = gate.clamp(max=limit)
@@ -119,6 +122,28 @@ def test_dense_reference_matches_naive(clamp):
     )
     naive = _naive_reference(problem, gate_up_clamp=clamp)
     torch.testing.assert_close(ref, naive, atol=1e-4, rtol=1e-4)
+
+
+def test_gate_second_half_matches_naive_and_differs():
+    """The trtllm-gen gated-act order (fi_split's convention) must match the
+    swapped naive loop AND differ from the default order, proving the flag is
+    exercised."""
+    problem = _problem(0)
+    kwargs = dict(
+        world_size=WORLD,
+        num_local_experts=NUM_LOCAL,
+        hidden=HIDDEN,
+        intermediate=INTER,
+        device=_device(),
+        gate_up_clamp=None,
+    )
+    swapped = compute_dense_moe_reference(
+        problem, gate_second_half=True, **kwargs
+    )
+    naive = _naive_reference(problem, gate_up_clamp=None, gate_second_half=True)
+    torch.testing.assert_close(swapped, naive, atol=1e-4, rtol=1e-4)
+    default = compute_dense_moe_reference(problem, **kwargs)
+    assert not torch.allclose(swapped, default)
 
 
 def test_clamp_actually_bites():

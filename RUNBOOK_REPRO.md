@@ -837,12 +837,32 @@ SECTION=fi_mega bash run_sweep.sh          # or: SEQ_LENS="1 8 64 512 4096"
 MEGA_KNOBS=auto SECTION=fi_mega bash run.sh
 # timed region: bare kernel launch vs full FI forward (default e2e)
 MEGA_TIMING=kernel SECTION=fi_mega bash run.sh
+
+# FI split path (NCCL-EP dispatch/combine + fused_moe local compute)
+SECTION=fi_split bash run.sh                          # bf16 + nvfp4 variants
+FI_SPLIT_LIST="bf16 nvfp4 identity" SECTION=fi_split bash run.sh  # + comm-only baseline
+ALGO=ll FI_SPLIT_LAYOUT=rank_major SECTION=fi_split bash run.sh   # LL receive layout
 ```
 
 fi_mega backends: `deep_gemm_mega | mxfp8_cutedsl | nvfp4_cutedsl`. The two
 `vllm_*` sections (`bench_moe_ep_vllm_mega.py`, `bench_moe_ep_nonmega.py`) are
 comparison baselines needing `vllm==0.20.0`, which the image does not ship —
 skip them unless you want the split-path comparison.
+
+The `fi_split` section (`bench_moe_ep_fi_split.py`) is FlashInfer's own
+non-fused pipeline — NCCL-EP dispatch → local `fused_moe` compute → NCCL-EP
+combine via `MoEEpSplitLayer` — i.e. the FI-side counterpart of `vllm_split`
+and the split-vs-fused comparison point for `fi_mega`. It shares `ALGO`
+(`ht`/`ll`, mapped to the NCCL-EP HT/LL algorithms), runs in the same image
+(no vLLM needed), and its CSV adds per-stage `dispatch/compute/combine` p50
+columns from the layer's opt-in CUDA events (a separate timing loop, so the
+e2e numbers stay barrier-cold like every other section). Weight prep is
+excluded (layer init); for `nvfp4` the per-iteration activation quant runs
+inside the compute stage and IS timed — the split path has no prestage hook
+to lift it out, unlike `fi_mega`. Its accuracy pass (`SPLIT_ACC=0` to skip)
+uses the trtllm-gen gated-act order (`silu` on the second half of `w13`),
+which differs from the mega convention — the two paths' `acc_loss_pct`
+columns are each vs their own bf16 reference.
 
 The five columns in §2a's tables are `nvfp4_cutedsl` under two extra knobs,
 which you can set here to reproduce one variant on its own:

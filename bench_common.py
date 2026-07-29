@@ -138,6 +138,7 @@ def compute_dense_moe_reference(
     intermediate: int,
     device: torch.device | int,
     gate_up_clamp: float | None = None,
+    gate_second_half: bool = False,
 ) -> torch.Tensor:
     """fp32 dense-MoE ground truth for this rank's tokens (all experts).
 
@@ -148,6 +149,11 @@ def compute_dense_moe_reference(
     serves deep_gemm and both cutedsl dtypes.  The measured gap to this
     reference is the full quantization + kernel-arithmetic accuracy loss
     (weight quant, activation quant, fc1-out requant, combine wire).
+
+    ``gate_second_half=True`` selects the trtllm-gen gated-act convention the
+    FI split fused_moe kernels use (``silu(x2) * x1`` with ``x1`` = first
+    half, ``x2`` = second half — see flashinfer
+    tests/moe_ep/test_split_fused_moe_kernel_vs_reference.py).
     """
     x = problem.hidden_states.float()
     topk_ids = problem.topk_ids
@@ -171,8 +177,12 @@ def compute_dense_moe_reference(
             tokens, slots = routed[:, 0], routed[:, 1]
 
             g1 = x[tokens] @ w13[local_e].float().transpose(0, 1)  # (R, 2I)
-            gate = g1[:, :intermediate]
-            up = g1[:, intermediate:]
+            if gate_second_half:
+                gate = g1[:, intermediate:]
+                up = g1[:, :intermediate]
+            else:
+                gate = g1[:, :intermediate]
+                up = g1[:, intermediate:]
             if gate_up_clamp is not None:
                 limit = abs(float(gate_up_clamp))
                 gate = gate.clamp(max=limit)

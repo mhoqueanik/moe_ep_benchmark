@@ -69,6 +69,9 @@ python model_shapes/make_tables.py \
 # one cell by hand, inside the container on an 8-GPU node
 MEGA_LIST=nvfp4_cutedsl TOKENS=512 SECTION=fi_mega bash run.sh
 SECTION=fi_mega bash run_sweep.sh          # token sweep, one backend list
+
+# FI split path (NCCL-EP dispatch/combine + fused_moe compute; RUNBOOK §2c)
+FI_SPLIT_LIST="bf16 nvfp4" TOKENS=512 SECTION=fi_split bash run.sh
 ```
 
 Resubmit a single shape to fill gaps (`SHAPE_LIST=qwen3_5_397b bash
