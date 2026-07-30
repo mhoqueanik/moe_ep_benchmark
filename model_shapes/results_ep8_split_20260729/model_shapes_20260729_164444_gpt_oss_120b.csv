@@ -1,0 +1,11 @@
+path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s,acc_loss_pct
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,8,8,128,4,2880,2880,93.1,89.1,96.3,687639.7,23.064
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,64,8,128,4,2880,2880,95.2,91.2,306.2,5379959.5,23.125
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,512,8,128,4,2880,2880,132.1,129.9,191.5,31000242.1,23.092
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,2048,8,128,4,2880,2880,240.8,239.6,460.7,68039869.0,23.102
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,8192,8,128,4,2880,2880,697.3,693.2,916.4,93990226.6,23.107
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,8,8,128,4,2880,2880,130.0,127.9,264.2,492126.0,6.314
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,64,8,128,4,2880,2880,132.2,129.9,197.6,3874092.0,6.344
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,512,8,128,4,2880,2880,167.0,164.7,334.8,24530470.7,6.337
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,2048,8,128,4,2880,2880,279.6,277.4,477.2,58608055.9,6.335
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,8192,8,128,4,2880,2880,815.1,804.9,1101.8,80403587.9,6.336

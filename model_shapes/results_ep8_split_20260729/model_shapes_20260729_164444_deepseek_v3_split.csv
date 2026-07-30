@@ -1,0 +1,11 @@
+path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s,dispatch_us_p50,compute_us_p50,combine_us_p50,acc_loss_pct
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_cutedsl,yes,nvfp4_block16,bfloat16,nvfp4_block16,8,8,256,8,7168,2048,1676.0,833.5,2004.9,38185.4,98.8,926.8,144.9,23.175
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_cutedsl,yes,nvfp4_block16,bfloat16,nvfp4_block16,64,8,256,8,7168,2048,1647.7,928.6,1974.8,310733.9,170.9,933.9,71.6,23.185
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_cutedsl,yes,nvfp4_block16,bfloat16,nvfp4_block16,512,8,256,8,7168,2048,1673.1,1643.1,1767.6,2448214.5,189.9,1253.7,111.0,23.142
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_cutedsl,yes,nvfp4_block16,bfloat16,nvfp4_block16,2048,8,256,8,7168,2048,6026.5,5861.9,6276.9,2718653.8,387.1,3593.8,342.4,23.147
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_cutedsl,yes,nvfp4_block16,bfloat16,nvfp4_block16,8192,8,256,8,7168,2048,18715.2,17461.5,19493.3,3501746.6,1309.8,13422.9,1896.9,23.121
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_trtllm,yes,nvfp4_block16,bfloat16,nvfp4_block16,8,8,256,8,7168,2048,2122.1,1638.5,2705.3,30158.6,97.9,1709.1,82.8,23.176
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_trtllm,yes,nvfp4_block16,bfloat16,nvfp4_block16,64,8,256,8,7168,2048,1831.6,1428.5,2252.9,279541.9,169.3,1129.3,398.2,23.186
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_trtllm,yes,nvfp4_block16,bfloat16,nvfp4_block16,512,8,256,8,7168,2048,2277.2,2252.5,2442.9,1798662.2,187.4,1848.0,117.3,23.142
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_trtllm,yes,nvfp4_block16,bfloat16,nvfp4_block16,2048,8,256,8,7168,2048,7186.4,6959.1,7378.1,2279867.0,409.1,4756.5,354.7,23.148
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_trtllm,yes,nvfp4_block16,bfloat16,nvfp4_block16,8192,8,256,8,7168,2048,21387.2,20686.0,21805.8,3064260.5,1316.9,16194.5,1310.1,23.121

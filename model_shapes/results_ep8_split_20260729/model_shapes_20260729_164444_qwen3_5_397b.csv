@@ -1,0 +1,16 @@
+path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s,acc_loss_pct
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8,8,512,10,4096,1024,112.7,108.6,197.7,568101.1,20.508
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,64,8,512,10,4096,1024,131.1,128.0,147.5,3904343.6,20.591
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,512,8,512,10,4096,1024,194.7,192.4,440.3,21042248.9,20.589
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,2048,8,512,10,4096,1024,550.4,545.8,705.6,29764846.1,20.595
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8192,8,512,10,4096,1024,2018.9,1974.2,2190.4,32461047.1,20.595
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,8,8,512,10,4096,1024,124.0,121.8,128.2,516195.6,23.015
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,64,8,512,10,4096,1024,144.2,140.4,146.5,3549639.5,23.116
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,512,8,512,10,4096,1024,209.4,205.9,213.0,19561396.5,23.100
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,2048,8,512,10,4096,1024,465.8,462.7,469.9,35173290.0,23.122
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,8192,8,512,10,4096,1024,1622.5,1618.9,1673.2,40392087.0,23.126
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,8,8,512,10,4096,1024,181.1,175.2,288.6,353325.7,6.307
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,64,8,512,10,4096,1024,211.3,209.8,304.2,2422590.7,6.346
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,512,8,512,10,4096,1024,312.3,308.2,420.1,13117441.7,6.342
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,2048,8,512,10,4096,1024,521.3,515.0,621.3,31430325.9,6.344
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,8192,8,512,10,4096,1024,1750.0,1733.6,1809.6,37450169.7,6.345
