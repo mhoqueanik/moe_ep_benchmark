@@ -12,3 +12,14 @@ mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,
 mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,256,8,256,8,7168,2048,222.4,217.6,233.4,9207970.7,nan
 mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,256,8,256,8,7168,2048,301.8,296.6,395.1,6785051.5,nan
 mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,64,8,256,8,7168,2048,231.3,226.7,329.0,2213920.1,23.175
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,512,8,256,8,7168,2048,297.8,293.2,325.2,13755306.1,nan
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,512,8,256,8,7168,2048,322.7,315.7,853.4,12694004.7,nan
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,1024,8,256,8,7168,2048,479.0,474.1,819.0,17100868.5,nan
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,1024,8,256,8,7168,2048,429.0,423.7,689.8,19095215.4,nan
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,2048,8,256,8,7168,2048,813.1,804.2,860.2,20150340.4,nan
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,2048,8,256,8,7168,2048,633.8,627.6,905.3,25849446.3,nan
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,4096,8,256,8,7168,2048,1649.1,1524.6,1859.8,19870184.1,nan
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,4096,8,256,8,7168,2048,1080.3,1069.1,1351.9,30331305.0,nan
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8192,8,256,8,7168,2048,3138.8,3058.1,3243.4,20878997.2,nan
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,8192,8,256,8,7168,2048,2067.0,2052.0,2423.5,31705239.0,nan
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,64,8,256,8,7168,2048,231.5,225.3,331.7,2211777.7,23.175

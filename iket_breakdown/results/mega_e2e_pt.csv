@@ -1,2 +1,3 @@
 path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s,acc_loss_pct
 mega,mega,fused_symm_mega,nvfp4_cutedsl+pt,no,nvfp4_block16,bfloat16,nvfp4_block16,64,8,256,8,7168,2048,236.3,231.3,123742.5,2166994.0,23.175
+mega,mega,fused_symm_mega,nvfp4_cutedsl+pt,no,nvfp4_block16,bfloat16,nvfp4_block16,64,8,256,8,7168,2048,238.2,233.2,129510.8,2149382.0,23.175
