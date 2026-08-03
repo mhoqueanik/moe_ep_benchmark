@@ -25,8 +25,16 @@ microbenchmark (§2) runs **DP4 + EP4, TP1**. The backend names, checkpoint
 policy and what a ratio means are unchanged — see the header of
 [expected_results.md](expected_results.md).
 
-V4-Pro is **not** measured end-to-end at 1x4 (its geometry is in the §2
-kernel tables only), and serving mode is not ported.
+V4-Pro is **not** measured end-to-end at 1x4, and serving mode is not
+ported. The Pro blocker is KV headroom, not sharding: TP4 fits the weights
+(mx 806 GB → ~202 GB/GPU, NVFP4 851 GB → ~213 GB/GPU of 288 GB), but the
+~40-55 GB/GPU left after weights cannot hold the lc100k cell's ~3.2M KV
+tokens (~140 GB at Pro's MLA ~35-43 KB/token, unsharded by TP), and ctx32k
+(~45 GB) sits at the edge where fi_cutedsl — the largest weights — OOMs
+first (§5.1 of the 1x8 file). pre8k/dec1k would likely run, but two cells
+are not the recorded four-cell row set, so Pro at 1x4 is left unmeasured
+rather than partially measured. Its geometry appears in the §2 kernel
+tables, which read no checkpoint.
 
 ---
 
