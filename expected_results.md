@@ -319,3 +319,129 @@ The ±0.02x above is measured, not assumed: repeating the whole set on a second
 pass reproduced it to within **0.5% on absolute throughput and 0.008x on every
 ratio**. Every table was produced by this branch's own scripts against a freshly
 built venv.
+
+---
+
+## 7. Side by side — 1x8 B200 (sm_100, EP8) vs 1x4 GB300 (sm_103, EP4)
+
+Convenience view pairing this file's B200 numbers with the GB300 EP4 run in
+[expected_results_1x4_sm103.md](expected_results_1x4_sm103.md). **This is not a GPU-vs-GPU
+comparison.** The two columns differ in world size as well as silicon: at EP8
+each rank holds 32 of Flash's 256 experts, at EP4 it holds 64, so
+tokens-per-expert doubles at a given tokens/rank and both the kernel
+crossover and per-rank latency move for reasons that have nothing to do with
+the GPU. The per-machine **ratios** are each configuration's own claim; read
+the side-by-side for the *shape* of the result — wrapper parity, where the
+CuteDSL win starts, how it grows — not for "which chip is faster".
+
+### 7a. vLLM e2e — DeepSeek-V4-Flash
+
+Total tok/s (whole node: 8 GPUs for B200, 4 for GB300) and ratio vs that
+machine's native:
+
+| cell | B200 EP8 native | fi_dg | fi_cutedsl | GB300 EP4 native | fi_dg | fi_cutedsl |
+|---|---|---|---|---|---|---|
+| prefill-8k | 38986 | 1.032x | **1.195x** | 47412 | 1.037x | **1.190x** |
+| decode-1k | 30845 | 1.021x | **1.061x** | 32313 | 1.019x | **1.064x** |
+| 100K ISL / 1K | 29632 | 1.020x | **1.111x** | 35575 | 1.023x | **1.086x** |
+| 32K ISL / 32 | 35700 | 1.025x | **1.177x** | 43615 | 1.028x | **1.155x** |
+
+fi_dg sits at 1.02-1.04x on both machines, and fi_cutedsl's ordering across
+cells is identical (prefill-8k > ctx32k > lc100k > dec1k). Its margin is
+2-3 points slimmer on the two long-context cells at EP4 — consistent with the
+crossover sitting one token bucket higher there (§6b).
+
+### 7b. Kernel microbenchmark
+
+p50 µs per rank; `dg` absolute, the two key CuteDSL variants as each
+machine's ratio-vs-its-own-dg (B200 from §3 above, GB300 from expected_results_1x4_sm103.md §2; the
+`+ikr` / `+combine_mxfp8` columns are omitted here — see the full tables).
+
+**deepseek_v4_flash** — 4096/2048/256/top-6:
+
+| tok/rank | dg B200 | dg GB300 | nvfp4 bf16 B200 | GB300 | +combine_nvfp4 B200 | GB300 |
+|---|---|---|---|---|---|---|
+| 8 | 108.5 | 129.0 | 0.91x | 0.91x | 0.86x | 0.88x |
+| 64 | 124.9 | 177.2 | 0.94x | 0.93x | 0.85x | 0.90x |
+| 512 | 154.7 | 197.5 | 0.82x | 0.85x | 0.92x | 0.91x |
+| 1024 | 233.5 | 229.4 | 1.00x | 0.88x | 1.18x | 0.98x |
+| 2048 | 379.1 | 364.5 | 1.13x | 1.10x | 1.39x | 1.32x |
+| 4096 | 680.0 | 610.3 | 1.18x | 1.14x | 1.61x | 1.53x |
+| 8192 | 1320.4 | 1123.3 | 1.20x | 1.14x | 1.71x | 1.61x |
+
+**deepseek_v4_pro** — 7168/3072/384/top-6:
+
+| tok/rank | dg B200 | dg GB300 | nvfp4 bf16 B200 | GB300 | +combine_nvfp4 B200 | GB300 |
+|---|---|---|---|---|---|---|
+| 8 | 260.1 | 290.8 | 1.00x | 0.95x | 0.97x | 0.94x |
+| 64 | 327.7 | 549.6 | 0.98x | 0.96x | 0.95x | 0.96x |
+| 512 | 376.9 | 609.3 | 0.96x | 0.96x | 1.00x | 1.00x |
+| 1024 | 492.1 | 644.1 | 1.12x | 0.95x | 1.18x | 1.00x |
+| 2048 | 899.1 | 824.3 | 1.44x | 1.08x | 1.57x | 1.19x |
+| 4096 | 1591.8 | 1457.3 | 1.56x | 1.47x | 1.69x | 1.63x |
+| 8192 | 3144.2 | 2587.6 | 1.64x | 1.62x | 1.83x | 1.77x |
+
+**deepseek_v3** — 7168/2048/256/top-8:
+
+| tok/rank | dg B200 | dg GB300 | nvfp4 bf16 B200 | GB300 | +combine_nvfp4 B200 | GB300 |
+|---|---|---|---|---|---|---|
+| 8 | 170.8 | 215.0 | 1.00x | 0.96x | 0.93x | 0.94x |
+| 64 | 184.4 | 290.8 | 1.01x | 1.01x | 0.91x | 0.95x |
+| 512 | 282.6 | 327.7 | 1.06x | 0.91x | 1.16x | 0.99x |
+| 1024 | 465.0 | 440.3 | 1.24x | 1.04x | 1.48x | 1.23x |
+| 2048 | 809.4 | 757.2 | 1.40x | 1.32x | 1.65x | 1.58x |
+| 4096 | 1604.6 | 1331.2 | 1.53x | 1.47x | 1.87x | 1.73x |
+| 8192 | 3236.3 | 2653.2 | 1.59x | 1.53x | 2.05x | 1.95x |
+
+**kimi_k2_6** — 7168/2048/384/top-8:
+
+| tok/rank | dg B200 | dg GB300 | nvfp4 bf16 B200 | GB300 | +combine_nvfp4 B200 | GB300 |
+|---|---|---|---|---|---|---|
+| 8 | 206.8 | 247.9 | 0.99x | 0.96x | 0.96x | 0.94x |
+| 64 | 253.9 | 413.7 | 1.04x | 1.01x | 0.99x | 0.98x |
+| 512 | 315.4 | 461.8 | 0.98x | 0.98x | 1.08x | 1.03x |
+| 1024 | 450.7 | 518.1 | 1.10x | 0.97x | 1.31x | 1.08x |
+| 2048 | 825.3 | 743.5 | 1.33x | 1.13x | 1.55x | 1.36x |
+| 4096 | 1664.0 | 1365.5 | 1.59x | 1.41x | 1.90x | 1.63x |
+| 8192 | 3128.4 | 2700.8 | 1.53x | 1.53x | 1.92x | 1.92x |
+
+**qwen3_5_397b** — 4096/1024/512/top-10:
+
+| tok/rank | dg B200 | dg GB300 | nvfp4 bf16 B200 | GB300 | +combine_nvfp4 B200 | GB300 |
+|---|---|---|---|---|---|---|
+| 8 | 112.7 | 129.0 | 0.90x | 0.89x | 0.82x | 0.82x |
+| 64 | 131.1 | 195.5 | 0.92x | 0.92x | 0.81x | 0.82x |
+| 512 | 194.7 | 231.4 | 0.93x | 0.86x | 1.09x | 0.97x |
+| 1024 | 309.2 | 294.9 | 1.04x | 0.98x | 1.29x | 1.10x |
+| 2048 | 549.0 | 492.5 | 1.18x | 1.10x | 1.56x | 1.41x |
+| 4096 | 1032.2 | 917.5 | 1.21x | 1.17x | 1.74x | 1.64x |
+| 8192 | 2022.4 | 1759.2 | 1.25x | 1.20x | 1.84x | 1.70x |
+
+**gpt_oss_120b** — 2880/2880/128/top-4 — no `dg` baseline on either machine
+(2880 is not %128), so absolute µs only:
+
+| tok/rank | nvfp4 bf16 B200 | GB300 | +combine_nvfp4 B200 | GB300 |
+|---|---|---|---|---|
+| 8 | 93.2 | 109.6 | 97.2 | 114.8 |
+| 64 | 95.2 | 126.0 | 101.3 | 134.1 |
+| 512 | 132.2 | 148.5 | 127.9 | 146.4 |
+| 1024 | 173.1 | 165.9 | 165.0 | 165.8 |
+| 2048 | 240.7 | 236.5 | 222.1 | 222.2 |
+| 4096 | 379.9 | 349.4 | 329.6 | 302.1 |
+| 8192 | 697.4 | 633.8 | 541.7 | 490.5 |
+
+The consistent picture: the crossover sits one token bucket higher at EP4
+(1024-2048 vs 512-1024 — visible in every ratio pair at 512/1024), the small
+tok/rank cells agree closely (there the kernel is dispatch-bound, not
+GEMM-bound), and by 8192 the two machines' ratios converge again (kimi and
+Pro land within 0.00-0.06x of each other).
+
+### 7c. GSM8K — DeepSeek-V4-Flash, 200 questions
+
+| | native | fi_dg | fi_cutedsl (NVFP4 cast) | delta |
+|---|---|---|---|---|
+| B200 EP8/TP8 | 0.965 | 0.965 | 0.965 | +0.000 |
+| GB300 EP4/TP4 | 0.965 | 0.965 | 0.975 | +0.010 |
+
+native and fi_dg score identically on both machines; fi_cutedsl's +0.010 on
+GB300 is 2 questions on 200, inside the ±0.02 agreement band.
