@@ -1,0 +1,189 @@
+#!/bin/bash
+#SBATCH --job-name=deepseekv4flash.vllm_pr_sweep_ep4
+#SBATCH --account=coreai_libraries_cudnn
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --exclusive
+#SBATCH --time=04:00:00
+#SBATCH --partition=gb300
+#SBATCH --output=vllm_pr_sweep_ep4_%j.log
+#
+# DeepSeek-V4-Flash at EP4/TP4 on one 1x4 SM103 (GB300) node — the 1x4 port of
+# job_vllm_pr_runbook_sweep_ep8.sh. Same four cells, same per-cell engine
+# settings, so each row corresponds 1:1 to the EP8 table; only the world size
+# (and therefore experts/rank: 64 of 256 instead of 32) differs. Do NOT compare
+# absolute tok/s against the B200 EP8 numbers — different GPU, different world
+# size; the fi-vs-native ratio is the claim that carries.
+#
+#   tier 1        config checks (no model)
+#   prefill-8k    prefill:1024:1  x256, capture 8192   [headline]
+#   decode-1k     decode:128:256  x1024, capture 4096  [headline]
+#   longctx-100k  100000:1024     x32 @conc 32         [interactivity]
+#   ctx32k        32768:32        x32 @conc 32         [interactivity]
+#
+# The 0.6.15 venv is below the new flashinfer floor, so the version gate is
+# explicitly skipped -- that is the documented pre-release escape hatch.
+#
+# Usage:
+#   cd <repo>/vllm_e2e && sbatch job_vllm_pr_runbook_sweep_ep4.sh
+#
+#   The %j log lands in the submit directory, so cd here first.
+#
+# Overrides (all optional; sbatch exports the submitting env by default):
+#   ROOT=/my/scratch          checkout root; default below
+#   IMG=/path/to.sqsh         container image
+#   ROUNDS=3                  timed rounds per cell (plus round 0 warmup)
+#   MODEL_MX_FLASH=... MODEL_NVFP4_FLASH=...   required; see §1.3
+#   EXTRA_MOUNTS=a:a,b:b      appended to --container-mounts, e.g. when the
+#                             checkpoints live outside $ROOT
+#   sbatch -A <acct> -p <part> ...   CLI flags override the #SBATCH lines above
+set -uo pipefail
+
+# NB: do not "improve" this into a BASH_SOURCE-derived path -- sbatch copies the
+# script to a spool dir, so the script's own location is not the checkout.
+ROOT=${ROOT:-/lustre/fsw/coreai_libraries_cudnn/mhoqueanik}
+W=$ROOT/moe_ep_benchmark/vllm_e2e
+REPO=${REPO:-$ROOT/flashinfer-moe_ep}
+IMG=${IMG:-$REPO/flashinfer-ep-pt2605-mega_moe_ep.sqsh}
+ROUNDS=${ROUNDS:-3}
+MOUNTS="$ROOT:$ROOT,/lustre/share:/lustre/share:ro"
+[[ -n "${EXTRA_MOUNTS:-}" ]] && MOUNTS="$MOUNTS,$EXTRA_MOUNTS"
+
+# Forward the checkpoint overrides only when set, so an unset MODEL stays unset
+# inside the container rather than becoming "" (which bench_offline.py would
+# treat as an explicit empty path instead of falling back to its default).
+FWD=""
+# Required, not optional: the cells pass --model, so these must reach the
+# container. Fail here rather than an hour into the allocation.
+for v in MODEL_MX_FLASH MODEL_NVFP4_FLASH; do
+    [[ -n "${!v:-}" ]] || { echo "$v is unset -- see RUNBOOK_REPRO.md §1.3"; exit 2; }
+    [[ -d "${!v}" ]]   || { echo "$v=${!v} is not a directory"; exit 2; }
+    FWD+="export $v='${!v}'; "
+done
+
+srun --ntasks=1 \
+  --container-image="$IMG" \
+  --container-name=fivllm_sweep \
+  --container-mounts="$MOUNTS" \
+  --container-workdir="$W" \
+  bash -lc "
+set -uo pipefail
+export FLASHINFER_DISABLE_VERSION_CHECK=1
+export HF_HOME=$ROOT/.cache/huggingface
+export PIP_CACHE_DIR=$ROOT/.cache/pip
+export FLASHINFER_WORKSPACE_BASE=$ROOT/.cache/flashinfer-root-ws
+export FI_MOE_EP_SKIP_VERSION_CHECK=1
+export TP=4   # EP4: bench_offline sets tensor_parallel_size=TP, DP=1 => EP=world=4
+$FWD
+
+echo '=== node ==='; hostname; nvidia-smi -L | head -4
+echo '=== harness ==='; git -C $ROOT/moe_ep_benchmark log --oneline -1
+echo '=== flashinfer ==='; git -C $REPO log --oneline -1
+echo '=== checkpoints ==='; echo \"MODEL=\${MODEL:-<bench_offline default>}\"; echo \"MODEL_NVFP4=\${MODEL_NVFP4:-<bench_offline default>}\"
+source venv0251/bin/activate || exit 1
+bash patch_0251/apply.sh || exit 1
+
+echo; echo '########## TIER 1'
+python test_backend_registration.py; t1=\$?
+[[ \$t1 -ne 0 ]] && { echo \"tier1 FAILED (\$t1)\"; exit \$t1; }
+
+DG=flashinfer_moe_ep_mega_deep_gemm
+CUTEDSL=flashinfer_moe_ep_mega_cutedsl
+
+# cell <tag> <extra-env-as-string> <bench args...>
+cell() {
+    local name=\$1; shift
+    local envs=\$1; shift
+    for be in deep_gemm_mega_moe \$DG \$CUTEDSL; do
+        local short=native
+        [[ \$be == \$DG ]] && short=fi_dg
+        [[ \$be == \$CUTEDSL ]] && short=fi_cutedsl
+        # --model per backend, not the MODEL env: resolve_model ranks MODEL
+        # above the per-backend NVFP4 default, so exporting it to point native
+        # at a local checkpoint would drag fi_cutedsl onto the mx dequant path
+        # too. Explicit is the only form that survives an off-cluster run.
+        local model=\$MODEL_MX_FLASH
+        local cache=''
+        if [[ \$short == fi_cutedsl ]]; then
+            model=\$MODEL_NVFP4_FLASH
+            cache=FLASHINFER_MOE_EP_KNOB_CACHE=$W/results/knob_cache_ep4.json
+        fi
+        echo; echo \"--- \$name / \$short (model=\$(basename \$model)) ---\"
+        env \$envs MOE_BACKEND=\$be \$cache \
+            python bench_offline.py --model \"\$model\" --tag sw_ep4_\${name}_\${short} \"\$@\" \
+            --out results/sweep_ep4_\${name}_\${short}.json 2>&1 \
+            | grep -E '^\\[bench_offline\\]|Error|Traceback' | tail -8
+    done
+}
+
+# Stale-result guard: the summary below only accepts JSONs written after
+# this point. Without it, a run whose cells all fail still prints a full
+# plausible table from the result files committed in the repo -- every cell
+# can fail, the job still exit 0, and the summary still look perfect.
+# Committed results must never masquerade as a fresh run.
+export RUN_T0=\$(date +%s)
+
+echo; echo '########## PREFILL-8K (headline)'
+cell pre8k 'ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 CAPTURE_SIZES=256,2048,4096,8192' \
+    --workload prefill:1024:1 --num-prompts 256 --rounds $ROUNDS
+
+echo; echo '########## DECODE-1K (headline)'
+# CAPTURE_SIZES is mandatory here. Without it this is the only cell setting
+# MAX_CAPTURE while inheriting vLLM's dense default capture ladder, and the
+# cudagraph memory profiler then reserves phantom GiB/GPU for the flashinfer
+# backends -- the reservation comes out of the KV cache and the backend looks
+# fast-per-step but slow overall. See the EP8 job and expected_results.md §5.1.
+cell dec1k 'ENFORCE_EAGER=0 MAX_CAPTURE=4096 MAX_NUM_SEQS=1024 CAPTURE_SIZES=256,1024,2048,4096' \
+    --workload decode:128:256 --num-prompts 1024 --rounds $ROUNDS
+
+echo; echo '########## LONGCTX 100K/1K @ conc 32'
+cell lc100k 'ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 CAPTURE_SIZES=32,256,2048,8192 MAX_NUM_SEQS=32 MAX_MODEL_LEN=102400 GPU_MEM_UTIL=0.93 REQUIRE_LATENCY=1' \
+    --workload longctx:100000:1024 --num-prompts 32 --rounds 2
+
+echo; echo '########## CTX 32K/32 @ conc 32'
+cell ctx32k 'ENFORCE_EAGER=0 MAX_CAPTURE=8192 MAX_BATCHED_TOKENS=8192 CAPTURE_SIZES=32,256,2048,8192 MAX_NUM_SEQS=32 MAX_MODEL_LEN=33792 GPU_MEM_UTIL=0.93 REQUIRE_LATENCY=1' \
+    --workload longctx:32768:32 --num-prompts 32 --rounds $ROUNDS
+
+echo; echo '########## SUMMARY'
+python - <<'PY'
+import json, os
+
+RUN_T0 = float(os.environ.get('RUN_T0', 0))
+
+def fresh(path):
+    return os.path.exists(path) and os.path.getmtime(path) >= RUN_T0
+
+CELLS = [
+    ('prefill-8k',      'pre8k',  'prefill 1024x1, 256 prompts, capture 8192'),
+    ('decode-1k',       'dec1k',  'decode 128->256, 1024 seqs, capture 4096'),
+    ('100K ISL / 1K',   'lc100k', '32 concurrent'),
+    ('32K ISL / 32',    'ctx32k', '32 concurrent'),
+]
+ROWS = [('native', 'native'), ('fi_dg', 'fi_dg'), ('fi_cutedsl', 'fi_cutedsl')]
+
+for title, stem, note in CELLS:
+    print(f\"\\n{title}  ({note})\")
+    print(f\"  {'backend':11s} {'tok/s':>9s} {'vs native':>10s} \"
+          f\"{'TTFT p50':>9s} {'ITL p50':>9s} {'ITL p99':>9s}\")
+    base = None
+    for label, short in ROWS:
+        p = f'results/sweep_ep4_{stem}_{short}.json'
+        if not fresh(p):
+            print(f'  {label:11s} MISSING'); continue
+        d = json.load(open(p))
+        v = d['median_total_tok_per_s']
+        if base is None:
+            base = v
+        m = d.get('median_latency') or {}
+        def g(k, s=1.0):
+            x = m.get(k)
+            return f'{x * s:9.1f}' if x is not None else f'{\"-\":>9s}'
+        print(f\"  {label:11s} {v:9.0f} {v / base:9.3f}x {g('ttft_s_p50')} \"
+              f\"{g('itl_s_p50', 1e3)} {g('itl_s_p99', 1e3)}\")
+print('\\n  TTFT seconds, ITL milliseconds. Latency only collected on the')
+print('  interactivity cells (REQUIRE_LATENCY=1).')
+PY
+"
+rc=$?
+echo "=== job exit rc=$rc ==="
+exit $rc

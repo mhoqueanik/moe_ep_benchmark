@@ -1,15 +1,40 @@
 # CLAUDE.md
 
-Reproduction-only branch (`vllm_repro_8_gpu`) for the FlashInfer `moe_ep`
-mega-MoE path on Blackwell (sm_100), on **one 8-GPU node**, at two levels: a
-kernel microbenchmark (no vLLM, no checkpoints) and a vLLM 0.25.1 end-to-end
-benchmark on DeepSeek-V4-Flash and V4-Pro.
+Reproduction branch (`vllm_repro_4_gpu_sm103`) for the FlashInfer `moe_ep`
+mega-MoE path on Blackwell Ultra (**sm_103, one 4-GPU GB300 node**), ported
+from the 1x8 B200 branch (`vllm_repro_8_gpu_v2`), at two levels: a kernel
+microbenchmark (no vLLM, no checkpoints) and a vLLM 0.25.1 end-to-end
+benchmark on DeepSeek-V4-Flash.
 
-[expected_results.md](expected_results.md) is the source of truth for numbers
-and for the two known ways this produces plausible-but-wrong results.
+[expected_results_1x4_sm103.md](expected_results_1x4_sm103.md) is the source
+of truth for this branch's numbers; [expected_results.md](expected_results.md)
+carries the 1x8 B200 reference the tables are ported from, plus the two known
+ways this produces plausible-but-wrong results.
 [README.md](README.md) is the repo map. Setup is
 [RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) — the single runbook, four sections:
-prep (§1), microbenchmark (§2), e2e throughput (§3), accuracy (§4).
+prep (§1), microbenchmark (§2), e2e throughput (§3), accuracy (§4) — read
+with the 1x4 deltas below.
+
+## 1x4 sm103 deltas vs the 1x8 runbook
+
+* World size is **4** everywhere: microbenchmark DP4/EP4/TP1 (`GPUS=4` is the
+  default in `run.sh` / `model_shapes/job_payload.sh`), e2e TP4/EP4/DP1
+  (`job_vllm_pr_runbook_sweep_ep4.sh` exports `TP=4`). The §4 one-liners must
+  carry `TP=4`; the `[fi_moe_ep]` banner must read `world=4`, four lines.
+* Micro CSVs land in `model_shapes/results_ep4/`; the B200 EP8 reference stays
+  in `results_ep8/`. Never render the two directories in one `make_tables`
+  call (it ignores the `gpus` column).
+* The fi_cutedsl knob cache is `vllm_e2e/results/knob_cache_ep4.json`, tuned
+  at world 4 on GB300; the shipped `knob_cache_ep8.json` is the wrong world
+  size here.
+* Local layout: flashinfer checkout at `$ROOT/flashinfer-moe_ep` (not
+  `flashinfer-2/…`), image `$ROOT/flashinfer-moe_ep/flashinfer-ep-pt2605-mega_moe_ep.sqsh`,
+  partition `gb300`. All are the scripts' defaults on this branch.
+* At EP4 each rank holds 64 of Flash's 256 experts (vs 32 at EP8), so
+  tokens-per-expert doubles at a given tokens/rank and the DeepGEMM↔CuteDSL
+  crossover sits at a different tokens/rank than the EP8 tables. Do not
+  compare absolute numbers across the two branches; ratios within one table
+  are the claim.
 
 Analysis history, one-off investigation drivers, EP4 material and the
 chronological run log live on the `vllm-pr` branch. Do not port them here —
@@ -21,9 +46,10 @@ this branch is deliberately only what a reproduction needs.
   (`run.sh`, `bench_moe_ep_*.py`, `model_shapes/`), e2e in `vllm_e2e/`.
 * Numbers are provenanced by SLURM job ID. When quoting or updating a number,
   carry the job ID with it; `expected_results.md` §6 lists them.
-* The measured configuration is 1x8 B200, EP8, vLLM 0.25.1, cutlass-dsl 4.5.2.
-  Anything else is a different measurement, not a better estimate of the same
-  one.
+* The measured configuration on this branch is 1x4 GB300 (sm_103), EP4,
+  vLLM 0.25.1, cutlass-dsl 4.5.2. Anything else — including the 1x8 B200 EP8
+  numbers this branch was ported from — is a different measurement, not a
+  better estimate of the same one.
 
 ## Invariants worth knowing before changing anything
 
@@ -42,16 +68,17 @@ The venv gets 4.5.2 from vLLM's pin; `model_shapes/job_payload.sh` installs and
 asserts it explicitly because it does not use the venv. The container image
 pins 4.5.0 and is *not* the source of truth.
 
-**EP8 everywhere, but not the same parallelism.** The microbenchmark shards
-nothing — `run.sh:33` makes world size = DP = EP, so `GPUS=8` is DP8/EP8/TP1.
-The vLLM e2e sweeps set `TP=8` and leave `DP` at 1, giving TP8/EP8/DP1. Expert
-parallelism is 8 in both; do not carry the microbenchmark's DP into an e2e
+**EP4 everywhere, but not the same parallelism.** The microbenchmark shards
+nothing — `run.sh:33` makes world size = DP = EP, so `GPUS=4` is DP4/EP4/TP1.
+The vLLM e2e sweeps set `TP=4` and leave `DP` at 1, giving TP4/EP4/DP1. Expert
+parallelism is 4 in both; do not carry the microbenchmark's DP into an e2e
 claim, or vice versa.
 
 **`make_tables.py` ignores the `gpus` column.** It keys cells on
 `(geometry, tokens/rank, variant)`, so CSVs from different world sizes in one
 directory silently overwrite each other. Use a separate `OUT_DIR` per EP size —
-this branch ships `model_shapes/results_ep8/`.
+this branch ships `model_shapes/results_ep4/` (GB300) next to the inherited
+`results_ep8/` (B200 reference).
 
 **Every cell that sets `MAX_CAPTURE` must pin `CAPTURE_SIZES`.** Without it,
 vLLM's CUDA-graph memory profiler reserves ~48 GiB/GPU for the flashinfer

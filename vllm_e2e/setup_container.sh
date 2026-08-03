@@ -8,7 +8,7 @@
 set -uo pipefail
 
 ROOT=${ROOT:-/lustre/fsw/coreai_libraries_cudnn/mhoqueanik}
-REPO=${REPO:-$ROOT/flashinfer-2/flashinfer-moe_ep}
+REPO=${REPO:-$ROOT/flashinfer-moe_ep}
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV=${VENV:-$HERE/venv0251}
 export PIP_CACHE_DIR=${PIP_CACHE_DIR:-$ROOT/.cache/pip}

@@ -1,13 +1,26 @@
 # MoE-EP: reproducing the whole thing from scratch
 
+> **This is the 1x4 sm103 (GB300) branch.** The runbook text below is the 1x8
+> B200 original it was ported from; read it with the deltas in
+> [CLAUDE.md](CLAUDE.md) §"1x4 sm103 deltas": world size 4 everywhere (micro
+> DP4/EP4/TP1, e2e TP4/EP4/DP1 via `job_vllm_pr_runbook_sweep_ep4.sh`), micro
+> output in `model_shapes/results_ep4/`, knob cache
+> `results/knob_cache_ep4.json`, partition `gb300`, flashinfer checkout at
+> `$ROOT/flashinfer-moe_ep`. Where a command below says `TP=8` /
+> `world=8` / eight banner lines, this branch's numbers are `TP=4` /
+> `world=4` / four. Expected numbers for this branch:
+> [expected_results_1x4_sm103.md](expected_results_1x4_sm103.md).
+
 Manual steps for the FlashInfer `moe_ep` mega-MoE work on DeepSeek-V4-Flash
 and V4-Pro: clone, build the image, fetch checkpoints, build the venv, then the
 kernel microbenchmark, the vLLM e2e sweeps and the accuracy gate. Commands are
 copied from the scripts that produced the recorded numbers.
 
-The numbers you should get are in [expected_results.md](expected_results.md),
-measured on one 1x8 B200 node with vLLM 0.25.1, flashinfer `4_5_2-perf-fix`
-@ `1ee41bcd` and cutlass-dsl 4.5.2.
+The numbers you should get are in
+[expected_results_1x4_sm103.md](expected_results_1x4_sm103.md), measured on one
+1x4 GB300 node with vLLM 0.25.1, flashinfer `4_5_2-perf-fix` @ `adfa4749` and
+cutlass-dsl 4.5.2. The 1x8 B200 reference these were ported from is
+[expected_results.md](expected_results.md).
 
 This is the only runbook you need. The one other document worth knowing about
 is in the flashinfer checkout — `docs/design_docs/moe_ep_runbook.md`, which

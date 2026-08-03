@@ -30,8 +30,8 @@ set -uo pipefail
 : "${PYTHON:=python}"
 : "${FI_PYTHON:=$PYTHON}"
 
-GPUS="${GPUS:-8}"                       # world size = DP = EP
-DEVS="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
+GPUS="${GPUS:-4}"                       # world size = DP = EP
+DEVS="${CUDA_VISIBLE_DEVICES:-0,1,2,3}"
 ALGO="${ALGO:-ht}"                      # ht (prefill) | ll (decode); ht enables exclude-quant on split
 TOKENS="${TOKENS:-8}"                   # tokens per rank
 NUM_EXPERTS="${NUM_EXPERTS:-256}"

@@ -5,7 +5,7 @@
 set -euo pipefail
 
 ROOT=${ROOT:-/lustre/fsw/coreai_libraries_cudnn/mhoqueanik}
-IMG=${IMG:-$ROOT/flashinfer-ep.sqsh}
+IMG=${IMG:-$ROOT/flashinfer-moe_ep/flashinfer-ep-pt2605-mega_moe_ep.sqsh}
 W=${W:-$ROOT/moe_ep_benchmark/vllm_e2e}
 JOBID=${JOBID:?set JOBID to the hold job id}
 

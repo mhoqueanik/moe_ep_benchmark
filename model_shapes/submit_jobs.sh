@@ -11,10 +11,10 @@ set -uo pipefail
 
 ROOT="${ROOT:-/lustre/fsw/coreai_libraries_cudnn/mhoqueanik}"
 ACCOUNT="${ACCOUNT:-coreai_libraries_cudnn}"   # override for your cluster
-PARTITION="${PARTITION:-batch}"
-IMG="${IMG:-$ROOT/flashinfer-ep.sqsh}"
+PARTITION="${PARTITION:-gb300}"                # 1x4 sm103 (GB300) nodes
+IMG="${IMG:-$ROOT/flashinfer-moe_ep/flashinfer-ep-pt2605-mega_moe_ep.sqsh}"
 BENCH=$ROOT/moe_ep_benchmark
-REPO=$ROOT/flashinfer-2/flashinfer-moe_ep
+REPO="${REPO:-$ROOT/flashinfer-moe_ep}"
 MS=$BENCH/model_shapes
 
 SHAPE_LIST="${SHAPE_LIST:-$(awk -F'\t' '!/^[[:space:]]*#/ && NF {print $1}' "$MS/shapes.tsv")}"
@@ -24,7 +24,7 @@ for shape in $SHAPE_LIST; do
     jobid=$(sbatch --parsable -A "$ACCOUNT" -p "$PARTITION" -N1 \
         --ntasks-per-node=1 --time=04:00:00 \
         -J "coreai_libraries_cudnn-fi.mshape.${shape}" \
-        --output="${OUT_DIR:-$MS/results_ep8}/slurm_${shape}_%j.log" \
+        --output="${OUT_DIR:-$MS/results_ep4}/slurm_${shape}_%j.log" \
         --export=ALL,SHAPES="$shape",STAMP="$stamp",VARIANTS="${VARIANTS:-}",SEQ_LENS="${SEQ_LENS:-}" \
         --wrap "srun --container-image='$IMG' \
             --container-mounts='$ROOT:$ROOT' \

@@ -1,0 +1,14 @@
+{
+ "tag": "fi_cutedsl",
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/nvidia_deepseek-v4-flash-nvfp4/hf/hf-48bfe38_orig",
+ "num_questions": 200,
+ "accuracy": 0.975,
+ "correct": 195,
+ "invalid": 0,
+ "truncated": 1,
+ "max_tokens": 512,
+ "elapsed_s": 66.34325237099256,
+ "cutlass_dsl_version": "4.5.2",
+ "eager": true,
+ "moe_backend": "flashinfer_moe_ep_mega_cutedsl"
+}

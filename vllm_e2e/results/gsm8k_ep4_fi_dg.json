@@ -1,0 +1,14 @@
+{
+ "tag": "fi_dg",
+ "model": "/lustre/share/coreai_dlalgo_ci/artifacts/model/deepseek-ai_deepseek-v4-flash/hf/hf-6e76323_orig",
+ "num_questions": 200,
+ "accuracy": 0.965,
+ "correct": 193,
+ "invalid": 0,
+ "truncated": 3,
+ "max_tokens": 512,
+ "elapsed_s": 63.29793764100759,
+ "cutlass_dsl_version": "4.5.2",
+ "eager": true,
+ "moe_backend": "flashinfer_moe_ep_mega_deep_gemm"
+}

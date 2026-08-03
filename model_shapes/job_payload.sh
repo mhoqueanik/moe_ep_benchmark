@@ -5,7 +5,7 @@
 set -uo pipefail
 
 ROOT="${ROOT:-/lustre/fsw/coreai_libraries_cudnn/mhoqueanik}"
-REPO="${REPO:-$ROOT/flashinfer-2/flashinfer-moe_ep}"
+REPO="${REPO:-$ROOT/flashinfer-moe_ep}"
 BENCH="${BENCH:-$ROOT/moe_ep_benchmark}"
 
 export FLASHINFER_DISABLE_VERSION_CHECK=1
@@ -36,5 +36,5 @@ for m in (flashinfer, flashinfer.moe_ep):
     assert m.__file__.startswith(want), "%s is not under %s" % (m.__file__, want)
 PY
 
-GPUS="${GPUS:-8}" CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}" \
+GPUS="${GPUS:-4}" CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3}" \
     bash "$BENCH/model_shapes/run_model_shapes.sh"

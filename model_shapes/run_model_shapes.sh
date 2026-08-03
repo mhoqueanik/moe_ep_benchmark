@@ -24,9 +24,10 @@
 set -uo pipefail
 
 MS_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# results_ep8/ on this branch: make_tables keys on (geometry, tokens/rank,
-# variant) and ignores the gpus column, so one directory per world size.
-OUT_DIR="${OUT_DIR:-$MS_HERE/results_ep8}"
+# results_ep4/ on this branch (1x4 sm103): make_tables keys on (geometry,
+# tokens/rank, variant) and ignores the gpus column, so one directory per
+# world size. The 1x8 B200 reference CSVs stay in results_ep8/.
+OUT_DIR="${OUT_DIR:-$MS_HERE/results_ep4}"
 
 # Definitions only (run.sh is guarded by a BASH_SOURCE check).
 # shellcheck source=../run.sh

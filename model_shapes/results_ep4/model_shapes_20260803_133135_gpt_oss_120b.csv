@@ -1,0 +1,9 @@
+path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s,acc_loss_pct
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,1024,4,128,4,2880,2880,165.9,163.7,232.4,24691358.5,23.117
+mega,mega,fused_symm_mega,nvfp4_cutedsl,no,nvfp4_block16,bfloat16,nvfp4_block16,4096,4,128,4,2880,2880,349.4,347.1,352.3,46886445.8,23.118
+mega,mega,fused_symm_mega,nvfp4_cutedsl+ikr,no,nvfp4_block16,bfloat16,nvfp4_block16,1024,4,128,4,2880,2880,168.0,165.8,172.9,24385597.6,23.118
+mega,mega,fused_symm_mega,nvfp4_cutedsl+ikr,no,nvfp4_block16,bfloat16,nvfp4_block16,4096,4,128,4,2880,2880,348.2,346.0,351.2,47048012.5,23.119
+mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_mxfp8,no,nvfp4_block16,bfloat16,nvfp4_block16,1024,4,128,4,2880,2880,160.8,159.7,232.0,25477706.6,23.258
+mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_mxfp8,no,nvfp4_block16,bfloat16,nvfp4_block16,4096,4,128,4,2880,2880,312.3,309.2,395.7,52464394.1,23.260
+mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_nvfp4,no,nvfp4_block16,bfloat16,nvfp4_block16,1024,4,128,4,2880,2880,165.8,154.7,1264.7,24698504.6,24.919
+mega,mega,fused_symm_mega,nvfp4_cutedsl+combine_nvfp4,no,nvfp4_block16,bfloat16,nvfp4_block16,4096,4,128,4,2880,2880,302.1,298.0,306.1,54237287.2,24.919

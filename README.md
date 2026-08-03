@@ -1,23 +1,27 @@
-# moe_ep benchmarks — 1x8 SM100 reproduction
+# moe_ep benchmarks — 1x4 SM103 (GB300) reproduction
 
-Reproduction branch (`vllm_repro_8_gpu`): the FlashInfer `moe_ep` mega-MoE
-path on one 8-GPU Blackwell node, at two levels, plus the vLLM patch and the
-numbers to check yourself against. Nothing else — development history lives
-elsewhere in the repo.
+Reproduction branch (`vllm_repro_4_gpu_sm103`): the FlashInfer `moe_ep`
+mega-MoE path on one 4-GPU Blackwell Ultra (GB300, sm_103) node, at two
+levels, plus the vLLM patch and the numbers to check yourself against.
+Ported from the 1x8 B200 branch (`vllm_repro_8_gpu_v2`); world size is 4
+everywhere here, and a different world size is a different measurement.
 
-**Start with [expected_results.md](expected_results.md)** — the numbers, the
-tolerances, and the two failure modes that produce plausible-but-wrong results.
+**Start with [expected_results_1x4_sm103.md](expected_results_1x4_sm103.md)**
+— this branch's numbers. [expected_results.md](expected_results.md) is the
+1x8 B200 reference, with the tolerances and the two failure modes that
+produce plausible-but-wrong results (which apply here unchanged).
 
 ## What reproduces
 
 | | what | how | ~time |
 |---|---|---|---|
-| Kernel microbenchmark | cutedsl vs deep_gemm_mega at DSV4 shapes. No vLLM, no checkpoints. | [RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) §2 | 20 min |
-| vLLM e2e, Flash | 4 cells x 3 backends, EP8 | `vllm_e2e/job_vllm_pr_runbook_sweep_ep8.sh` | 1 h |
-| vLLM e2e, Pro | same cells, V4-Pro | `vllm_e2e/job_vllm_pr_runbook_sweep_pro.sh` | 2 h |
-| vLLM serving, Flash | `vllm serve` + `vllm bench serve`, same 4 cells x 3 backends | `vllm_e2e/job_vllm_serving_sweep_ep8.sh` | 2.5 h |
-| vLLM serving, Pro | same cells, V4-Pro | `vllm_e2e/job_vllm_serving_sweep_pro.sh` | 3.7 h |
-| Accuracy gate | GSM8K, both models, both checkpoints | `vllm_e2e/job_gsm8k_flash_pro.sh` | 35 min |
+| Kernel microbenchmark | cutedsl vs deep_gemm_mega at DSV4 shapes. No vLLM, no checkpoints. EP4. | [RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) §2 | 20 min |
+| vLLM e2e, Flash | 4 cells x 3 backends, TP4/EP4 | `vllm_e2e/job_vllm_pr_runbook_sweep_ep4.sh` | ~1.5 h |
+| Accuracy gate | GSM8K, Flash, both checkpoints, TP4 | RUNBOOK §4b one-liners on the hold node | 35 min |
+
+The `*_ep8.sh` / `*_pro.sh` / serving job scripts inherited from the 1x8
+branch are **not ported** — they assume an 8-GPU node and the EP8 knob cache.
+V4-Pro and serving mode are unmeasured at 1x4.
 
 Setup — container, venv, patch, checkpoints — is
 [RUNBOOK_REPRO.md](RUNBOOK_REPRO.md) §1. It is the single runbook, in four
@@ -28,10 +32,10 @@ sections: prep (§1), microbenchmark (§2), e2e throughput (§3), accuracy (§4)
 ```
 expected_results.md        the numbers, tolerances, failure modes
 RUNBOOK_REPRO.md           the runbook: §1 prep, §2 micro, §3 e2e, §4 accuracy
-run.sh, run_sweep.sh       microbenchmark launchers   (GPUS=8 => EP8)
+run.sh, run_sweep.sh       microbenchmark launchers   (GPUS=4 => EP4)
 bench_moe_ep_*.py          microbenchmark bodies
 plot*.py, tests/          chart rendering, dense-reference correctness test
-model_shapes/              per-shape kernel sweep + results_ep8/ (the CSV §2 cites)
+model_shapes/              per-shape kernel sweep + results_ep4/ (GB300; results_ep8/ = B200 reference)
 vllm_e2e/
   patch_0251/              the vLLM patch (apply.sh / reset.sh)
   bench_offline.py         the e2e throughput harness (offline, in-process)
@@ -55,18 +59,18 @@ RUNBOOK_REPRO.md §1; nothing below works without it. All submit scripts take
 
 ```bash
 # full model-shape sweep: one SLURM job per shape in shapes.tsv (~20 min each,
-# parallel nodes), CSVs land in model_shapes/results_ep8/ (override OUT_DIR)
+# parallel nodes), CSVs land in model_shapes/results_ep4/ (override OUT_DIR)
 ACCOUNT=<account> PARTITION=<partition> IMG=<flashinfer-ep image> \
     bash model_shapes/submit_jobs.sh
 
 # turn the CSVs into the per-shape markdown tables — works standalone on the
-# shipped results_ep8/ CSVs, no GPU needed. One table per shape:
+# shipped results_ep4/ CSVs, no GPU needed. One table per shape:
 #   | tok/rank | dg | nvfp4 bf16 | +ikr | +combine_nvfp4 | +combine_mxfp8 |
 # (p50 us; fp4-family cells carry a speedup-vs-dg ratio)
 python model_shapes/make_tables.py \
-    model_shapes/results_ep8/model_shapes_*.csv -o RESULTS.md
+    model_shapes/results_ep4/model_shapes_*.csv -o RESULTS.md
 
-# one cell by hand, inside the container on an 8-GPU node
+# one cell by hand, inside the container on a 4-GPU node
 MEGA_LIST=nvfp4_cutedsl TOKENS=512 SECTION=fi_mega bash run.sh
 SECTION=fi_mega bash run_sweep.sh          # token sweep, one backend list
 ```
@@ -82,12 +86,12 @@ job), and an editable-install race when many jobs start at once
 
 ```bash
 cd vllm_e2e
-sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_ep8.sh   # Flash, 4 cells x 3 backends, ~1 h
-sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_pro.sh   # V4-Pro, same cells, ~2 h
-sbatch -A <account> -p <partition> job_vllm_serving_sweep_ep8.sh      # Flash serving mode, ~2.5 h
-sbatch -A <account> -p <partition> job_vllm_serving_sweep_pro.sh      # V4-Pro serving mode, ~3.7 h
-sbatch -A <account> -p <partition> job_gsm8k_flash_pro.sh             # accuracy gate, ~35 min
+sbatch -A <account> -p <partition> job_vllm_pr_runbook_sweep_ep4.sh   # Flash, 4 cells x 3 backends, TP4/EP4, ~1.5 h
+# accuracy gate: RUNBOOK §4a/§4b one-liners with TP=4 on the hold node
 ```
+
+(The `*_ep8.sh` / `*_pro.sh` / serving jobs are the unported 1x8 scripts —
+see "What reproduces".)
 
 The two `serving` jobs are the server+client counterpart of the offline
 sweeps, on the **same four workloads**: one process runs
