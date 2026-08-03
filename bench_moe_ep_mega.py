@@ -149,6 +149,32 @@ def _mega_combine_dtype() -> str:
     return os.environ.get("MEGA_COMBINE_DTYPE", "bf16")
 
 
+def _mega_iket() -> bool:
+    """MEGA_IKET=1 -> compile the cutedsl kernel with options="iket".
+
+    In-kernel event tracing: the kernel's iket.range_push/range_pop markers
+    survive lowering, so a run under the internal ``run-iket`` wrapper (tot
+    cutlass-dsl with the iket dialect + CTK >= 13.1) yields a warp-phase
+    trace.  On the pinned public DSL (4.5.2, no iket dialect) the markers
+    no-op via iket_compat and this flag is refused at compile time by DSLs
+    that do not know the option.  Latency from an iket-instrumented run is
+    NOT comparable to a normal run.
+    """
+    return bool(int(os.environ.get("MEGA_IKET", "0")))
+
+
+def _mega_phase_timing() -> bool:
+    """MEGA_PHASE_TIMING=1 -> clock64 in-kernel phase breakdown (nvfp4 only).
+
+    Runs on the pinned public DSL 4.5.2 (no iket dialect needed): each warp
+    role accumulates %clock64 deltas per phase and the bench prints a
+    per-rank PT_CSV breakdown after the timed loop.  The instrumentation
+    perturbs latency; rows from such a run are labeled "+pt" and are NOT
+    perf-quotable.
+    """
+    return bool(int(os.environ.get("MEGA_PHASE_TIMING", "0")))
+
+
 def _mega_variant_suffix() -> str:
     """CSV compute_kernel suffix for the MEGA_IKR / MEGA_COMBINE_DTYPE variant."""
     parts = []
@@ -156,6 +182,12 @@ def _mega_variant_suffix() -> str:
         parts.append("ikr")
     if _mega_combine_dtype() != "bf16":
         parts.append(f"combine_{_mega_combine_dtype()}")
+    if _mega_iket():
+        # Instrumented run: latency is not comparable to non-iket rows.
+        parts.append("iket")
+    if _mega_phase_timing():
+        # clock64-instrumented run: latency is not perf-quotable.
+        parts.append("pt")
     return ("+" + "+".join(parts)) if parts else ""
 
 
@@ -180,6 +212,7 @@ def _build_megakernel_config(cfg: Cfg):
             fast_math=cfg.fast_math,
             in_kernel_fc2_reduce=_mega_ikr(),
             knobs=_mega_knobs(),
+            enable_iket=_mega_iket(),
         )
     if cfg.mega_backend == "nvfp4_cutedsl":
         from flashinfer.moe_ep import Nvfp4CutedslMegaMoeConfig
@@ -192,6 +225,8 @@ def _build_megakernel_config(cfg: Cfg):
             in_kernel_fc2_reduce=_mega_ikr(),
             combine_dtype=_mega_combine_dtype(),
             knobs=_mega_knobs(),
+            enable_iket=_mega_iket(),
+            enable_phase_timing=_mega_phase_timing(),
         )
     raise ValueError(f"unknown mega backend: {cfg.mega_backend}")
 
@@ -498,6 +533,49 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
 
         us = median(samples)
         us_min, us_max = min(samples), max(samples)
+        dist.barrier()
+
+        # clock64 phase breakdown: read back the LAST timed launch's per-CTA
+        # slot rows BEFORE the accuracy pass overwrites them with one more
+        # launch.  Every rank prints its own PT_CSV lines (rank skew is part
+        # of the signal at low tokens/rank).
+        if cfg.mega_backend == "nvfp4_cutedsl" and _mega_phase_timing():
+            from flashinfer.moe_ep.kernel_src.cutedsl_megamoe import (
+                phase_timing_layout,
+            )
+
+            pt_map, _, _, _ = phase_timing_layout()
+            snap = workspace._frontend.phase_timing_snapshot()  # (ctas, slots)
+            active = snap[:, pt_map["kernel_total"]] > 0
+            n_active = int(active.sum().item())
+            if n_active > 0:
+                act = snap[active].double()
+                kt_mean = act[:, pt_map["kernel_total"]].mean().item()
+                us_per_cycle = us / kt_mean if kt_mean > 0 else float("nan")
+                if rank == 0:
+                    print(
+                        "PT_HDR,rank,slot,mean_cycles,max_cycles,sum_cycles,"
+                        "pct_of_kernel,approx_us",
+                        flush=True,
+                    )
+                lines = []
+                for name, idx in sorted(pt_map.items(), key=lambda kv: kv[1]):
+                    col = act[:, idx]
+                    mean_c = col.mean().item()
+                    lines.append(
+                        f"PT_CSV,{rank},{name},{mean_c:.0f},"
+                        f"{col.max().item():.0f},{col.sum().item():.0f},"
+                        f"{100.0 * mean_c / kt_mean if kt_mean > 0 else float('nan'):.1f},"
+                        f"{mean_c * us_per_cycle:.1f}"
+                    )
+                print(
+                    f"PT_INFO,rank={rank},active_ctas={n_active},"
+                    f"kernel_total_mean_cycles={kt_mean:.0f},"
+                    f"measured_p50_us={us:.1f}\n" + "\n".join(lines),
+                    flush=True,
+                )
+            else:
+                print(f"PT_INFO,rank={rank},active_ctas=0 (no rows)", flush=True)
         dist.barrier()
 
         # Accuracy-loss pass (MEGA_ACC=0 disables): one un-timed full forward
