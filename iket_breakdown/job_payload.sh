@@ -54,4 +54,11 @@ for tokens in $TOKENS_LIST; do
     run_cell nvfp4_cutedsl   kernel 0 "$tokens"
     run_cell nvfp4_cutedsl   kernel 1 "$tokens"
 done
+
+# Instrumentation-corruption gate: the accuracy-loss number must match
+# between pt=0 and pt=1 at the same cell (phase timing only writes its own
+# workspace region; any drift here means it does not).
+echo "== acc gate (pt off vs on, tokens/rank=64)"
+MEGA_ACC=1 run_cell nvfp4_cutedsl e2e 0 64
+MEGA_ACC=1 run_cell nvfp4_cutedsl e2e 1 64
 echo "== SWEEP DONE"
