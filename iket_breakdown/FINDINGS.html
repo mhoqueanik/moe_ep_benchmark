@@ -502,13 +502,11 @@ phases in a fixed order. What differs between cases is which bars move:</p>
 <rect class="w1" x="957" y="282" width="62.2" height="14" rx="3"><title>sched_publish (backpressure) — 8192 tok/rank: 1061.4 µs · 53.3% of kernel</title></rect>
 <text x="1022.2" y="293" font-size="8.5">53</text>
 <rect class="hl" x="224" y="45" width="244" height="22" rx="5"/>
-<text class="hlt" x="474" y="59">① fc1 weight-stream floor: ~51–58 µs flat — the pacer</text>
+<text class="hlt" x="479" y="59.0">①</text>
 <rect class="hl" x="224" y="175" width="244" height="48" rx="5"/>
-<text class="hlt" x="474" y="189">② serial barrier floor: ~40 µs/launch fixed —</text>
-<text class="hlt" x="474" y="203">23% of an 8-tok kernel, gone by 8k</text>
+<text class="hlt" x="479" y="189.0">②</text>
 <rect class="hl2" x="224" y="227" width="244" height="74" rx="5"/>
-<text class="hlt" x="474" y="241">③ all this waiting is ① seen from downstream</text>
-<text class="hlt" x="474" y="255">(epilogue/MMA/scheduler starved, not slow)</text>
+<text class="hlt" x="479" y="241.0">③</text>
 </svg>
 </div>
 <figcaption>Small multiples over the whole sweep (plus the two 256 variants): one column per
