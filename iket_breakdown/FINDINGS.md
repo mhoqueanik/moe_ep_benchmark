@@ -1,69 +1,106 @@
-# Why nvfp4_cutedsl loses to deep_gemm_mega at low tokens/rank — exact causes, with IKET markers
+# nvfp4_cutedsl mega kernel vs deep_gemm_mega — kernel-only analysis, with IKET markers
 
-Data: SLURM jobs 2359277 + 2359364 (1×8 B200, EP8, 256 experts top-8, hidden 7168, inter 2048, DSL 4.5.2).
-Each cause points at the IKET marker that measures it (same names as the clock64 `PT` slots in
-`src/src/phase_timing.py`); file:line anchors are on the flashinfer `iket_analysis` branch.
-Full tables: [RESULTS.md](RESULTS.md).
+Data: SLURM jobs 2359277 + 2359364 (sweep 8..8192 tok/rank) and 2359949 (gap
+discrimination). 1×8 B200, EP8, 256 experts top-8, hidden 7168, inter 2048, DSL 4.5.2.
+All numbers in this section are **MEGA_TIMING=kernel** (steady-state, back-to-back
+launches — no launch/barrier-cold effects). Marker anchors are on the flashinfer
+`iket_analysis` branch; clock64 slots mirror the marker names
+(`src/src/phase_timing.py`). Full tables: [RESULTS.md](RESULTS.md).
 
-**Headline:** the GEMMs are never the problem. The kernel is at dg parity ≤128 tok/rank
-(0.97–1.04×); cutedsl loses e2e (~1.2×) purely on a **constant ~40–60 µs per-launch tax** that
-dg does not pay. That tax stops mattering above ~512–1024 tok/rank, where cutedsl wins outright
-(1.56× faster at 8k).
+## Kernel-only headline
 
-## Primary causes (the low-tok/rank tax, ~40–60 µs every launch)
+| tok/rank | 8 | 16 | 32 | 64 | 128 | 192 | 256 | 384 | 512 | 1024 | 2048 | 4096 | 8192 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ratio cutedsl ÷ dg | 0.98 | 0.99 | 0.97 | 0.98 | 1.04 | 1.10 | **1.20** | 1.09 | 0.94 | 0.81 | 0.72 | 0.64 | 0.64 |
 
-- **Kernel-tail NVLink quiesce — ~23–26 µs/launch, pure fixed cost.**
-  Every launch ends with a 3-barrier sense-reversing NVLink sequence plus counter resets.
-  - Markers: `Tail.NvlinkDrain` (~15–18 µs) — `src/src/token_comm.py:1865`;
-    `Tail.NvlinkPublish` (~8 µs) — `token_comm.py:1931`
-    (plus `Tail.Rendezvous`/`Tail.SharedReset`/`Tail.LocalReset`, all <1 µs).
-  - At 8 tok/rank that is **15% of the whole kernel**; dg has no equivalent tail of this size.
-  - Fix direction: fold/elide the drain+publish pair, or overlap the tail with the next
-    layer's dispatch.
+The kernel is at dg parity ≤128 tok/rank and wins outright ≥512 (1.56× faster at
+8k). The only kernel-level slowdown is a **hump peaked exactly at 256 tok/rank**
+(+21%), not a trend. (dg's "kernel" numbers still include FI wrapper overhead —
+no bare-launch thunk for dg — so cutedsl's true relative position is slightly
+better than shown everywhere.)
 
-- **Dispatch count-exchange barrier — ~14 µs/launch, fixed cost.**
-  The all-rank exchange of expert send counts before any token moves.
-  - Marker: `Dispatch_Barrier` — `token_comm.py:1613` (slot `dispatch_barrier`, 8.2% of kernel
-    at 8 tok/rank).
+## The 256-tok hump, discriminated (job 2359949)
 
-- **Cold-launch arrival skew amplifies both barriers — the ~35–50 µs e2e-vs-kernel delta.**
-  Steady-state (kernel mode, back-to-back thunk launches): cutedsl = dg. Barrier-cold e2e:
-  cutedsl pays +48 µs vs its own kernel time, dg only +8–10 µs — and the gap persists at 8k
-  tokens (+87 vs +31 µs). A kernel with 4 cross-rank sync points inherits the slowest rank's
-  launch delay at every one of them.
-  - Evidence markers: `Dispatch_Barrier` and `Tail.*` under e2e vs kernel timing mode;
-    host side, the FI forward path (arg prep / workspace reset / output copy) ahead of the
-    kernel is what staggers rank arrival — the kernel-mode thunk shows the ceiling.
-  - Fix direction: pre-arm/slim the per-call host path (extend the thunk approach to the
-    serving path), reduce in-kernel cross-rank sync points.
+| tok/rank | dg | cutedsl default | + `MEGA_IKR=1` | + `MEGA_KNOBS=auto` |
+|---:|---:|---:|---:|---:|
+| 128 | 188.4 | 195.5 (+3.8%) | 226.3 (worse) | 195.5 (no change) |
+| 192 | 199.6 | 220.1 (+10.3%) | 252.8 (worse) | — |
+| 256 | 205.9 | 248.8 (+20.8%) | 277.6 (worse) | **232.4 (+12.9%)** |
+| 384 | 238.5 | 261.1 (+9.5%) | 267.3 (worse) | 255.0 (+6.9%) |
+| 512 | 278.5 | 263.2 (−5.5%) | 269.2 | — |
 
-## Secondary causes (per-token costs, visible at ≥128 tok/rank; NOT a divergence)
+- **In-flight REDG combine (`MEGA_IKR=1`) is ruled out — it is *worse* at every
+  point in the window** (+12–16%): its per-fc2-tile cross-rank atomic-adds cost
+  more than the staged combine here (`epi_fc2` grows 71.0 → 113.5 µs at 256).
+- **~40% of the hump is a knob-table gap.** Online autotune recovers 16.4 µs at
+  256; the winning change in the 256-max-token bucket is
+  `token_back_mode: epi_warps → standalone_warps` (combine push moved off the
+  epilogue warps to a dedicated warp group), tiler unchanged (256×128×256).
+- **The smoking gun is `epi_fc2` (combine store) being anomalous exactly in the
+  256 bucket:** work = 69 µs (27% of kernel) at 256 but only **29 µs at 384** —
+  the cost is non-monotonic in tokens, so it is a *configuration* artifact of
+  the epi-warps token-back at that pool geometry, not a fundamental per-token
+  cost. Markers: `fc2_store_combine` (`epilogue_refactor.py:2349`) with the
+  wait split via `fc2_epi_wait` (`epilogue_refactor.py:2185,2199`).
+- **Residual after tuning: +12.9% at 256.** Phase table at the tuned point not
+  yet captured (autotune cell ran without `+pt`); next probe: rerun 256 with
+  the winning knobs pinned via `MEGA_KNOBS` + `MEGA_PHASE_TIMING=1`.
 
-- **fc2 epilogue combine store (cross-rank peer STG) — linear, settles at ~20% of kernel.**
-  Work = `epi_fc2` − `epi_fc2_wait`: 29 µs @128 → 72 µs @256 → 410 µs @8192. This is what
-  turns the 256-tok transition point into a visible 1.20× kernel gap before amortization wins.
-  - Markers: `fc2_store_combine` — `src/moe_nvfp4_swapab/epilogue_refactor.py:2349`;
-    wait split via `fc2_epi_wait` — `epilogue_refactor.py:2185,2199`.
-  - Fix direction: `MEGA_IKR=1` (in-kernel REDG reduce), quantized combine wire, wider stores.
+**Action items, kernel-only:**
+1. Fix the knob table's 256-max-token bucket (adopt `standalone_warps`
+   token-back; re-tune the bucket) — recovers ~7 µs of the ~43 µs gap
+   immediately, more once the bucket is properly swept.
+2. Profile the epi-warps combine STG pattern at 128–384 pool geometries
+   (`fc2_store_combine` marker) — why it degrades only there.
+3. Do NOT pursue IKR for this regime.
 
-- **dispatch_pull grows to ~30% at 8k** (`Dispatch_Pull` — `token_comm.py:1643`) but runs on
-  dedicated warps overlapped with compute; secondary pipelining target only.
+## Fixed in-kernel floor (absolute decode latency, both-backends-relative)
 
-## Measured but exonerated (symptoms, not causes)
+These are steady-state kernel costs on every launch — they don't explain a gap
+vs dg at ≤128 (parity holds), but they are the biggest absolute levers at tiny
+token counts:
 
-- **`sched_publish` "backpressure" ~50–55% everywhere** (`kernel_fc12.py:1663`) and
-  **`epi_fc1_wait` ~40–48%** (`epilogue_refactor.py:1467`): consumers pacing on fc1.
-- **`mma_fc1` ~60–70 µs at low tokens** (`kernel_fc12.py:2324`, fed by `tma_weight_fc1`
-  `kernel_fc12.py:1733`): the fc1 weight-streaming bandwidth floor — every expert's full
-  weights stream regardless of token count, and **both backends pay it equally** (hence
-  kernel parity at low tokens).
-- **`Sched_PreInit_Wait` ≈ 0** (`token_comm.py:577`): dispatch arrival is NOT what the compute
-  side waits on — the counts are ready before the sched warp asks.
+- **Kernel-tail NVLink quiesce ~23–26 µs** — `Tail.NvlinkDrain` (~15–18 µs,
+  `src/src/token_comm.py:1865`) + `Tail.NvlinkPublish` (~8 µs,
+  `token_comm.py:1931`); 15% of an 8-tok kernel. Fold/elide the pair or overlap
+  with the next layer's dispatch.
+- **Dispatch count-exchange barrier ~14 µs** — `Dispatch_Barrier`
+  (`token_comm.py:1613`).
+- **fc1 weight-streaming floor ~60–70 µs** — `mma_fc1` (`kernel_fc12.py:2324`),
+  fed by `tma_weight_fc1` (`kernel_fc12.py:1733`): every expert's full weights
+  stream regardless of token count. Both backends pay it; it is why kernel
+  time barely moves from 8 → 128 tok/rank.
+
+## Measured and exonerated (symptoms, not causes)
+
+- `sched_publish` ~50–55% (`kernel_fc12.py:1663`) and `epi_fc1_wait` ~40–48%
+  (`epilogue_refactor.py:1467`): consumers pacing on the fc1 weight-stream /
+  MMA — mirrors of `mma_fc1`, not independent problems.
+- `Sched_PreInit_Wait` ≈ 0 (`token_comm.py:577`): dispatch arrival is not what
+  the compute side waits on.
+- `dispatch_pull` grows to ~30% at 8k (`token_comm.py:1643`) but runs on
+  dedicated warps overlapped with compute.
+
+## Deferred: e2e / barrier-cold behavior (not kernel)
+
+Parked per current focus; evidence kept for when we return to the e2e microbench.
+
+- e2e ratios (barrier-cold full FI forward): 1.19–1.36× at 8–256 tok/rank,
+  crossing below 1.0 between 512 and 1024 — entirely explained by a constant
+  ~40–60 µs/launch cost dg does not pay (dg e2e−kernel ≈ 8–25 µs, cutedsl
+  ≈ 48–87 µs, roughly constant through 8k tokens).
+- Direct proof of the mechanism (job 2359944, e2e mode + phase timing): at 8
+  tok/rank, `Dispatch_Barrier` inflates **14 µs → 164 µs (75% of the kernel)**
+  on rank 0 — per-rank host-side launch jitter is absorbed at the first
+  cross-rank sync point, so the slowest rank's launch delay becomes everyone's
+  latency. Fix direction: slim/pre-arm the per-call host path (thunk-style),
+  reduce sync points.
 
 ## Sanity
 
-- Instrumentation overhead: ~0–7 µs on 170–2000 µs kernels; accuracy gate pt=0 vs pt=1
-  bit-identical (23.175% rel-L2 vs synthetic reference).
-- IKET markers no-op on public DSL wheels (dialect is internal-tot-only); the numbers above
-  come from the clock64 fallback (`MEGA_PHASE_TIMING=1`) using the same phase boundaries, so
-  a future `run-iket` trace is directly comparable.
+Instrumentation (`MEGA_PHASE_TIMING=1`) adds ~0–7 µs on 170–2000 µs kernels;
+accuracy gate pt=0 vs pt=1 bit-identical (23.175% rel-L2, synthetic microbench
+reference). IKET markers no-op on public DSL wheels (dialect is internal-tot
+only); the clock64 fallback uses the same phase boundaries, so a future
+`run-iket` trace is directly comparable. Autotune cells used an isolated knob
+cache (`FLASHINFER_MOE_EP_KNOB_CACHE`) — the default cache is untouched.

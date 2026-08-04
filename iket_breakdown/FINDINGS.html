@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Why nvfp4_cutedsl loses at low tokens/rank — IKET/clock64 breakdown</title>
+<title>nvfp4_cutedsl mega kernel — kernel-only analysis (IKET/clock64)</title>
 <style>
   .viz-root {
     color-scheme: light;
@@ -13,8 +13,10 @@
     --text-secondary: #52514e;
     --text-muted: #8a887f;
     --grid: #e4e2dc;
-    --series-1: #2a78d6;   /* cutedsl / work */
+    --series-1: #2a78d6;   /* cutedsl default / work */
     --series-2: #eb6834;   /* dg / wait+overhead */
+    --series-3: #1baf7a;   /* autotuned */
+    --series-4: #eda100;   /* IKR */
     --ref-line: #8a887f;
   }
   @media (prefers-color-scheme: dark) {
@@ -23,7 +25,8 @@
       --surface-1: #1a1a19; --surface-2: #232322;
       --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8d83;
       --grid: #343431;
-      --series-1: #3987e5; --series-2: #d95926; --ref-line: #8f8d83;
+      --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+      --series-4: #c98500; --ref-line: #8f8d83;
     }
   }
   :root[data-theme="dark"] .viz-root {
@@ -31,7 +34,8 @@
     --surface-1: #1a1a19; --surface-2: #232322;
     --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8d83;
     --grid: #343431;
-    --series-1: #3987e5; --series-2: #d95926; --ref-line: #8f8d83;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+    --series-4: #c98500; --ref-line: #8f8d83;
   }
   .viz-root {
     font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -50,7 +54,7 @@
          color: var(--text-secondary); }
   figure { margin: 12px 0 4px; }
   figcaption { font-size: 12.5px; color: var(--text-secondary); margin-top: 6px; }
-  .legend { display: flex; gap: 18px; font-size: 12.5px;
+  .legend { display: flex; gap: 18px; font-size: 12.5px; flex-wrap: wrap;
             color: var(--text-secondary); margin: 6px 0 2px; }
   .legend .sw { display: inline-block; width: 10px; height: 10px;
                 border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
@@ -66,83 +70,103 @@
          z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
   svg text { fill: var(--text-secondary); font-size: 11px; }
   svg .lbl { fill: var(--text-primary); font-size: 11px; }
-  svg .axis line, svg .grid line { stroke: var(--grid); }
+  svg .grid line { stroke: var(--grid); }
 </style>
 </head>
-<body class="viz-root" data-palette="#2a78d6,#eb6834">
+<body class="viz-root" data-palette="#2a78d6,#eb6834,#1baf7a,#eda100">
 <div id="tip"></div>
 
-<h1>Why <code>nvfp4_cutedsl</code> loses to <code>deep_gemm_mega</code> at low tokens/rank</h1>
-<div class="sub">IKET-marker phase breakdown via the clock64 fallback · SLURM jobs 2359277 + 2359364 ·
-1×8 B200, EP8, 256 experts top-8, hidden 7168, inter 2048, cutlass-dsl 4.5.2 ·
+<h1><code>nvfp4_cutedsl</code> mega kernel vs <code>deep_gemm_mega</code> — kernel-only</h1>
+<div class="sub">Steady-state kernel time only (<code>MEGA_TIMING=kernel</code>, back-to-back launches —
+no launch/barrier-cold effects) · IKET-marker phases via the clock64 fallback ·
+jobs 2359277 / 2359364 / 2359949 · 1×8 B200, EP8, 256 experts top-8, 7168/2048, DSL 4.5.2 ·
 flashinfer branch <code>iket_analysis</code></div>
 
-<h2>Exact causes</h2>
+<h2>Kernel-only conclusions</h2>
 <ul>
-  <li><b>Kernel-tail NVLink quiesce — ~23–26 µs of fixed cost on every launch.</b><span class="tag">primary</span><br>
-      Markers <code>Tail.NvlinkDrain</code> (~15–18 µs, <code>src/src/token_comm.py:1865</code>) and
-      <code>Tail.NvlinkPublish</code> (~8 µs, <code>token_comm.py:1931</code>): a 3-barrier sense-reversing
-      NVLink sequence + counter resets ends every launch. 15% of the entire kernel at 8 tok/rank.</li>
-  <li><b>Dispatch count-exchange barrier — ~14 µs of fixed cost.</b><span class="tag">primary</span><br>
-      Marker <code>Dispatch_Barrier</code> (<code>token_comm.py:1613</code>): all-rank expert-count exchange before any token moves.</li>
-  <li><b>Cold-launch arrival skew multiplies both — the ~35–50 µs e2e-vs-kernel delta.</b><span class="tag">primary</span><br>
-      Back-to-back (thunk) launches: cutedsl = dg. Barrier-cold launches: cutedsl pays +48 µs over its own
-      kernel time, dg only +8–10 µs — a kernel with 4 cross-rank sync points inherits the slowest rank's
-      launch delay at each one. Host-side FI forward prep is what staggers arrival.</li>
-  <li><b>fc2 combine peer-STG — linear per-token cost, ~20% of kernel at scale.</b><span class="tag">secondary</span><br>
-      Marker <code>fc2_store_combine</code> (<code>epilogue_refactor.py:2349</code>), wait split via
-      <code>fc2_epi_wait</code>: work grows 29 µs @128 → 72 µs @256 → 410 µs @8192. Causes the 256-tok
-      transition bump; cutedsl still wins 1.56× at 8k despite it.</li>
-  <li><b>Exonerated:</b> <code>mma_fc1</code> (~60–70 µs, <code>kernel_fc12.py:2324</code>) is the fc1
-      weight-streaming bandwidth floor both backends share; <code>sched_publish</code> (~50–55%) and
-      <code>epi_fc1_wait</code> (~40–48%) are pacing symptoms of it; <code>Sched_PreInit_Wait</code> ≈ 0 —
-      dispatch arrival is <i>not</i> what compute waits on.</li>
+  <li><b>The kernel is at dg parity ≤128 tok/rank (0.97–1.04×) and wins outright ≥512
+      (0.94× → 0.64× at 8k).</b> The only kernel-level slowdown is a <b>hump peaked exactly at
+      256 tok/rank (+21%)</b> — not a trend.</li>
+  <li><b>IKR ruled out.</b><span class="tag">job 2359949</span> <code>MEGA_IKR=1</code> is <i>worse</i> at every point in the window
+      (+12–16%); its cross-rank REDG atomic-adds cost more than the staged combine
+      (<code>epi_fc2</code> 71.0 → 113.5 µs at 256).</li>
+  <li><b>~40% of the hump is a knob-table gap.</b> Online autotune recovers 16.4 µs at 256; the winning
+      change in the 256-max-token bucket is <code>token_back_mode: epi_warps → standalone_warps</code>
+      (combine push moved to a dedicated warp group), tiler unchanged.</li>
+  <li><b>Smoking gun: the combine store is anomalous only in the 256 bucket.</b>
+      <code>fc2_store_combine</code> work (<code>epilogue_refactor.py:2349</code>) = <b>69 µs at 256 but 29 µs at 384</b> —
+      non-monotonic in tokens ⇒ a configuration artifact of the epi-warps token-back at that pool
+      geometry, not a per-token cost.</li>
+  <li><b>Fixed floor (absolute latency at tiny tokens, parity-neutral):</b> tail NVLink quiesce ~23–26 µs
+      (<code>Tail.NvlinkDrain</code> <code>token_comm.py:1865</code> + <code>Tail.NvlinkPublish</code> <code>:1931</code>),
+      dispatch count-exchange ~14 µs (<code>Dispatch_Barrier</code> <code>:1613</code>), fc1 weight-streaming
+      floor ~60–70 µs (<code>mma_fc1</code> <code>kernel_fc12.py:2324</code>) that both backends pay.</li>
+  <li><b>Exonerated:</b> <code>sched_publish</code> (~55%) and <code>epi_fc1_wait</code> (~45%) are pacing
+      symptoms of the fc1 weight stream; <code>Sched_PreInit_Wait</code> ≈ 0.</li>
 </ul>
 
-<h2>1 · The crossover</h2>
+<h2>1 · Kernel latency ratio (steady state)</h2>
+<figure><div id="ratio"></div>
+<figcaption>Kernel-mode latency ratio cutedsl ÷ dg (single series; dashed = parity). Parity ≤128,
+hump at 256, decisively faster ≥512. Hover for raw µs.</figcaption></figure>
+<details><summary>Table view</summary><table id="rtable"></table></details>
+
+<h2>2 · The 256-tok hump, discriminated</h2>
 <div class="legend">
-  <span><span class="sw" style="background:var(--series-1)"></span>e2e (barrier-cold full forward)</span>
-  <span><span class="sw" style="background:var(--series-2)"></span>kernel (steady-state, back-to-back)</span>
+  <span><span class="sw" style="background:var(--series-2)"></span>dg</span>
+  <span><span class="sw" style="background:var(--series-1)"></span>cutedsl default</span>
+  <span><span class="sw" style="background:var(--series-4)"></span>cutedsl MEGA_IKR=1</span>
+  <span><span class="sw" style="background:var(--series-3)"></span>cutedsl autotuned</span>
 </div>
-<figure><div id="crossover"></div>
-<figcaption>Latency ratio cutedsl ÷ dg (lower = cutedsl faster; dashed line = parity). Kernel is at
-parity through 128 tok/rank and crosses for good at 512; e2e crosses between 512 and 1024 because of the
-constant per-launch tax. Hover points for exact values.</figcaption></figure>
+<figure><div id="gap"></div>
+<figcaption>Kernel µs, 128–512 tok/rank (job 2359949). IKR is worse everywhere; autotune closes ~40%
+of the 256 gap (winning knob: standalone-warps token-back); +12.9% residual remains at 256.</figcaption></figure>
+<details><summary>Table view</summary><table id="gtable"></table></details>
 
-<details><summary>Table view — ratios and raw µs</summary>
-<table id="xtable"></table>
-</details>
-
-<h2>2 · Where the kernel time goes (rank 0, MEGA_TIMING=kernel + phase timing)</h2>
+<h2>3 · Where kernel time goes (rank 0, phase timing)</h2>
 <div class="legend">
   <span><span class="sw" style="background:var(--series-1)"></span>work</span>
   <span><span class="sw" style="background:var(--series-2)"></span>wait / fixed overhead</span>
 </div>
-<div class="sub">Warp roles run concurrently, so phases overlap in time and do not sum to the
-kernel total — each bar is that role's own clock, as a share of the whole kernel. Waits on one
-role mirror work on another (e.g. <code>epi_fc1_wait</code> tracks <code>mma_fc1</code>).</div>
+<div class="sub">Warp roles run concurrently: phases overlap and do not sum to the kernel total —
+each bar is that role's own clock. Waits on one role mirror work on another
+(<code>epi_fc1_wait</code> tracks <code>mma_fc1</code>).</div>
 <div id="bars"></div>
+<details><summary>Table view — phase µs per token count</summary><table id="ptable"></table></details>
 
-<details><summary>Table view — phase µs per token count</summary>
-<table id="ptable"></table>
-</details>
+<h2>4 · Deferred: e2e / barrier-cold behavior (not kernel)</h2>
+<ul>
+  <li>e2e (barrier-cold full FI forward) runs 1.19–1.36× at 8–256 tok/rank, crossing below 1.0
+      between 512 and 1024 — a constant ~40–60 µs/launch cost dg does not pay
+      (dg e2e−kernel ≈ 8–25 µs; cutedsl ≈ 48–87 µs, roughly constant through 8k).</li>
+  <li>Mechanism proof (job 2359944, e2e mode + phase timing): at 8 tok/rank
+      <code>Dispatch_Barrier</code> inflates <b>14 µs → 164 µs (75% of kernel)</b> on rank 0 —
+      per-rank host launch jitter is absorbed at the first cross-rank sync point.</li>
+</ul>
+<details><summary>Table view — e2e vs kernel µs (all token counts)</summary><table id="etable"></table></details>
 
 <div class="sub" style="margin-top:26px">Instrumentation adds ~0–7 µs on 170–2000 µs kernels; accuracy
-gate pt=0 vs pt=1 is bit-identical. Phase boundaries mirror the IKET range names, so a future
-<code>run-iket</code> trace (internal tot DSL) is directly comparable. Full tables: RESULTS.md.</div>
+gate pt=0 vs pt=1 bit-identical. Phase boundaries mirror the IKET range names, so a future
+<code>run-iket</code> trace (internal tot DSL) is directly comparable. Autotune cells used an isolated
+knob cache. Full tables: RESULTS.md.</div>
 
 <script>
-const TOK = [8,16,32,64,128,256,512,1024,2048,4096,8192];
-const E2E_R  = [1.21,1.20,1.05,1.19,1.22,1.36,1.08,0.90,0.78,0.66,0.66];
-const KERN_R = [0.98,0.99,0.97,0.98,1.04,1.20,0.94,0.81,0.72,0.64,0.64];
-const RAW = { // [dg_e2e, cutedsl_e2e, dg_kernel, cutedsl_kernel]
-  8:[178.5,215.1,170.0,167.0],16:[190.7,227.9,180.2,179.2],32:[216.5,227.5,184.3,179.2],
-  64:[193.4,230.0,184.4,181.2],128:[199.7,244.1,188.4,195.5],256:[222.4,301.8,206.9,248.9],
-  512:[297.8,322.7,280.7,263.2],1024:[479.0,429.0,460.8,371.7],2048:[813.1,633.8,788.5,566.4],
-  4096:[1649.1,1080.3,1594.3,1025.5],8192:[3138.8,2067.0,3107.8,1980.4]};
+const TOK = [8,16,32,64,128,192,256,384,512,1024,2048,4096,8192];
+const KERN = { // [dg_kernel, cutedsl_kernel]
+  8:[170.0,167.0],16:[180.2,179.2],32:[184.3,179.2],64:[184.4,181.2],
+  128:[188.4,195.5],192:[199.6,220.1],256:[206.9,248.9],384:[238.5,261.1],
+  512:[280.7,263.2],1024:[460.8,371.7],2048:[788.5,566.4],4096:[1594.3,1025.5],
+  8192:[3107.8,1980.4]};
+const E2E = { // [dg_e2e, cutedsl_e2e] (deferred section)
+  8:[178.5,215.1],16:[190.7,227.9],32:[216.5,227.5],64:[193.4,230.0],
+  128:[199.7,244.1],256:[222.4,301.8],512:[297.8,322.7],1024:[479.0,429.0],
+  2048:[813.1,633.8],4096:[1649.1,1080.3],8192:[3138.8,2067.0]};
+// hump discrimination (job 2359949): tok -> [dg, default, ikr, auto|null]
+const GAP = {128:[188.4,195.5,226.3,195.5],192:[199.6,220.1,252.8,null],
+  256:[205.9,248.8,277.6,232.4],384:[238.5,261.1,267.3,255.0],
+  512:[278.5,263.2,269.2,null]};
 
-// phase, us, kind(0=work,1=wait/overhead) — rank-0 means, kernel-mode +pt runs
-const PHASES = {
+const PHASES = { // rank-0 means, kernel-mode +pt
   8: {total:173.1, rows:[
     ["mma_fc1 (fc1 GEMM)",51.3,0],["mma_fc2 (fc2 GEMM)",18.4,0],
     ["epi_fc1 work (swiglu+quant+store)",9.8,0],["epi_fc2 work (combine STG)",16.3,0],
@@ -167,56 +191,87 @@ const tip = document.getElementById("tip");
 function showTip(e, html){ tip.innerHTML = html; tip.style.display = "block";
   tip.style.left = (e.clientX + 14) + "px"; tip.style.top = (e.clientY - 10) + "px"; }
 function hideTip(){ tip.style.display = "none"; }
+function hoverize(sel, fmt){
+  document.querySelectorAll(sel).forEach(el=>{
+    el.addEventListener("mousemove", e=>{ showTip(e, fmt(el.dataset)); el.setAttribute("opacity","0.85"); });
+    el.addEventListener("mouseleave", ()=>{ hideTip(); el.removeAttribute("opacity"); });
+  });
+}
 
-/* ---- crossover line chart ---- */
+/* ---- 1: kernel ratio line (single series) ---- */
 (function(){
-  const W=920,H=300,L=52,R=16,T=14,B=40, pw=W-L-R, ph=H-T-B;
+  const W=920,H=280,L=52,R=60,T=14,B=40, pw=W-L-R, ph=H-T-B;
   const x = t => L + pw * (Math.log2(t)-3) / (13-3);
-  const ymin=0.55, ymax=1.45;
+  const ymin=0.55, ymax=1.30;
   const y = r => T + ph * (ymax - r) / (ymax - ymin);
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
-    aria-label="Latency ratio cutedsl over dg vs tokens per rank">`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Kernel latency ratio">`;
   s += `<g class="grid">`;
-  for (const g of [0.6,0.8,1.0,1.2,1.4]) {
+  for (const g of [0.6,0.8,1.0,1.2]) {
     s += `<line x1="${L}" x2="${W-R}" y1="${y(g)}" y2="${y(g)}"
       ${g===1.0?`stroke-dasharray="5 4" stroke="${css('--ref-line')}" stroke-width="1.4"`:""}/>`;
     s += `<text x="${L-8}" y="${y(g)+4}" text-anchor="end">${g.toFixed(1)}</text>`;
   }
   s += `</g>`;
-  for (const t of TOK) s += `<text x="${x(t)}" y="${H-B+18}" text-anchor="middle">${t>=1024?(t/1024)+"k":t}</text>`;
+  for (const t of TOK) if (t!==192 && t!==384)
+    s += `<text x="${x(t)}" y="${H-B+18}" text-anchor="middle">${t>=1024?(t/1024)+"k":t}</text>`;
   s += `<text x="${L+pw/2}" y="${H-4}" text-anchor="middle">tokens/rank (log2)</text>`;
-  s += `<text transform="rotate(-90 14 ${T+ph/2})" x="14" y="${T+ph/2}" text-anchor="middle">ratio cutedsl ÷ dg</text>`;
-  const mk = (arr, color, name, rawIdx) => {
-    let d = TOK.map((t,i)=>`${i?"L":"M"}${x(t)},${y(arr[i])}`).join("");
-    s += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2"/>`;
-    TOK.forEach((t,i)=>{
-      s += `<circle class="pt" data-n="${name}" data-t="${t}" data-r="${arr[i]}"
-        data-a="${RAW[t][rawIdx]}" data-b="${RAW[t][rawIdx+1]}"
-        cx="${x(t)}" cy="${y(arr[i])}" r="4.5" fill="${color}"
-        stroke="${css('--surface-1')}" stroke-width="2"/>`;
-    });
-    s += `<text class="lbl" x="${x(8192)+6}" y="${y(arr[arr.length-1])+4}">${name}</text>`;
-  };
-  mk(E2E_R, css('--series-1'), "e2e", 0);
-  mk(KERN_R, css('--series-2'), "kernel", 2);
+  s += `<text transform="rotate(-90 14 ${T+ph/2})" x="14" y="${T+ph/2}" text-anchor="middle">kernel ratio cutedsl ÷ dg</text>`;
+  const c = css('--series-1');
+  let d = TOK.map((t,i)=>`${i?"L":"M"}${x(t)},${y(KERN[t][1]/KERN[t][0])}`).join("");
+  s += `<path d="${d}" fill="none" stroke="${c}" stroke-width="2"/>`;
+  for (const t of TOK) {
+    const r = KERN[t][1]/KERN[t][0];
+    s += `<circle class="rp" data-t="${t}" data-a="${KERN[t][0]}" data-b="${KERN[t][1]}"
+      data-r="${r.toFixed(2)}" cx="${x(t)}" cy="${y(r)}" r="4.5" fill="${c}"
+      stroke="${css('--surface-1')}" stroke-width="2"/>`;
+  }
+  s += `<text class="lbl" x="${x(256)}" y="${y(KERN[256][1]/KERN[256][0])-10}" text-anchor="middle">256: 1.20×</text>`;
   s += `</svg>`;
-  const el = document.getElementById("crossover"); el.innerHTML = s;
-  el.querySelectorAll(".pt").forEach(c=>{
-    c.addEventListener("mousemove", e=>{
-      const d=c.dataset;
-      showTip(e, `<b>${d.t} tok/rank · ${d.n}</b><br>dg ${d.a} µs → cutedsl ${d.b} µs<br>ratio ${d.r}×`);
-      c.setAttribute("r","6");
-    });
-    c.addEventListener("mouseleave", ()=>{ hideTip(); c.setAttribute("r","4.5"); });
-  });
-  const tb = document.getElementById("xtable");
-  tb.innerHTML = "<tr><th>tok/rank</th><th>dg e2e</th><th>cutedsl e2e</th><th>ratio</th>"+
-    "<th>dg kernel</th><th>cutedsl kernel</th><th>ratio</th></tr>" +
-    TOK.map((t,i)=>`<tr><td>${t}</td><td>${RAW[t][0]}</td><td>${RAW[t][1]}</td><td>${E2E_R[i]}×</td>`+
-      `<td>${RAW[t][2]}</td><td>${RAW[t][3]}</td><td>${KERN_R[i]}×</td></tr>`).join("");
+  document.getElementById("ratio").innerHTML = s;
+  hoverize(".rp", d=>`<b>${d.t} tok/rank</b><br>dg ${d.a} µs → cutedsl ${d.b} µs<br>ratio ${d.r}×`);
+  document.getElementById("rtable").innerHTML =
+    "<tr><th>tok/rank</th><th>dg kernel µs</th><th>cutedsl kernel µs</th><th>ratio</th></tr>" +
+    TOK.map(t=>`<tr><td>${t}</td><td>${KERN[t][0]}</td><td>${KERN[t][1]}</td>`+
+      `<td>${(KERN[t][1]/KERN[t][0]).toFixed(2)}×</td></tr>`).join("");
 })();
 
-/* ---- phase bars ---- */
+/* ---- 2: hump discrimination grouped bars ---- */
+(function(){
+  const toks = [128,192,256,384,512];
+  const series = [["dg",0,css('--series-2')],["default",1,css('--series-1')],
+                  ["MEGA_IKR=1",2,css('--series-4')],["autotuned",3,css('--series-3')]];
+  const W=920,H=300,L=52,R=16,T=14,B=40, pw=W-L-R, ph=H-T-B;
+  const maxv=290;
+  const y = v => T + ph * (1 - v/maxv);
+  const groupW = pw/toks.length, barW = 16, gap2 = 2;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Hump discrimination">`;
+  s += `<g class="grid">`;
+  for (const g of [100,150,200,250]) {
+    s += `<line x1="${L}" x2="${W-R}" y1="${y(g)}" y2="${y(g)}"/>`;
+    s += `<text x="${L-8}" y="${y(g)+4}" text-anchor="end">${g}</text>`;
+  }
+  s += `</g><text transform="rotate(-90 14 ${T+ph/2})" x="14" y="${T+ph/2}" text-anchor="middle">kernel µs</text>`;
+  toks.forEach((t,gi)=>{
+    const cx = L + groupW*gi + groupW/2;
+    s += `<text x="${cx}" y="${H-B+18}" text-anchor="middle">${t} tok/rank</text>`;
+    const present = series.filter(sr=>GAP[t][sr[1]]!=null);
+    const total = present.length*barW + (present.length-1)*gap2;
+    present.forEach((sr,si)=>{
+      const v = GAP[t][sr[1]];
+      const bx = cx - total/2 + si*(barW+gap2);
+      s += `<rect class="gb" data-n="${sr[0]}" data-t="${t}" data-u="${v}"
+        x="${bx}" y="${y(v)}" width="${barW}" height="${y(0)-y(v)}" rx="4" fill="${sr[2]}"/>`;
+    });
+  });
+  s += `</svg>`;
+  document.getElementById("gap").innerHTML = s;
+  hoverize(".gb", d=>`<b>${d.t} tok/rank · ${d.n}</b><br>${d.u} µs`);
+  document.getElementById("gtable").innerHTML =
+    "<tr><th>tok/rank</th><th>dg</th><th>default</th><th>IKR</th><th>autotuned</th></tr>" +
+    toks.map(t=>`<tr><td>${t}</td>`+GAP[t].map(v=>`<td>${v==null?"—":v}</td>`).join("")+"</tr>").join("");
+})();
+
+/* ---- 3: phase bars ---- */
 (function(){
   const host = document.getElementById("bars");
   const colors = [css('--series-1'), css('--series-2')];
@@ -224,37 +279,45 @@ function hideTip(){ tip.style.display = "none"; }
     const {total, rows} = PHASES[tok];
     const sorted = rows.slice().sort((a,b)=>b[1]-a[1]);
     const maxv = sorted[0][1];
-    const W=920, rowH=24, L=300, R=90, H=sorted.length*rowH+34;
+    const W=920, rowH=24, L=300, R=90, H=sorted.length*rowH+18;
     let s = `<h3>tokens/rank = ${tok} <span class="tag">kernel ≈ ${total} µs</span>
       ${tok===8?'<span class="tag">fixed barriers = 23% of kernel</span>':''}
-      ${tok===256?'<span class="tag">combine STG emerges</span>':''}
-      ${tok===8192?'<span class="tag">overhead amortized; cutedsl 1.56× faster</span>':''}</h3>`;
+      ${tok===256?'<span class="tag">the hump: combine STG anomaly</span>':''}
+      ${tok===8192?'<span class="tag">cutedsl 1.56× faster than dg</span>':''}</h3>`;
     s += `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
       aria-label="Phase durations at ${tok} tokens per rank">`;
     sorted.forEach((r,i)=>{
-      const [name,us,kind]=r, yy=i*rowH+8;
+      const [name,us,kind]=r, yy=i*rowH+2;
       const bw = Math.max(2,(W-L-R)*us/maxv);
       s += `<text x="${L-8}" y="${yy+12}" text-anchor="end">${name}</text>`;
       s += `<rect class="bar" data-n="${name}" data-u="${us}" data-p="${(100*us/total).toFixed(1)}"
-        x="${L}" y="${yy}" width="${bw}" height="16" rx="4"
-        fill="${colors[kind]}"/>`;
+        x="${L}" y="${yy}" width="${bw}" height="16" rx="4" fill="${colors[kind]}"/>`;
       s += `<text class="lbl" x="${L+bw+6}" y="${yy+12}">${us} µs · ${(100*us/total).toFixed(0)}%</text>`;
     });
     s += `</svg>`;
     host.insertAdjacentHTML("beforeend", s);
   }
-  host.querySelectorAll(".bar").forEach(b=>{
-    b.addEventListener("mousemove", e=>{
-      const d=b.dataset; showTip(e, `<b>${d.n}</b><br>${d.u} µs · ${d.p}% of kernel`);
-      b.setAttribute("opacity","0.85");
-    });
-    b.addEventListener("mouseleave", ()=>{ hideTip(); b.removeAttribute("opacity"); });
-  });
-  const tb = document.getElementById("ptable");
+  hoverize(".bar", d=>`<b>${d.n}</b><br>${d.u} µs · ${d.p}% of kernel`);
   const names = PHASES[8].rows.map(r=>r[0]);
-  tb.innerHTML = "<tr><th>phase</th><th>8 tok µs</th><th>256 tok µs</th><th>8192 tok µs</th></tr>" +
+  document.getElementById("ptable").innerHTML =
+    "<tr><th>phase</th><th>8 tok µs</th><th>256 tok µs</th><th>8192 tok µs</th></tr>" +
     names.map((n,i)=>`<tr><td>${n}</td><td>${PHASES[8].rows[i][1]}</td>`+
       `<td>${PHASES[256].rows[i][1]}</td><td>${PHASES[8192].rows[i][1]}</td></tr>`).join("");
+})();
+
+/* ---- 4: deferred e2e table ---- */
+(function(){
+  const ts = Object.keys(E2E).map(Number).sort((a,b)=>a-b);
+  document.getElementById("etable").innerHTML =
+    "<tr><th>tok/rank</th><th>dg e2e</th><th>cutedsl e2e</th><th>e2e ratio</th>"+
+    "<th>cutedsl e2e−kernel</th><th>dg e2e−kernel</th></tr>" +
+    ts.map(t=>{
+      const k = KERN[t] || [null,null];
+      const dgd = k[0]!=null ? (E2E[t][0]-k[0]).toFixed(1) : "—";
+      const cdd = k[1]!=null ? (E2E[t][1]-k[1]).toFixed(1) : "—";
+      return `<tr><td>${t}</td><td>${E2E[t][0]}</td><td>${E2E[t][1]}</td>`+
+        `<td>${(E2E[t][1]/E2E[t][0]).toFixed(2)}×</td><td>${cdd}</td><td>${dgd}</td></tr>`;
+    }).join("");
 })();
 </script>
 </body>
