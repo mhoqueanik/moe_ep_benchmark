@@ -143,21 +143,29 @@ form a pipeline:</p>
   <tr><td><b>MMA</b></td><td>w4</td><td>run the fc1 and fc2 tensor-core GEMMs</td></tr>
   <tr><td><b>epilogue</b></td><td>w0–3</td><td>SwiGLU + re-quantize after fc1; after fc2, <i>store results back to the token's home rank</i> (the combine)</td></tr>
 </table>
-<p style="font-size:13.5px"><b>How to read the bars:</b> each bar is the time one role spent in one
-phase, measured on that role's own clock (a <code>%clock64</code> range around the same code the IKET
-markers wrap). Because all roles run <i>concurrently</i>, the bars overlap in time and do
-<b>not</b> sum to the kernel total — a big blue bar means that role was doing real work; a big
-orange bar means it sat waiting (idle, spinning on a counter, or at a barrier). Waits are mirrors:
-when the epilogue's <code>epi_fc1_wait</code> is large it's because <code>mma_fc1</code> upstream is
-the pacer, and when the scheduler's <code>sched_publish</code> is large it's because the consumers
-downstream aren't draining tiles. So the question to ask per chart is: <i>which blue bar is the
-pacer that all the orange bars are waiting on?</i></p>
+<p style="font-size:13.5px"><b>How to read the chart:</b> each phase is measured on its role’s own clock (a <code>%clock64</code> range around the same code the IKET markers wrap). Roles run <i>concurrently</i>, so phases overlap in time and do not sum to the kernel total. Bars are shown as <b>% of that case’s kernel time</b> so the four cases are directly comparable; color = case. The top group is real work, the bottom group is waiting — and waits are mirrors: a large <code>epi_fc1_wait</code> means <code>mma_fc1</code> upstream is the pacer, a large <code>sched_publish</code> means the consumers downstream aren’t draining tiles. So compare the <i>work</i> rows across colors first; the wait rows explain who was pacing whom.</p>
 
+<p style="font-size:13.5px"><b>All four cases share the same overall shape</b> — a persistent,
+wait-dominated kernel where <code>sched_publish</code> and the idle/wait slots are always ~40–55% —
+so the chart below plots every case side by side on a common <b>% of kernel time</b> scale, with
+phases in a fixed order. What differs between cases is which bars move:</p>
+<ul style="font-size:13.5px">
+  <li><b>tail NVLink barriers</b>: 15% of the kernel at 8 tok → 1.5% at 8192 (fixed cost amortizing);</li>
+  <li><b>combine STG (epi_fc2 work)</b>: 9% at 8 tok → <b>28% at 256 (the hump)</b> → 5.5% with tuned
+      knobs → 21% at 8192 (where it is honest per-token work);</li>
+  <li><b>dispatch_pull</b>: 2% at 8 tok → 31% at 8192 (scales with tokens, overlapped);</li>
+  <li><b>GEMM share</b> barely moves 8 → 256 (weight-streaming floor) and only doubles by 8192.</li>
+</ul>
 <div class="legend">
-  <span><span class="sw" style="background:var(--series-1)"></span>work</span>
-  <span><span class="sw" style="background:var(--series-2)"></span>wait / fixed overhead</span>
+  <span><span class="sw" style="background:var(--series-1)"></span>8 tok/rank</span>
+  <span><span class="sw" style="background:var(--series-2)"></span>256 default (the hump)</span>
+  <span><span class="sw" style="background:var(--series-3)"></span>256 tuned knobs</span>
+  <span><span class="sw" style="background:var(--series-4)"></span>8192 tok/rank</span>
 </div>
 <div id="bars"></div>
+<figcaption>Each phase row shows the four cases as % of that case's kernel time (8: 173 µs ·
+256 default: 255 µs · 256 tuned: 234 µs · 8192: 1991 µs). Hover for µs. Top group = work,
+bottom group = waits/fixed overhead; waits mirror upstream pacers, so read the work group first.</figcaption>
 <details><summary>Table view — phase µs per token count</summary><table id="ptable"></table></details>
 
 <h2>4 · Deferred: e2e / barrier-cold behavior (not kernel)</h2>
@@ -323,35 +331,69 @@ function hoverize(sel, fmt){
     toks.map(t=>`<tr><td>${t}</td>`+GAP[t].map(v=>`<td>${v==null?"—":v}</td>`).join("")+"</tr>").join("");
 })();
 
-/* ---- 3: phase bars ---- */
+/* ---- 3: phase comparison (grouped, % of kernel) ---- */
 (function(){
-  const host = document.getElementById("bars");
-  const colors = [css('--series-1'), css('--series-2')];
-  for (const tok of [8,256,"256 (tuned knobs)",8192]) {
-    const {total, rows, story} = PHASES[tok];
-    const sorted = rows.slice().sort((a,b)=>b[1]-a[1]);
-    const maxv = sorted[0][1];
-    const W=920, rowH=24, L=300, R=90, H=sorted.length*rowH+18;
-    let s = `<h3>tokens/rank = ${tok} <span class="tag">kernel ≈ ${total} µs</span>
-      ${tok===8?'<span class="tag">fixed barriers = 23% of kernel</span>':''}
-      ${tok===256?'<span class="tag">the hump: combine STG anomaly (default knobs)</span>':''}
-      ${tok==="256 (tuned knobs)"?'<span class="tag">hump fixed; residual = serial tail</span>':''}
-      ${tok===8192?'<span class="tag">cutedsl 1.56× faster than dg</span>':''}</h3>`;
-    s += `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
-      aria-label="Phase durations at ${tok} tokens per rank">`;
-    sorted.forEach((r,i)=>{
-      const [name,us,kind]=r, yy=i*rowH+2;
-      const bw = Math.max(2,(W-L-R)*us/maxv);
-      s += `<text x="${L-8}" y="${yy+12}" text-anchor="end">${name}</text>`;
-      s += `<rect class="bar" data-n="${name}" data-u="${us}" data-p="${(100*us/total).toFixed(1)}"
-        x="${L}" y="${yy}" width="${bw}" height="16" rx="4" fill="${colors[kind]}"/>`;
-      s += `<text class="lbl" x="${L+bw+6}" y="${yy+12}">${us} µs · ${(100*us/total).toFixed(0)}%</text>`;
-    });
-    s += `</svg>`;
-    s += `<figcaption>${story}</figcaption>`;
-    host.insertAdjacentHTML("beforeend", s);
+  const CASES = [
+    ["8 tok/rank", 8, css('--series-1')],
+    ["256 default", 256, css('--series-2')],
+    ["256 tuned", "256 (tuned knobs)", css('--series-3')],
+    ["8192 tok/rank", 8192, css('--series-4')],
+  ];
+  const GROUPS = [
+    ["work", ["mma_fc1 (fc1 GEMM)","mma_fc2 (fc2 GEMM)",
+              "epi_fc1 work (swiglu+quant+store)","epi_fc2 work (combine STG)",
+              "dispatch_pull"]],
+    ["waits / fixed overhead", ["dispatch_barrier","tail NVLink drain+publish",
+              "epi_fc1_wait (acc TMEM)","mma consume_work (idle)",
+              "sched_publish (backpressure)"]],
+  ];
+  const byName = {};
+  for (const [,key] of CASES.map(c=>[c[0],c[1]])) {
+    const {total, rows} = PHASES[key];
+    for (const [name, us] of rows) {
+      (byName[name] ||= {})[key] = {us, pct: 100*us/total};
+    }
   }
-  hoverize(".bar", d=>`<b>${d.n}</b><br>${d.u} µs · ${d.p}% of kernel`+
+  const W=920, L=300, R=70, barH=9, gap2=2, rowPad=10;
+  const groupHdr=24, rowH=CASES.length*(barH+gap2)+rowPad;
+  const nRows = GROUPS.reduce((a,g)=>a+g[1].length,0);
+  const H = nRows*rowH + GROUPS.length*groupHdr + 30;
+  const maxPct = 60;
+  const x = p => L + (W-L-R) * Math.min(p, maxPct) / maxPct;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
+    aria-label="Phase share of kernel time across cases">`;
+  s += `<g class="grid">`;
+  for (const g of [0,20,40,60]) {
+    s += `<line x1="${x(g)}" x2="${x(g)}" y1="0" y2="${H-18}"/>`;
+    s += `<text x="${x(g)}" y="${H-4}" text-anchor="middle">${g}%</text>`;
+  }
+  s += `</g>`;
+  let yy = 6;
+  for (const [gname, names] of GROUPS) {
+    s += `<text class="lbl" x="0" y="${yy+12}" font-weight="600">${gname}</text>`;
+    yy += groupHdr;
+    for (const name of names) {
+      s += `<text x="${L-8}" y="${yy + (rowH-rowPad)/2 + 4}" text-anchor="end">${name}</text>`;
+      CASES.forEach((c,ci)=>{
+        const d = byName[name][c[1]];
+        const by = yy + ci*(barH+gap2);
+        const bw = Math.max(2, x(d.pct)-L);
+        s += `<rect class="bar" data-n="${name}" data-c="${c[0]}"
+          data-u="${d.us}" data-p="${d.pct.toFixed(1)}"
+          x="${L}" y="${by}" width="${bw}" height="${barH}" rx="3" fill="${c[2]}"/>`;
+      });
+      // direct label: only the largest case, to avoid clutter
+      let best = CASES.reduce((a,c)=> byName[name][c[1]].pct > byName[name][a[1]].pct ? c : a, CASES[0]);
+      const bd = byName[name][best[1]];
+      s += `<text x="${x(Math.min(bd.pct,maxPct))+5}"
+        y="${yy + CASES.indexOf(best)*(barH+gap2) + barH - 1}"
+        class="lbl">${bd.pct.toFixed(0)}%</text>`;
+      yy += rowH;
+    }
+  }
+  s += `</svg>`;
+  document.getElementById("bars").innerHTML = s;
+  hoverize(".bar", d=>`<b>${d.n}</b><br>${d.c}: ${d.u} µs · ${d.p}% of kernel`+
     (PHASE_NOTES[d.n]?`<br><span style="color:var(--text-secondary)">${PHASE_NOTES[d.n]}</span>`:""));
   const names = PHASES[8].rows.map(r=>r[0]);
   document.getElementById("ptable").innerHTML =
