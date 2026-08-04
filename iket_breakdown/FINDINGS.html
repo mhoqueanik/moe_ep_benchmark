@@ -85,24 +85,29 @@ flashinfer branch <code>iket_analysis</code></div>
 <h2>Kernel-only conclusions</h2>
 <ul>
   <li><b>The kernel is at dg parity ≤128 tok/rank (0.97–1.04×) and wins outright ≥512
-      (0.94× → 0.64× at 8k).</b> The only kernel-level slowdown is a <b>hump peaked exactly at
-      256 tok/rank (+21%)</b> — not a trend.</li>
-  <li><b>IKR ruled out.</b><span class="tag">job 2359949</span> <code>MEGA_IKR=1</code> is <i>worse</i> at every point in the window
-      (+12–16%); its cross-rank REDG atomic-adds cost more than the staged combine
-      (<code>epi_fc2</code> 71.0 → 113.5 µs at 256).</li>
-  <li><b>~40% of the hump is a knob-table gap.</b> Online autotune recovers 16.4 µs at 256; the winning
-      change in the 256-max-token bucket is <code>token_back_mode: epi_warps → standalone_warps</code>
-      (combine push moved to a dedicated warp group), tiler unchanged.</li>
-  <li><b>Smoking gun: the combine store is anomalous only in the 256 bucket.</b>
-      <code>fc2_store_combine</code> work (<code>epilogue_refactor.py:2349</code>) = <b>69 µs at 256 but 29 µs at 384</b> —
-      non-monotonic in tokens ⇒ a configuration artifact of the epi-warps token-back at that pool
-      geometry, not a per-token cost.</li>
-  <li><b>Fixed floor (absolute latency at tiny tokens, parity-neutral):</b> tail NVLink quiesce ~23–26 µs
-      (<code>Tail.NvlinkDrain</code> <code>token_comm.py:1865</code> + <code>Tail.NvlinkPublish</code> <code>:1931</code>),
-      dispatch count-exchange ~14 µs (<code>Dispatch_Barrier</code> <code>:1613</code>), fc1 weight-streaming
-      floor ~60–70 µs (<code>mma_fc1</code> <code>kernel_fc12.py:2324</code>) that both backends pay.</li>
-  <li><b>Exonerated:</b> <code>sched_publish</code> (~55%) and <code>epi_fc1_wait</code> (~45%) are pacing
-      symptoms of the fc1 weight stream; <code>Sched_PreInit_Wait</code> ≈ 0.</li>
+      (0.94× → 0.64× at 8k).</b> The only kernel-level slowdown was a hump peaked at 256 tok/rank
+      (+21%) — <b>now resolved as a knob-bucket artifact</b> (section 2).</li>
+  <li><b>Hump resolution:</b><span class="tag">jobs 2359949 + 2360287</span> the 256-max-token knob
+      bucket defaults to <code>epi_warps</code> token-back, whose combine STG
+      (<code>fc2_store_combine</code>, <code>epilogue_refactor.py:2349</code>) misbehaves at that pool
+      geometry (69 µs @256 vs 29 µs @384, non-monotonic ⇒ config artifact). Switching the bucket to
+      <code>standalone_warps</code> (autotune's winner, then pinned + reproduced) gives
+      248.8 → 232.5 µs and drops <code>epi_fc2</code> 71 → 33 µs. <code>MEGA_IKR=1</code> is ruled
+      out (worse everywhere, +12–16%).</li>
+  <li><b>The remaining gap is the serial barrier tail, not compute.</b><span class="tag">job 2360287</span>
+      With tuned knobs at 256 the compute pipeline (sched/TMA/MMA/epilogue loop totals) finishes at
+      ~190–195 µs — <i>below dg's 205.9 total</i> — but the kernel runs to 234 µs: ~40 µs of serialized
+      cross-rank sync per launch (<code>Tail.NvlinkDrain</code> 16.5 µs <code>token_comm.py:1865</code> +
+      <code>Tail.NvlinkPublish</code> 7.3 µs <code>:1931</code> + token-back drain, plus
+      <code>Dispatch_Barrier</code> 15.1 µs <code>:1613</code> up front). That ≈ the whole +12.9%
+      residual, and the same fixed costs set the absolute floor at 8–128 tok/rank.</li>
+  <li><b>Action items:</b> (1) knob table: <code>standalone_warps</code> for the 256 bucket + re-sweep
+      (banked, ~16 µs); (2) fold/elide the NVLink drain+publish pair or overlap the tail with the next
+      layer's dispatch (~24 µs/launch at every size); (3) overlap the dispatch count-exchange (~14 µs)
+      with input staging; (4) do NOT pursue IKR here.</li>
+  <li><b>Exonerated:</b> <code>mma_fc1</code> ~60–70 µs is the fc1 weight-streaming floor both backends
+      share (<code>kernel_fc12.py:2324</code>); <code>sched_publish</code> (~50%) and
+      <code>epi_fc1_wait</code> (~44%) are pacing symptoms of it; <code>Sched_PreInit_Wait</code> ≈ 0.</li>
 </ul>
 
 <h2>1 · Kernel latency ratio (steady state)</h2>
@@ -111,7 +116,7 @@ flashinfer branch <code>iket_analysis</code></div>
 hump at 256, decisively faster ≥512. Hover for raw µs.</figcaption></figure>
 <details><summary>Table view</summary><table id="rtable"></table></details>
 
-<h2>2 · The 256-tok hump, discriminated</h2>
+<h2>2 · The 256-tok hump — resolved (knob-bucket artifact)</h2>
 <div class="legend">
   <span><span class="sw" style="background:var(--series-2)"></span>dg</span>
   <span><span class="sw" style="background:var(--series-1)"></span>cutedsl default</span>
@@ -119,8 +124,9 @@ hump at 256, decisively faster ≥512. Hover for raw µs.</figcaption></figure>
   <span><span class="sw" style="background:var(--series-3)"></span>cutedsl autotuned</span>
 </div>
 <figure><div id="gap"></div>
-<figcaption>Kernel µs, 128–512 tok/rank (job 2359949). IKR is worse everywhere; autotune closes ~40%
-of the 256 gap (winning knob: standalone-warps token-back); +12.9% residual remains at 256.</figcaption></figure>
+<figcaption>Kernel µs, 128–512 tok/rank (job 2359949). IKR is worse everywhere; the winning knob
+(standalone-warps token-back) closes ~40% of the 256 gap and was reproduced pinned (232.5 µs, job
+2360287). The remaining +12.9% is the serial barrier tail — see the tuned-256 chart in section 3.</figcaption></figure>
 <details><summary>Table view</summary><table id="gtable"></table></details>
 
 <h2>3 · Where kernel time goes (rank 0, phase timing)</h2>
@@ -215,6 +221,14 @@ const PHASES = { // rank-0 means, kernel-mode +pt
     ["dispatch_pull",23.5,0],["dispatch_barrier",13.6,1],
     ["tail NVLink drain+publish",22.4,1],["epi_fc1_wait (acc TMEM)",100.2,1],
     ["mma consume_work (idle)",124.9,1],["sched_publish (backpressure)",140.8,1]]},
+  "256 (tuned knobs)": {total:234.4,
+    story:"Same 256 tok/rank with the winning knobs (standalone-warps token-back): combine leaves the epilogue (epi_fc2 work ≈70 → 13 µs) and every compute loop finishes by ~195 µs — below dg's 205.9 µs total. The kernel still runs to 234 µs: the last ~40 µs is the serial tail (token-back drain + NVLink drain/publish barriers). The residual gap vs dg is synchronization, not compute.",
+    rows:[
+    ["mma_fc1 (fc1 GEMM)",61.4,0],["mma_fc2 (fc2 GEMM)",22.3,0],
+    ["epi_fc1 work (swiglu+quant+store)",13.0,0],["epi_fc2 work (combine STG)",12.9,0],
+    ["dispatch_pull",22.1,0],["dispatch_barrier",15.1,1],
+    ["tail NVLink drain+publish",23.8,1],["epi_fc1_wait (acc TMEM)",103.0,1],
+    ["mma consume_work (idle)",104.8,1],["sched_publish (backpressure)",116.7,1]]},
   8192: {total:1990.7,
     story:"Prefill regime: blue dominates — GEMMs, epilogues and dispatch_pull all scale with tokens while the fixed barriers stay ~30 µs and vanish into noise. This is where cutedsl's pipeline beats dg by 1.56×.",
     rows:[
@@ -313,14 +327,15 @@ function hoverize(sel, fmt){
 (function(){
   const host = document.getElementById("bars");
   const colors = [css('--series-1'), css('--series-2')];
-  for (const tok of [8,256,8192]) {
+  for (const tok of [8,256,"256 (tuned knobs)",8192]) {
     const {total, rows, story} = PHASES[tok];
     const sorted = rows.slice().sort((a,b)=>b[1]-a[1]);
     const maxv = sorted[0][1];
     const W=920, rowH=24, L=300, R=90, H=sorted.length*rowH+18;
     let s = `<h3>tokens/rank = ${tok} <span class="tag">kernel ≈ ${total} µs</span>
       ${tok===8?'<span class="tag">fixed barriers = 23% of kernel</span>':''}
-      ${tok===256?'<span class="tag">the hump: combine STG anomaly</span>':''}
+      ${tok===256?'<span class="tag">the hump: combine STG anomaly (default knobs)</span>':''}
+      ${tok==="256 (tuned knobs)"?'<span class="tag">hump fixed; residual = serial tail</span>':''}
       ${tok===8192?'<span class="tag">cutedsl 1.56× faster than dg</span>':''}</h3>`;
     s += `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
       aria-label="Phase durations at ${tok} tokens per rank">`;
@@ -340,9 +355,10 @@ function hoverize(sel, fmt){
     (PHASE_NOTES[d.n]?`<br><span style="color:var(--text-secondary)">${PHASE_NOTES[d.n]}</span>`:""));
   const names = PHASES[8].rows.map(r=>r[0]);
   document.getElementById("ptable").innerHTML =
-    "<tr><th>phase</th><th>8 tok µs</th><th>256 tok µs</th><th>8192 tok µs</th></tr>" +
+    "<tr><th>phase</th><th>8 tok µs</th><th>256 tok µs</th><th>256 tuned µs</th><th>8192 tok µs</th></tr>" +
     names.map((n,i)=>`<tr><td>${n}</td><td>${PHASES[8].rows[i][1]}</td>`+
-      `<td>${PHASES[256].rows[i][1]}</td><td>${PHASES[8192].rows[i][1]}</td></tr>`).join("");
+      `<td>${PHASES[256].rows[i][1]}</td><td>${PHASES["256 (tuned knobs)"].rows[i][1]}</td>`+
+      `<td>${PHASES[8192].rows[i][1]}</td></tr>`).join("");
 })();
 
 /* ---- 4: deferred e2e table ---- */

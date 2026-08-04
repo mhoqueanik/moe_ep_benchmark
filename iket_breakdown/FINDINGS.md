@@ -13,46 +13,57 @@ launches — no launch/barrier-cold effects). Marker anchors are on the flashinf
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | ratio cutedsl ÷ dg | 0.98 | 0.99 | 0.97 | 0.98 | 1.04 | 1.10 | **1.20** | 1.09 | 0.94 | 0.81 | 0.72 | 0.64 | 0.64 |
 
-The kernel is at dg parity ≤128 tok/rank and wins outright ≥512 (1.56× faster at
-8k). The only kernel-level slowdown is a **hump peaked exactly at 256 tok/rank**
-(+21%), not a trend. (dg's "kernel" numbers still include FI wrapper overhead —
+The kernel is at dg parity ≤128 tok/rank and wins outright ≥512 (1.56× faster
+at 8k). The only kernel-level slowdown was a hump peaked at 256 tok/rank
+(+21%) — now resolved as a knob-bucket artifact (next section); after tuning,
+what remains everywhere is the serial barrier tail (~39 µs/launch). (dg's "kernel" numbers still include FI wrapper overhead —
 no bare-launch thunk for dg — so cutedsl's true relative position is slightly
 better than shown everywhere.)
 
-## The 256-tok hump, discriminated (job 2359949)
+## The 256-tok hump: resolved — a knob-bucket artifact (jobs 2359949, 2360287)
 
-| tok/rank | dg | cutedsl default | + `MEGA_IKR=1` | + `MEGA_KNOBS=auto` |
-|---:|---:|---:|---:|---:|
-| 128 | 188.4 | 195.5 (+3.8%) | 226.3 (worse) | 195.5 (no change) |
-| 192 | 199.6 | 220.1 (+10.3%) | 252.8 (worse) | — |
-| 256 | 205.9 | 248.8 (+20.8%) | 277.6 (worse) | **232.4 (+12.9%)** |
-| 384 | 238.5 | 261.1 (+9.5%) | 267.3 (worse) | 255.0 (+6.9%) |
-| 512 | 278.5 | 263.2 (−5.5%) | 269.2 | — |
+Short version: the hump is a bad default in the 256-max-token knob bucket, and
+tuning removes ~40% of it immediately; what tuning cannot remove is the serial
+barrier tail, analyzed below.
 
-- **In-flight REDG combine (`MEGA_IKR=1`) is ruled out — it is *worse* at every
-  point in the window** (+12–16%): its per-fc2-tile cross-rank atomic-adds cost
-  more than the staged combine here (`epi_fc2` grows 71.0 → 113.5 µs at 256).
-- **~40% of the hump is a knob-table gap.** Online autotune recovers 16.4 µs at
-  256; the winning change in the 256-max-token bucket is
-  `token_back_mode: epi_warps → standalone_warps` (combine push moved off the
-  epilogue warps to a dedicated warp group), tiler unchanged (256×128×256).
-- **The smoking gun is `epi_fc2` (combine store) being anomalous exactly in the
-  256 bucket:** work = 69 µs (27% of kernel) at 256 but only **29 µs at 384** —
-  the cost is non-monotonic in tokens, so it is a *configuration* artifact of
-  the epi-warps token-back at that pool geometry, not a fundamental per-token
-  cost. Markers: `fc2_store_combine` (`epilogue_refactor.py:2349`) with the
-  wait split via `fc2_epi_wait` (`epilogue_refactor.py:2185,2199`).
-- **Residual after tuning: +12.9% at 256.** Phase table at the tuned point not
-  yet captured (autotune cell ran without `+pt`); next probe: rerun 256 with
-  the winning knobs pinned via `MEGA_KNOBS` + `MEGA_PHASE_TIMING=1`.
+- The 256 bucket defaults to `epi_warps` token-back, whose combine STG
+  (`fc2_store_combine`, `epilogue_refactor.py:2349`) misbehaves at that pool
+  geometry: 69 µs at 256 vs 29 µs at 384 (non-monotonic ⇒ config artifact).
+- Autotune's winning change is `token_back_mode → standalone_warps` (combine
+  push on dedicated warps w12-15): 248.8 → 232.4 µs. Pinning those knobs
+  reproduces it (232.5 µs, job 2360287), and the phase table confirms the
+  mechanism: `epi_fc2` drops 71 → 33 µs.
+- `MEGA_IKR=1` is ruled out (worse at every point, +12–16%).
+- **Fix:** adopt `standalone_warps` in the knob table's 256 bucket and re-sweep
+  the bucket. Discrimination table: [results/job2359949_kernelgap_extract.txt](results/job2359949_kernelgap_extract.txt).
 
-**Action items, kernel-only:**
-1. Fix the knob table's 256-max-token bucket (adopt `standalone_warps`
-   token-back; re-tune the bucket) — recovers ~7 µs of the ~43 µs gap
-   immediately, more once the bucket is properly swept.
-2. Profile the epi-warps combine STG pattern at 128–384 pool geometries
-   (`fc2_store_combine` marker) — why it degrades only there.
-3. Do NOT pursue IKR for this regime.
+## The remaining kernel gap: the serial tail (job 2360287)
+
+With tuned knobs at 256 tok/rank the kernel is 232.5 µs vs dg 205.9 (+12.9%),
+and the phase table shows exactly where that lives:
+
+| span (tuned 256) | µs |
+|---|---:|
+| compute pipeline (sched/TMA/MMA/epi loop totals all end) | ~190–195 |
+| kernel_total | 234.4 |
+| → serial tail after compute | **~40** |
+
+The compute pipeline alone finishes at ~195 µs — *below* dg's total. The whole
+residual is the serial tail that runs after the last fc2 tile:
+token-back drain + `Tail.NvlinkDrain` (16.5 µs, `token_comm.py:1865`) +
+`Tail.NvlinkPublish` (7.3 µs, `:1931`), plus `Dispatch_Barrier` (15.1 µs,
+`:1613`) at the front — ≈ 39 µs of serialized cross-rank synchronization per
+launch that dg's kernel does not pay at this size. The same fixed costs set
+the absolute floor at 8–128 tok/rank (where cutedsl still matches dg only
+because dg carries other overheads).
+
+**Kernel-only action items, in order:**
+1. Knob table: `standalone_warps` for the 256 bucket (+ re-sweep) — banked,
+   ~16 µs.
+2. Tail quiesce: fold/elide the NVLink drain+publish pair, or overlap the tail
+   with the next layer's dispatch — worth ~24 µs/launch at every token count.
+3. Dispatch count-exchange: overlap the ~14 µs barrier with input staging.
+4. Do NOT pursue IKR in this regime.
 
 ## Fixed in-kernel floor (absolute decode latency, both-backends-relative)
 
