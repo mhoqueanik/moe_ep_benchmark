@@ -1,0 +1,34 @@
+{
+ "version": 1,
+ "entries": [
+  {
+   "device": "NVIDIA GB200",
+   "dtype": "mxfp8_e4m3",
+   "world_size": 4,
+   "hidden": 7168,
+   "intermediate": 3072,
+   "num_experts": 384,
+   "topk": 6,
+   "combine_dtype": "bf16",
+   "max_tokens": 2048,
+   "knobs": {
+    "cluster_shape_mnk": [
+     2,
+     1,
+     1
+    ],
+    "group_hint": 512,
+    "epi_flag_batch": [
+     2,
+     4
+    ],
+    "load_balance_mode": "atomic_counter",
+    "flag_batch": 4,
+    "token_back_mode": "epi_warps"
+   },
+   "p50_us": 1499.3299846537411,
+   "source": "autotune",
+   "tuned_at": "2026-08-04T13:35:39"
+  }
+ ]
+}

@@ -39,6 +39,26 @@ from bench_common import (
 )
 
 
+def _alias_cutedsl_megamoe() -> None:
+    """Post-restructure branches moved the cutedsl kernel tree to
+    kernel_src/sm100/cutedsl_megamoe; alias the old module path so the
+    imports below work on both layouts."""
+    import importlib
+    import importlib.util
+    import sys
+
+    old = "flashinfer.moe_ep.kernel_src.cutedsl_megamoe"
+    spec = importlib.util.find_spec(old)
+    if spec is not None and spec.origin is not None:  # real package (old layout)
+        return
+    sys.modules[old] = importlib.import_module(
+        "flashinfer.moe_ep.kernel_src.sm100.cutedsl_megamoe"
+    )
+
+
+_alias_cutedsl_megamoe()
+
+
 @dataclasses.dataclass
 class Cfg:
     world_size: int

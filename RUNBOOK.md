@@ -201,3 +201,73 @@ fi_mega, default geometry, compute-only timing (staging + weight prep excluded):
 | `deep_gemm_mega` | fp4_int8_block32       | 238      | 134,264 |
 | `nvfp4_cutedsl`  | nvfp4_block16          | 625      | 51,195  |
 | `mxfp8_cutedsl`  | mxfp8_e4m3_block32     | 686      | 46,672  |
+
+---
+
+## 8. MoK comparison: fi mxfp8_cutedsl vs Cursor Mixture-of-Kittens
+
+Forward-only (inference) microbenchmark comparison against Cursor's
+Mixture-of-Kittens (https://github.com/cursor/mixture-of-kittens) on a
+matched workload. Expected numbers + caveats: `EXPECTED_RESULTS.md`.
+All scripts referenced below live in `mok_comparison/` (edit the `ROOT`
+paths at the top of each for a new machine).
+
+Matched workload: 2048 tokens/rank, 384 experts, top-k 6, hidden 7168,
+intermediate 3072, EP = 4, bf16 activations. Same container image for both
+sides (`flashinfer-ep-pt2605-mega_moe_ep-20260712.sqsh`; MoK needs
+torch >= 2.10 on CUDA 13.x with a matching nvcc — the image's
+torch 2.12/cu13.2 + nvcc 13.2 qualifies).
+
+### 8a. MoK side
+
+```bash
+git clone --recurse-submodules https://github.com/cursor/mixture-of-kittens $ROOT/mixture-of-kittens
+cd $ROOT/mixture-of-kittens                    # pinned at 8f90b74 for the reference numbers
+git apply $BENCH/mok_comparison/mok_sm100_capability_check.patch   # GB200/SM100 only; skip on GB300/SM103
+cp $BENCH/mok_comparison/bench_mok_fwd_only.py benchmarks/
+```
+
+`bench_mok_fwd_only.py` is a forward-only wrapper around MoK's own
+`benchmarks/bench_mok.py` harness (same correctness check and
+`benchmark_fwd` timing; backward stripped). The patch relaxes MoK's
+SM103-only runtime gate to also accept SM100 — the kernel builds for SM100
+via `MOK_ARCH=SM100` per MoK's README, only the check is over-strict.
+
+Build + run (in-container; `run_mok_fwd_bench.sh` does exactly this —
+in-tree `make` so the .so persists on shared storage, no pip needed):
+
+```bash
+srun -A <account> -p batch -N1 --ntasks-per-node=1 --time=02:00:00 \
+  --container-image=$IMG --container-mounts=$ROOT:$ROOT \
+  bash $BENCH/mok_comparison/run_mok_fwd_bench.sh
+```
+
+Prints `BF16: forward X ms, Y TFLOP/s` and the MXFP8 line. Workload knobs
+are env vars read by MoK's bench_mok.py (NUM_LOCAL_TOKENS, NUM_EXPERTS,
+TOPK, HIDDEN_DIM, INTERMEDIATE_DIM) — defaults already match the
+comparison shape. GPU count = `--nproc-per-node` inside the script.
+
+### 8b. fi side
+
+Default knobs (also runs plain `e2e` after `e2e_pipelined`):
+
+```bash
+srun ... --container-image=$IMG --container-mounts=$ROOT:$ROOT \
+  bash $BENCH/mok_comparison/run_fi_mega_moklike.sh
+```
+
+Tuned: `run_fi_mega_tuned.sh` first runs the offline tuner
+(`torchrun -m flashinfer.moe_ep.tune --dtype mxfp8_e4m3 ...` at the same
+geometry) with `FLASHINFER_MOE_EP_KNOB_CACHE` pointed at a shared-storage
+JSON, then reruns the benchmark so the workspace picks the tuned knobs up
+via the cache. The 2026-08-04 winner is checked in at
+`mok_comparison/moe_ep_knob_cache_moklike.json` — reuse it directly by
+exporting `FLASHINFER_MOE_EP_KNOB_CACHE` to skip the ~4-compile sweep.
+
+### 8c. Comparability rules
+
+Compare fi `e2e_pipelined` p50 against MoK's forward ms (both steady-state
+back-to-back CUDA-event timing). Normalize FLOPs before quoting a ratio:
+MoK computes a shared expert on top of the routed ones (T·(topk+1) vs
+T·topk), and fi excludes input activation quant from the timed region
+while MoK includes it. Full caveat list in `EXPECTED_RESULTS.md`.
