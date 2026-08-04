@@ -32,11 +32,11 @@ export TOKENS=2048 NUM_EXPERTS=384 TOPK=6 HIDDEN=7168 INTER=3072
 export WARMUP=100 ITERS=100
 export MEGA_LIST=mxfp8_cutedsl
 
-echo "=== fi_mega mxfp8_cutedsl +SHARED EXPERT, tuned, MEGA_TIMING=e2e_pipelined"
-MEGA_SHARED_EXPERT=1 MEGA_TIMING=e2e_pipelined STAMP=moklike_shared_pipelined bash "$BENCH/run.sh"
+echo "=== fi_mega +shared +timed-quant (full MoK scope), tuned, MEGA_TIMING=e2e_pipelined"
+MEGA_SHARED_EXPERT=1 MEGA_TIMED_QUANT=1 MEGA_TIMING=e2e_pipelined STAMP=moklike_sharedquant_pipelined bash "$BENCH/run.sh"
 
-echo "=== fi_mega mxfp8_cutedsl +SHARED EXPERT, tuned, MEGA_TIMING=e2e"
-MEGA_SHARED_EXPERT=1 MEGA_TIMING=e2e STAMP=moklike_shared_e2e bash "$BENCH/run.sh"
+echo "=== fi_mega +shared +timed-quant (full MoK scope), tuned, MEGA_TIMING=e2e"
+MEGA_SHARED_EXPERT=1 MEGA_TIMED_QUANT=1 MEGA_TIMING=e2e STAMP=moklike_sharedquant_e2e bash "$BENCH/run.sh"
 
 echo "=== xcheck: fi side (same-input protocol, output dumped)"
 MEGA_XCHECK_DIR=$XDIR MEGA_SHARED_EXPERT=1 MEGA_ACC=0 MEGA_TIMING=e2e \

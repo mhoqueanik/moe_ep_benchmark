@@ -30,21 +30,29 @@ intermediate 3072, EP = world size = 4, bf16 activations in/out.
 All rows below run the SAME workload: routed experts + a shared expert
 (MoK fuses its shared expert into the megakernel; the fi rows include a
 MoK-parity shared expert in the timed region via `MEGA_SHARED_EXPERT=1`).
+The "+quant" fi rows additionally time the fused bf16→MXFP8 activation
+quant + staging kernel (`MEGA_TIMED_QUANT=1`), matching MoK's timed scope
+exactly: bf16 tokens in → bf16 combined output out, everything in between
+on the clock. **Quote the bold full-scope rows against MoK.**
 
 | Variant | Fwd latency p50 | Effective TFLOP/s |
 |---|---|---|
-| **fi `mxfp8_cutedsl` + shared expert, tuned, `e2e_pipelined`** | **1.782 ms** | **~1063** |
-| fi `mxfp8_cutedsl` + shared expert, tuned, `e2e` | 1.867 ms | ~1014 |
+| **fi + shared + timed quant (full MoK scope), tuned, `e2e_pipelined`** | **1.832 ms** | **~1034** |
+| fi + shared + timed quant (full MoK scope), tuned, `e2e` | 1.942 ms | ~975 |
+| fi + shared, staging excluded, tuned, `e2e_pipelined` | 1.782 ms | ~1063 |
+| fi + shared, staging excluded, tuned, `e2e` | 1.867 ms | ~1014 |
 | **MoK MXFP8 forward (routed + shared)** | **2.562 ms** | **739** |
 | MoK BF16 forward (routed + shared) | 3.708 ms | 511 |
 
-Headline (compare the bold rows — `e2e_pipelined` is the MoK-comparable
-timing mode): **fi is ~1.44× faster than MoK** (1.782 ms vs 2.562 ms).
-CSVs of record:
-`results/bench_moklike_shared_{pipelined,e2e}_fi_mega.csv`.
+Headline (bold rows, identical scope, `e2e_pipelined` = the MoK-comparable
+timing mode): **fi is ~1.40× faster than MoK** (1.832 ms vs 2.562 ms).
+The fused quant+staging kernel costs fi ~50 µs; the staging-excluded rows
+are kept only to show that delta. CSVs of record:
+`results/bench_moklike_{sharedquant,shared}_{pipelined,e2e}_fi_mega.csv`.
 
-Do not benchmark fi without `MEGA_SHARED_EXPERT=1` when comparing against
-MoK: a routed-only fi run under-counts fi's work and inflates the ratio.
+Do not benchmark fi without `MEGA_SHARED_EXPERT=1 MEGA_TIMED_QUANT=1` when
+comparing against MoK: anything less under-counts fi's work and inflates
+the ratio.
 
 ### Timing modes (plain language)
 
@@ -94,7 +102,7 @@ shared expert). Effective TFLOP/s = that over the p50 latency.
 
 ## Why is MoK slower here? (2026-08-04 analysis)
 
-From code inspection and targeted measurements — the ~1.44× gap is
+From code inspection and targeted measurements — the ~1.40× gap is
 structural at this scale, not a tuning artifact:
 
 1. **MoK's forward is a training forward — it always builds the backward
@@ -122,10 +130,11 @@ structural at this scale, not a tuning artifact:
    bitwise reproducibility — a deliberate scheduling constraint. fi's
    default mxfp8 path is also deterministic in output but keeps dynamic
    (atomic-counter) load balancing for work assignment.
-4. **Activation quantization scope** (also caveat 1 below): MoK quantizes
-   bf16→MXFP8 activations (including transposed copies) inside the timed
-   forward; the fi harness pre-stages quantized activations. A small
-   slice of the gap is measurement scope rather than kernel speed.
+4. **Activation quantization** is NOT the gap: timing fi's fused
+   bf16→MXFP8 quant+staging kernel (`MEGA_TIMED_QUANT=1`) costs only
+   ~50 µs (1.782 → 1.832 ms). MoK additionally quantizes *transposed*
+   activation copies for the backward — part of item 1, not a
+   measurement-scope issue.
 5. **Design point mismatch.** MoK is engineered for NVL72-scale EP
    (cross-rack NVLink, comm/compute overlap at configurable granularity);
    at single-node EP=4 that machinery is oversized. Sweeping its knobs at

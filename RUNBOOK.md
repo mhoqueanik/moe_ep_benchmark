@@ -258,9 +258,11 @@ srun ... --container-image=$IMG --container-mounts=$ROOT:$ROOT \
   bash $BENCH/mok_comparison/run_shared_and_xcheck.sh
 ```
 
-Always benchmark the fi side with `MEGA_SHARED_EXPERT=1` when comparing
-against MoK — a routed-only run under-counts fi's work and inflates the
-speedup ratio.
+Always benchmark the fi side with `MEGA_SHARED_EXPERT=1 MEGA_TIMED_QUANT=1`
+when comparing against MoK: the first adds the MoK-parity shared expert,
+the second moves the fused bf16->MXFP8 activation quant+staging kernel
+into the timed region, so the timed scope matches MoK exactly (bf16 in ->
+bf16 out). Anything less under-counts fi's work and inflates the ratio.
 
 Knob tuning: `run_fi_mega_tuned.sh` first runs the offline tuner
 (`torchrun -m flashinfer.moe_ep.tune --dtype mxfp8_e4m3 ...` at the same
@@ -277,11 +279,10 @@ Compare fi `e2e_pipelined` p50 against MoK's forward ms (both steady-state
 back-to-back CUDA-event timing; `e2e` adds a per-iteration barrier + idle
 GPU and measures cold-start latency instead — see the plain-language
 timing-mode note in `EXPECTED_RESULTS.md`). Run the fi side with
-`MEGA_SHARED_EXPERT=1` so the per-iteration work matches MoK's fused
-routed+shared forward — `run_shared_and_xcheck.sh` does this. Remaining
-scope difference: fi excludes input activation quant from the timed
-region while MoK quantizes in-kernel. Full caveat list in
-`EXPECTED_RESULTS.md`.
+`MEGA_SHARED_EXPERT=1 MEGA_TIMED_QUANT=1` so both the per-iteration work
+(routed + shared expert) and the timed scope (activation quant+staging
+included) match MoK's forward — `run_shared_and_xcheck.sh` does this.
+Full caveat list in `EXPECTED_RESULTS.md`.
 
 ### 8d. Same-input output cross-check
 

@@ -178,6 +178,8 @@ def _mega_variant_suffix() -> str:
         parts.append(f"combine_{_mega_combine_dtype()}")
     if bool(int(os.environ.get("MEGA_SHARED_EXPERT", "0"))):
         parts.append("shared")
+    if bool(int(os.environ.get("MEGA_TIMED_QUANT", "0"))):
+        parts.append("quant")
     return ("+" + "+".join(parts)) if parts else ""
 
 
@@ -470,7 +472,24 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
         # Timed region only — the accuracy pass reruns the plain kernel and is
         # unaffected. Not supported with MEGA_TIMING=kernel (bare-launch thunk
         # bypasses this closure).
+        # MEGA_TIMED_QUANT=1: include the fused bf16->MXFP8 activation quant +
+        # staging kernel (DataPreprocess single launch) in the timed region.
+        # MoK quantizes activations inside its timed forward; this closes that
+        # measurement-scope gap for the MoK comparison. mxfp8_cutedsl only.
+        timed_quant = bool(int(os.environ.get("MEGA_TIMED_QUANT", "0")))
+        t_bf16 = None
+        if timed_quant:
+            if cfg.mega_backend != "mxfp8_cutedsl":
+                raise ValueError("MEGA_TIMED_QUANT=1 is only supported for mxfp8_cutedsl")
+            t_bf16 = MoEEpTensors(
+                hidden_states=problem.hidden_states,
+                topk_ids=problem.topk_ids,
+                topk_weights=problem.topk_weights,
+            )
+
         def kernel_run():
+            if t_bf16 is not None:
+                mega._kernel.stage_inputs(t_bf16, workspace, quantize_input=True)
             mega._kernel.compute(workspace, transformed, output=y)
             return y
 
@@ -528,6 +547,11 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
             raise ValueError(
                 "MEGA_SHARED_EXPERT=1 requires MEGA_TIMING=e2e|e2e_pipelined "
                 "(the bare-launch thunk cannot include the shared expert)"
+            )
+        if timed_quant and timing_mode == "kernel":
+            raise ValueError(
+                "MEGA_TIMED_QUANT=1 requires MEGA_TIMING=e2e|e2e_pipelined "
+                "(the bare-launch thunk cannot include the staging kernel)"
             )
 
         thunk = None
@@ -655,7 +679,7 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
                 "acc_loss_pct"
             )
             row = (
-                f"mega,mega,{comm_backend},{compute_kernel},no,"
+                f"mega,mega,{comm_backend},{compute_kernel},{'yes' if timed_quant else 'no'},"
                 f"{weight_dtype},bfloat16,{act_compute_dtype},"
                 f"{cfg.tokens_per_rank},{world},{cfg.num_experts},{cfg.top_k},"
                 f"{cfg.hidden},{cfg.intermediate},"
@@ -666,7 +690,13 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
             print(
                 "\n=== FlashInfer MoE-EP (mega) result ===\n"
                 f"  mega backend     : {compute_kernel}\n"
-                f"  staging          : excluded (pre-quantized once; timed = compute only)\n"
+                f"  staging          : "
+                + (
+                    "INCLUDED (fused bf16->MXFP8 quant + stage in timed region)"
+                    if timed_quant
+                    else "excluded (pre-quantized once; timed = compute only)"
+                )
+                + "\n"
                 f"  weight prep      : excluded (preprocessed at layer init)\n"
                 f"  geometry         : {world} GPUs (DP={world}, EP={world}, TP=1), "
                 f"{cfg.num_experts} experts, top-{cfg.top_k}, hidden={cfg.hidden}, "
