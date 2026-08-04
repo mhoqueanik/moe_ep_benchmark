@@ -249,20 +249,27 @@ comparison shape. GPU count = `--nproc-per-node` inside the script.
 
 ### 8b. fi side
 
-Default knobs (also runs plain `e2e` after `e2e_pipelined`):
+Canonical run — benchmark with the MoK-parity shared expert
+(`MEGA_SHARED_EXPERT=1`, both timing modes) plus the same-input output
+cross-check (§8d):
 
 ```bash
 srun ... --container-image=$IMG --container-mounts=$ROOT:$ROOT \
-  bash $BENCH/mok_comparison/run_fi_mega_moklike.sh
+  bash $BENCH/mok_comparison/run_shared_and_xcheck.sh
 ```
 
-Tuned: `run_fi_mega_tuned.sh` first runs the offline tuner
+Always benchmark the fi side with `MEGA_SHARED_EXPERT=1` when comparing
+against MoK — a routed-only run under-counts fi's work and inflates the
+speedup ratio.
+
+Knob tuning: `run_fi_mega_tuned.sh` first runs the offline tuner
 (`torchrun -m flashinfer.moe_ep.tune --dtype mxfp8_e4m3 ...` at the same
 geometry) with `FLASHINFER_MOE_EP_KNOB_CACHE` pointed at a shared-storage
-JSON, then reruns the benchmark so the workspace picks the tuned knobs up
-via the cache. The 2026-08-04 winner is checked in at
+JSON, then reruns the shared-expert benchmark so the workspace picks the
+tuned knobs up via the cache. The 2026-08-04 winner is checked in at
 `mok_comparison/moe_ep_knob_cache_moklike.json` — reuse it directly by
-exporting `FLASHINFER_MOE_EP_KNOB_CACHE` to skip the ~4-compile sweep.
+exporting `FLASHINFER_MOE_EP_KNOB_CACHE` to skip the ~4-compile sweep
+(`run_shared_and_xcheck.sh` already does).
 
 ### 8c. Comparability rules
 

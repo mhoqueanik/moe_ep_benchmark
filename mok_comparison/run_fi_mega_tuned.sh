@@ -33,11 +33,11 @@ export TOKENS=2048 NUM_EXPERTS=384 TOPK=6 HIDDEN=7168 INTER=3072
 export WARMUP=100 ITERS=100
 export MEGA_LIST=mxfp8_cutedsl
 
-echo "=== fi_mega mxfp8_cutedsl TUNED MEGA_TIMING=e2e_pipelined"
-MEGA_TIMING=e2e_pipelined STAMP=moklike_tuned_pipelined bash "$BENCH/run.sh"
+echo "=== fi_mega mxfp8_cutedsl TUNED +SHARED EXPERT MEGA_TIMING=e2e_pipelined"
+MEGA_SHARED_EXPERT=1 MEGA_TIMING=e2e_pipelined STAMP=moklike_tuned_pipelined bash "$BENCH/run.sh"
 
-echo "=== fi_mega mxfp8_cutedsl TUNED MEGA_TIMING=e2e"
-MEGA_TIMING=e2e STAMP=moklike_tuned_e2e bash "$BENCH/run.sh"
+echo "=== fi_mega mxfp8_cutedsl TUNED +SHARED EXPERT MEGA_TIMING=e2e"
+MEGA_SHARED_EXPERT=1 MEGA_TIMING=e2e STAMP=moklike_tuned_e2e bash "$BENCH/run.sh"
 
 echo "=== newest CSVs:"
 ls -t "$BENCH/results" | head -6

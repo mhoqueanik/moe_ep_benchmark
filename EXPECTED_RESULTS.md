@@ -27,23 +27,24 @@ intermediate 3072, EP = world size = 4, bf16 activations in/out.
 
 ## Results
 
+All rows below run the SAME workload: routed experts + a shared expert
+(MoK fuses its shared expert into the megakernel; the fi rows include a
+MoK-parity shared expert in the timed region via `MEGA_SHARED_EXPERT=1`).
+
 | Variant | Fwd latency p50 | Effective TFLOP/s |
 |---|---|---|
-| fi `mxfp8_cutedsl`, default knobs, `MEGA_TIMING=e2e_pipelined` | 1.599 ms | ~1016 |
-| fi `mxfp8_cutedsl`, tuned knobs, `e2e_pipelined` | 1.597 ms | ~1016 |
 | **fi `mxfp8_cutedsl` + shared expert, tuned, `e2e_pipelined`** | **1.782 ms** | **~1063** |
-| fi `mxfp8_cutedsl`, default knobs, `e2e` | 1.669 ms | ~973 |
-| fi `mxfp8_cutedsl`, tuned knobs, `e2e` | 1.659 ms | ~979 |
 | fi `mxfp8_cutedsl` + shared expert, tuned, `e2e` | 1.867 ms | ~1014 |
 | **MoK MXFP8 forward (routed + shared)** | **2.562 ms** | **739** |
 | MoK BF16 forward (routed + shared) | 3.708 ms | 511 |
 
-Headline (matched workload, shared expert included on both sides —
-compare the bold rows): **fi is ~1.44× faster than MoK** (1.782 ms vs
-2.562 ms, `e2e_pipelined`, the MoK-comparable timing mode). Routed-only fi
-is 1.597 ms (~1.6× vs MoK raw, but that under-counts fi's work — always
-quote the shared-expert row against MoK). CSVs of record:
-`results/bench_moklike_{pipelined,e2e,tuned_pipelined,tuned_e2e,shared_pipelined,shared_e2e}_fi_mega.csv`.
+Headline (compare the bold rows — `e2e_pipelined` is the MoK-comparable
+timing mode): **fi is ~1.44× faster than MoK** (1.782 ms vs 2.562 ms).
+CSVs of record:
+`results/bench_moklike_shared_{pipelined,e2e}_fi_mega.csv`.
+
+Do not benchmark fi without `MEGA_SHARED_EXPERT=1` when comparing against
+MoK: a routed-only fi run under-counts fi's work and inflates the ratio.
 
 ### Timing modes (plain language)
 
@@ -88,25 +89,27 @@ ranks) confirms the two compute the same function. Rerun:
 
 ### FLOPs normalization
 
-- fi (routed experts only): `6·T·topk·H·I` = 1.624 TFLOP per rank-forward
-- MoK (routed + shared expert): `6·T·(topk+1)·H·I` = 1.894 TFLOP
+Both sides: `6·T·(topk+1)·H·I` = 1.894 TFLOP per rank-forward (routed +
+shared expert). Effective TFLOP/s = that over the p50 latency.
 
-### Caveats — read before quoting the raw 1.6×
+### Caveats
 
-1. **Shared expert**: MoK's forward also computes a shared expert (~14.3%
-   extra FLOPs at top-k 6); fi computes routed experts only. The TFLOP/s
-   column corrects for this; fi still leads ~1.37×.
-2. **Activation quantization scope**: the fi harness lifts bf16→MXFP8 input
+1. **Activation quantization scope**: the fi harness lifts bf16→MXFP8 input
    staging out of the timed region; MoK quantizes activations inside the
-   timed forward. Part of the remaining gap is timing scope, not kernel
+   timed forward. A small part of the gap is timing scope, not kernel
    speed.
+2. **Shared expert implementation**: fi's shared expert runs as three
+   sequential bf16 cuBLAS GEMMs after the fused kernel (~185 µs); MoK
+   overlaps its shared expert inside the megakernel. This is pessimistic
+   for fi.
 3. **Timing statistic**: fi reports p50 across 100 CUDA-event-timed iters
    (100 warmup); MoK reports median-across-iters of max-across-ranks over
    100 iters (500 warmup). Both steady-state, back-to-back launches;
    `e2e_pipelined` is the MoK-comparable fi mode.
 4. **Accuracy metrics are not comparable across rows**: fi reports 6.36%
-   rel-L2 vs its bf16 *dense* reference; MoK reports 2.6% relative error vs
-   its own bf16 MoE reference.
+   rel-L2 vs its bf16 *dense* reference (routed only); MoK reports 2.6%
+   relative error vs its own bf16 MoE reference. The same-input
+   cross-check above is the apples-to-apples correctness signal.
 5. **Knob tuning is a wash here**: the offline tuner's winner
    (`flag_batch=4, token_back_mode=epi_warps`, see
    `mok_comparison/moe_ep_knob_cache_moklike.json`) matches the built-in
