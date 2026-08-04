@@ -92,6 +92,48 @@ ranks) confirms the two compute the same function. Rerun:
 Both sides: `6·T·(topk+1)·H·I` = 1.894 TFLOP per rank-forward (routed +
 shared expert). Effective TFLOP/s = that over the p50 latency.
 
+## Why is MoK slower here? (2026-08-04 analysis)
+
+From code inspection and targeted measurements — the ~1.44× gap is
+structural at this scale, not a tuning artifact:
+
+1. **MoK's forward is a training forward — it always builds the backward
+   stash.** `mok/functional.py::forward` returns a `MoKForwardContext`
+   holding quantized fc1 gate/up outputs, the post-SwiGLU hidden
+   (re-quantized in *transposed* layout for the wgrad GEMMs), and the
+   dispatched activations (also transposed+quantized) — roughly 250
+   MB/rank of extra HBM writes plus in-kernel transpose-quantize stages
+   per forward. There is no inference mode that skips this. fi's mega
+   kernel writes only the combined output. In an inference comparison
+   this is pure overhead for MoK.
+2. **MoK's SM-resident communication stage is the bottleneck at EP=4**
+   (measured, `mok_comparison/bench_mok_sweep_fwd.py`): MXFP8 forward vs
+   `fwd_num_comm_sms` on 152-SM GB200s —
+   4→9.39 ms, 8→5.07, 16→3.04, 24→2.57, **36→2.56 (default, best)**,
+   52→2.62. Latency scales ~inversely with comm SMs until ~24: the
+   forward is throughput-limited by its dedicated dispatch/combine copy
+   engine, which needs 24–36 SMs (~25% of the chip) to keep pace,
+   leaving ~116 SMs for the GEMMs. fi's cutedsl kernel instead returns
+   combined tokens through the GEMM epilogue warps
+   (`token_back_mode=epi_warps`, the tuner winner) — no whole-SM comm
+   reservation.
+3. **Determinism by construction.** MoK serializes combine additions in a
+   fixed macrobatch order (`csrc/mok_megakernel.cuh:1410`) to guarantee
+   bitwise reproducibility — a deliberate scheduling constraint. fi's
+   default mxfp8 path is also deterministic in output but keeps dynamic
+   (atomic-counter) load balancing for work assignment.
+4. **Activation quantization scope** (also caveat 1 below): MoK quantizes
+   bf16→MXFP8 activations (including transposed copies) inside the timed
+   forward; the fi harness pre-stages quantized activations. A small
+   slice of the gap is measurement scope rather than kernel speed.
+5. **Design point mismatch.** MoK is engineered for NVL72-scale EP
+   (cross-rack NVLink, comm/compute overlap at configurable granularity);
+   at single-node EP=4 that machinery is oversized. Sweeping its knobs at
+   this scale (12 configs over `fwd_num_comm_sms` × `minibatch_size`)
+   improves on the defaults by ≤1% (best 2.537 ms at comm SMs 24,
+   minibatch 2048) — its README's NVL72/SM103 performance claims are a
+   different regime and are not contradicted by this comparison.
+
 ### Caveats
 
 1. **Activation quantization scope**: the fi harness lifts bf16→MXFP8 input
