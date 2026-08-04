@@ -71,6 +71,9 @@
   svg text { fill: var(--text-secondary); font-size: 11px; }
   svg .lbl { fill: var(--text-primary); font-size: 11px; }
   svg .grid line { stroke: var(--grid); }
+  svg .gl { stroke: var(--grid); }
+  svg .w0 { fill: var(--series-1); }
+  svg .w1 { fill: var(--series-2); }
 </style>
 </head>
 <body class="viz-root" data-palette="#2a78d6,#eb6834,#1baf7a,#eda100">
@@ -80,7 +83,7 @@
 <div class="sub">Steady-state kernel time only (<code>MEGA_TIMING=kernel</code>, back-to-back launches —
 no launch/barrier-cold effects) · IKET-marker phases via the clock64 fallback ·
 jobs 2359277 / 2359364 / 2359949 · 1×8 B200, EP8, 256 experts top-8, 7168/2048, DSL 4.5.2 ·
-flashinfer branch <code>iket_analysis</code></div>
+flashinfer branch <code>iket_analysis</code> · doc rev: section-3 static small multiples</div>
 
 <h2>Kernel-only conclusions</h2>
 <ul>
@@ -160,7 +163,133 @@ phases in a fixed order. What differs between cases is which bars move:</p>
   <span><span class="sw" style="background:var(--series-1)"></span>work</span>
   <span><span class="sw" style="background:var(--series-2)"></span>wait / fixed overhead</span>
 </div>
-<div id="bars"></div>
+<div id="bars">
+<svg viewBox="0 0 931 326" width="100%" role="img" aria-label="Phase share of kernel time, one column per case">
+<text class="lbl" x="235" y="14" font-weight="600">8 tok</text>
+<text x="235" y="28">kernel 173.1 µs</text>
+<line class="gl" x1="235" x2="235" y1="38" y2="304"/>
+<text x="235" y="318" text-anchor="middle">0%</text>
+<line class="gl" x1="315" x2="315" y1="38" y2="304"/>
+<text x="315" y="318" text-anchor="middle">30%</text>
+<line class="gl" x1="395" x2="395" y1="38" y2="304"/>
+<text x="395" y="318" text-anchor="middle">60%</text>
+<text class="lbl" x="409" y="14" font-weight="600">256 default</text>
+<text x="409" y="28">kernel 255.1 µs</text>
+<line class="gl" x1="409" x2="409" y1="38" y2="304"/>
+<text x="409" y="318" text-anchor="middle">0%</text>
+<line class="gl" x1="489" x2="489" y1="38" y2="304"/>
+<text x="489" y="318" text-anchor="middle">30%</text>
+<line class="gl" x1="569" x2="569" y1="38" y2="304"/>
+<text x="569" y="318" text-anchor="middle">60%</text>
+<text class="lbl" x="583" y="14" font-weight="600">256 tuned</text>
+<text x="583" y="28">kernel 234.4 µs</text>
+<line class="gl" x1="583" x2="583" y1="38" y2="304"/>
+<text x="583" y="318" text-anchor="middle">0%</text>
+<line class="gl" x1="663" x2="663" y1="38" y2="304"/>
+<text x="663" y="318" text-anchor="middle">30%</text>
+<line class="gl" x1="743" x2="743" y1="38" y2="304"/>
+<text x="743" y="318" text-anchor="middle">60%</text>
+<text class="lbl" x="757" y="14" font-weight="600">8192 tok</text>
+<text x="757" y="28">kernel 1990.7 µs</text>
+<line class="gl" x1="757" x2="757" y1="38" y2="304"/>
+<text x="757" y="318" text-anchor="middle">0%</text>
+<line class="gl" x1="837" x2="837" y1="38" y2="304"/>
+<text x="837" y="318" text-anchor="middle">30%</text>
+<line class="gl" x1="917" x2="917" y1="38" y2="304"/>
+<text x="917" y="318" text-anchor="middle">60%</text>
+<text x="225" y="55" text-anchor="end">mma_fc1 (fc1 GEMM)</text>
+<rect class="w0" x="235" y="44" width="79.0" height="14" rx="3"><title>mma_fc1 (fc1 GEMM) — 8 tok: 51.3 µs · 29.6% of kernel</title></rect>
+<text x="318.0" y="55" font-size="10">30</text>
+<rect class="w0" x="409" y="44" width="65.0" height="14" rx="3"><title>mma_fc1 (fc1 GEMM) — 256 default: 62.2 µs · 24.4% of kernel</title></rect>
+<text x="478.0" y="55" font-size="10">24</text>
+<rect class="w0" x="583" y="44" width="69.9" height="14" rx="3"><title>mma_fc1 (fc1 GEMM) — 256 tuned: 61.4 µs · 26.2% of kernel</title></rect>
+<text x="656.9" y="55" font-size="10">26</text>
+<rect class="w0" x="757" y="44" width="54.0" height="14" rx="3"><title>mma_fc1 (fc1 GEMM) — 8192 tok: 402.9 µs · 20.2% of kernel</title></rect>
+<text x="815.0" y="55" font-size="10">20</text>
+<text x="225" y="81" text-anchor="end">mma_fc2 (fc2 GEMM)</text>
+<rect class="w0" x="235" y="70" width="28.3" height="14" rx="3"><title>mma_fc2 (fc2 GEMM) — 8 tok: 18.4 µs · 10.6% of kernel</title></rect>
+<text x="267.3" y="81" font-size="10">11</text>
+<rect class="w0" x="409" y="70" width="42.5" height="14" rx="3"><title>mma_fc2 (fc2 GEMM) — 256 default: 40.7 µs · 16.0% of kernel</title></rect>
+<text x="455.5" y="81" font-size="10">16</text>
+<rect class="w0" x="583" y="70" width="25.4" height="14" rx="3"><title>mma_fc2 (fc2 GEMM) — 256 tuned: 22.3 µs · 9.5% of kernel</title></rect>
+<text x="612.4" y="81" font-size="10">10</text>
+<rect class="w0" x="757" y="70" width="37.0" height="14" rx="3"><title>mma_fc2 (fc2 GEMM) — 8192 tok: 276.1 µs · 13.9% of kernel</title></rect>
+<text x="798.0" y="81" font-size="10">14</text>
+<text x="225" y="107" text-anchor="end">epi_fc1 work (swiglu+quant+store)</text>
+<rect class="w0" x="235" y="96" width="15.1" height="14" rx="3"><title>epi_fc1 work (swiglu+quant+store) — 8 tok: 9.8 µs · 5.7% of kernel</title></rect>
+<text x="254.1" y="107" font-size="10">6</text>
+<rect class="w0" x="409" y="96" width="14.6" height="14" rx="3"><title>epi_fc1 work (swiglu+quant+store) — 256 default: 14.0 µs · 5.5% of kernel</title></rect>
+<text x="427.6" y="107" font-size="10">5</text>
+<rect class="w0" x="583" y="96" width="14.8" height="14" rx="3"><title>epi_fc1 work (swiglu+quant+store) — 256 tuned: 13.0 µs · 5.5% of kernel</title></rect>
+<text x="601.8" y="107" font-size="10">6</text>
+<rect class="w0" x="757" y="96" width="44.8" height="14" rx="3"><title>epi_fc1 work (swiglu+quant+store) — 8192 tok: 334.3 µs · 16.8% of kernel</title></rect>
+<text x="805.8" y="107" font-size="10">17</text>
+<text x="225" y="133" text-anchor="end">epi_fc2 work (combine STG)</text>
+<rect class="w0" x="235" y="122" width="25.1" height="14" rx="3"><title>epi_fc2 work (combine STG) — 8 tok: 16.3 µs · 9.4% of kernel</title></rect>
+<text x="264.1" y="133" font-size="10">9</text>
+<rect class="w0" x="409" y="122" width="75.4" height="14" rx="3"><title>epi_fc2 work (combine STG) — 256 default: 72.1 µs · 28.3% of kernel</title></rect>
+<text x="488.4" y="133" font-size="10">28</text>
+<rect class="w0" x="583" y="122" width="14.7" height="14" rx="3"><title>epi_fc2 work (combine STG) — 256 tuned: 12.9 µs · 5.5% of kernel</title></rect>
+<text x="601.7" y="133" font-size="10">6</text>
+<rect class="w0" x="757" y="122" width="54.9" height="14" rx="3"><title>epi_fc2 work (combine STG) — 8192 tok: 409.7 µs · 20.6% of kernel</title></rect>
+<text x="815.9" y="133" font-size="10">21</text>
+<text x="225" y="159" text-anchor="end">dispatch_pull</text>
+<rect class="w0" x="235" y="148" width="6.3" height="14" rx="3"><title>dispatch_pull — 8 tok: 4.1 µs · 2.4% of kernel</title></rect>
+<text x="245.3" y="159" font-size="10">2</text>
+<rect class="w0" x="409" y="148" width="24.6" height="14" rx="3"><title>dispatch_pull — 256 default: 23.5 µs · 9.2% of kernel</title></rect>
+<text x="437.6" y="159" font-size="10">9</text>
+<rect class="w0" x="583" y="148" width="25.1" height="14" rx="3"><title>dispatch_pull — 256 tuned: 22.1 µs · 9.4% of kernel</title></rect>
+<text x="612.1" y="159" font-size="10">9</text>
+<rect class="w0" x="757" y="148" width="81.5" height="14" rx="3"><title>dispatch_pull — 8192 tok: 608.4 µs · 30.6% of kernel</title></rect>
+<text x="842.5" y="159" font-size="10">31</text>
+<text x="225" y="185" text-anchor="end">dispatch_barrier</text>
+<line class="gl" x1="0" x2="931" y1="167" y2="167"/>
+<rect class="w1" x="235" y="174" width="21.9" height="14" rx="3"><title>dispatch_barrier — 8 tok: 14.2 µs · 8.2% of kernel</title></rect>
+<text x="260.9" y="185" font-size="10">8</text>
+<rect class="w1" x="409" y="174" width="14.2" height="14" rx="3"><title>dispatch_barrier — 256 default: 13.6 µs · 5.3% of kernel</title></rect>
+<text x="427.2" y="185" font-size="10">5</text>
+<rect class="w1" x="583" y="174" width="17.2" height="14" rx="3"><title>dispatch_barrier — 256 tuned: 15.1 µs · 6.4% of kernel</title></rect>
+<text x="604.2" y="185" font-size="10">6</text>
+<rect class="w1" x="757" y="174" width="3.5" height="14" rx="3"><title>dispatch_barrier — 8192 tok: 25.8 µs · 1.3% of kernel</title></rect>
+<text x="764.5" y="185" font-size="10">1</text>
+<text x="225" y="211" text-anchor="end">tail NVLink drain+publish</text>
+<rect class="w1" x="235" y="200" width="40.2" height="14" rx="3"><title>tail NVLink drain+publish — 8 tok: 26.1 µs · 15.1% of kernel</title></rect>
+<text x="279.2" y="211" font-size="10">15</text>
+<rect class="w1" x="409" y="200" width="23.4" height="14" rx="3"><title>tail NVLink drain+publish — 256 default: 22.4 µs · 8.8% of kernel</title></rect>
+<text x="436.4" y="211" font-size="10">9</text>
+<rect class="w1" x="583" y="200" width="27.1" height="14" rx="3"><title>tail NVLink drain+publish — 256 tuned: 23.8 µs · 10.2% of kernel</title></rect>
+<text x="614.1" y="211" font-size="10">10</text>
+<rect class="w1" x="757" y="200" width="4.0" height="14" rx="3"><title>tail NVLink drain+publish — 8192 tok: 29.9 µs · 1.5% of kernel</title></rect>
+<text x="765.0" y="211" font-size="10">2</text>
+<text x="225" y="237" text-anchor="end">epi_fc1_wait (acc TMEM)</text>
+<rect class="w1" x="235" y="226" width="129.4" height="14" rx="3"><title>epi_fc1_wait (acc TMEM) — 8 tok: 84.0 µs · 48.5% of kernel</title></rect>
+<text x="368.4" y="237" font-size="10">49</text>
+<rect class="w1" x="409" y="226" width="104.7" height="14" rx="3"><title>epi_fc1_wait (acc TMEM) — 256 default: 100.2 µs · 39.3% of kernel</title></rect>
+<text x="517.7" y="237" font-size="10">39</text>
+<rect class="w1" x="583" y="226" width="117.2" height="14" rx="3"><title>epi_fc1_wait (acc TMEM) — 256 tuned: 103.0 µs · 43.9% of kernel</title></rect>
+<text x="704.2" y="237" font-size="10">44</text>
+<rect class="w1" x="757" y="226" width="45.1" height="14" rx="3"><title>epi_fc1_wait (acc TMEM) — 8192 tok: 336.8 µs · 16.9% of kernel</title></rect>
+<text x="806.1" y="237" font-size="10">17</text>
+<text x="225" y="263" text-anchor="end">mma consume_work (idle)</text>
+<rect class="w1" x="235" y="252" width="135.3" height="14" rx="3"><title>mma consume_work (idle) — 8 tok: 87.8 µs · 50.7% of kernel</title></rect>
+<text x="374.3" y="263" font-size="10">51</text>
+<rect class="w1" x="409" y="252" width="130.6" height="14" rx="3"><title>mma consume_work (idle) — 256 default: 124.9 µs · 49.0% of kernel</title></rect>
+<text x="543.6" y="263" font-size="10">49</text>
+<rect class="w1" x="583" y="252" width="119.2" height="14" rx="3"><title>mma consume_work (idle) — 256 tuned: 104.8 µs · 44.7% of kernel</title></rect>
+<text x="706.2" y="263" font-size="10">45</text>
+<rect class="w1" x="757" y="252" width="99.6" height="14" rx="3"><title>mma consume_work (idle) — 8192 tok: 743.8 µs · 37.4% of kernel</title></rect>
+<text x="860.6" y="263" font-size="10">37</text>
+<text x="225" y="289" text-anchor="end">sched_publish (backpressure)</text>
+<rect class="w1" x="235" y="278" width="142.2" height="14" rx="3"><title>sched_publish (backpressure) — 8 tok: 92.3 µs · 53.3% of kernel</title></rect>
+<text x="381.2" y="289" font-size="10">53</text>
+<rect class="w1" x="409" y="278" width="147.2" height="14" rx="3"><title>sched_publish (backpressure) — 256 default: 140.8 µs · 55.2% of kernel</title></rect>
+<text x="560.2" y="289" font-size="10">55</text>
+<rect class="w1" x="583" y="278" width="132.8" height="14" rx="3"><title>sched_publish (backpressure) — 256 tuned: 116.7 µs · 49.8% of kernel</title></rect>
+<text x="719.8" y="289" font-size="10">50</text>
+<rect class="w1" x="757" y="278" width="142.2" height="14" rx="3"><title>sched_publish (backpressure) — 8192 tok: 1061.4 µs · 53.3% of kernel</title></rect>
+<text x="903.2" y="289" font-size="10">53</text>
+</svg>
+</div>
 <figcaption>Small multiples: one column per case, phases locked to the same rows, all bars as
 % of that case's kernel time — scan a row straight across to see how a phase changes between
 cases. Hover for µs. Waits mirror upstream pacers, so read the work rows first.</figcaption>
@@ -329,72 +458,16 @@ function hoverize(sel, fmt){
     toks.map(t=>`<tr><td>${t}</td>`+GAP[t].map(v=>`<td>${v==null?"—":v}</td>`).join("")+"</tr>").join("");
 })();
 
-/* ---- 3: phase comparison — small multiples, fixed rows ---- */
+/* ---- 3: chart is pre-rendered static SVG; only the table view is JS ---- */
 (function(){
-  const CASES = [
-    ["8 tok", 8, 173.1],
-    ["256 default", 256, 255.1],
-    ["256 tuned", "256 (tuned knobs)", 234.4],
-    ["8192 tok", 8192, 1990.7],
-  ];
-  const ROWS = [  // fixed order: work first, then waits
-    ["mma_fc1 (fc1 GEMM)",0],["mma_fc2 (fc2 GEMM)",0],
-    ["epi_fc1 work (swiglu+quant+store)",0],["epi_fc2 work (combine STG)",0],
-    ["dispatch_pull",0],
-    ["dispatch_barrier",1],["tail NVLink drain+publish",1],
-    ["epi_fc1_wait (acc TMEM)",1],["mma consume_work (idle)",1],
-    ["sched_publish (backpressure)",1],
-  ];
-  const val = {};
-  for (const [,key] of CASES) {
-    const {total, rows} = PHASES[key];
-    for (const [name, us] of rows) (val[name] ||= {})[key] = {us, pct: 100*us/total};
-  }
-  const LBL=235, COLW=160, COLGAP=12, rowH=26, HDR=34;
-  const W = LBL + CASES.length*(COLW+COLGAP);
-  const H = HDR + ROWS.length*rowH + 24;
-  const maxPct = 60;
-  const colors = [css('--series-1'), css('--series-2')];
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
-    aria-label="Phase share of kernel time, one column per case">`;
-  CASES.forEach((c,ci)=>{
-    const x0 = LBL + ci*(COLW+COLGAP);
-    s += `<text class="lbl" x="${x0}" y="12" font-weight="600">${c[0]}</text>`;
-    s += `<text x="${x0}" y="26">kernel ${c[2]} µs</text>`;
-    s += `<g class="grid">`;
-    for (const g of [0,30,60]) {
-      const gx = x0 + COLW*g/maxPct;
-      s += `<line x1="${gx}" x2="${gx}" y1="${HDR-2}" y2="${H-22}"/>`;
-      s += `<text x="${gx}" y="${H-8}" text-anchor="middle">${g}%</text>`;
-    }
-    s += `</g>`;
-  });
-  ROWS.forEach((r,ri)=>{
-    const [name, kind] = r;
-    const yy = HDR + ri*rowH;
-    s += `<text x="${LBL-10}" y="${yy+15}" text-anchor="end">${name}</text>`;
-    if (kind===1 && ROWS[ri-1] && ROWS[ri-1][1]===0)
-      s += `<line x1="0" x2="${W}" y1="${yy-3}" y2="${yy-3}" stroke="${css('--grid')}"/>`;
-    CASES.forEach((c,ci)=>{
-      const x0 = LBL + ci*(COLW+COLGAP);
-      const d = val[name][c[1]];
-      const bw = Math.max(2, COLW*Math.min(d.pct,maxPct)/maxPct);
-      s += `<rect class="bar" data-n="${name}" data-c="${c[0]}" data-u="${d.us}"
-        data-p="${d.pct.toFixed(1)}" x="${x0}" y="${yy+4}" width="${bw}"
-        height="14" rx="3" fill="${colors[kind]}"/>`;
-      s += `<text x="${x0+bw+4}" y="${yy+15}" font-size="10">${d.pct.toFixed(0)}</text>`;
-    });
-  });
-  s += `</svg>`;
-  document.getElementById("bars").innerHTML = s;
-  hoverize(".bar", d=>`<b>${d.n}</b><br>${d.c}: ${d.u} µs · ${d.p}% of kernel`+
-    (PHASE_NOTES[d.n]?`<br><span style="color:var(--text-secondary)">${PHASE_NOTES[d.n]}</span>`:""));
-  const names = PHASES[8].rows.map(r=>r[0]);
+  var names = PHASES[8].rows.map(function(r){return r[0];});
   document.getElementById("ptable").innerHTML =
     "<tr><th>phase</th><th>8 tok µs</th><th>256 tok µs</th><th>256 tuned µs</th><th>8192 tok µs</th></tr>" +
-    names.map((n,i)=>`<tr><td>${n}</td><td>${PHASES[8].rows[i][1]}</td>`+
-      `<td>${PHASES[256].rows[i][1]}</td><td>${PHASES["256 (tuned knobs)"].rows[i][1]}</td>`+
-      `<td>${PHASES[8192].rows[i][1]}</td></tr>`).join("");
+    names.map(function(n,i){
+      return "<tr><td>"+n+"</td><td>"+PHASES[8].rows[i][1]+"</td><td>"+
+        PHASES[256].rows[i][1]+"</td><td>"+PHASES["256 (tuned knobs)"].rows[i][1]+
+        "</td><td>"+PHASES[8192].rows[i][1]+"</td></tr>";
+    }).join("");
 })();
 
 /* ---- 4: deferred e2e table ---- */
