@@ -74,6 +74,11 @@
   svg .gl { stroke: var(--grid); }
   svg .w0 { fill: var(--series-1); }
   svg .w1 { fill: var(--series-2); }
+  svg .hl { fill: none; stroke: var(--text-primary); stroke-width: 1.3;
+            stroke-dasharray: 6 4; pointer-events: none; }
+  svg .hl2 { fill: none; stroke: var(--text-muted); stroke-width: 1.1;
+             stroke-dasharray: 3 4; pointer-events: none; }
+  svg .hlt { fill: var(--text-primary); font-size: 11px; font-weight: 600; }
 </style>
 </head>
 <body class="viz-root" data-palette="#2a78d6,#eb6834,#1baf7a,#eda100">
@@ -496,12 +501,22 @@ phases in a fixed order. What differs between cases is which bars move:</p>
 <text x="939.5" y="293" font-size="8.5">52</text>
 <rect class="w1" x="957" y="282" width="62.2" height="14" rx="3"><title>sched_publish (backpressure) — 8192 tok/rank: 1061.4 µs · 53.3% of kernel</title></rect>
 <text x="1022.2" y="293" font-size="8.5">53</text>
+<rect class="hl" x="224" y="45" width="244" height="22" rx="5"/>
+<text class="hlt" x="474" y="59">① fc1 weight-stream floor: ~51–58 µs flat — the pacer</text>
+<rect class="hl" x="224" y="175" width="244" height="48" rx="5"/>
+<text class="hlt" x="474" y="189">② serial barrier floor: ~40 µs/launch fixed —</text>
+<text class="hlt" x="474" y="203">23% of an 8-tok kernel, gone by 8k</text>
+<rect class="hl2" x="224" y="227" width="244" height="74" rx="5"/>
+<text class="hlt" x="474" y="241">③ all this waiting is ① seen from downstream</text>
+<text class="hlt" x="474" y="255">(epilogue/MMA/scheduler starved, not slow)</text>
 </svg>
 </div>
 <figcaption>Small multiples over the whole sweep (plus the two 256 variants): one column per
 case, phases locked to the same rows, bars as % of that case's kernel time (kernel time under each
-header). Scan a row straight across for the trend; hover any bar for exact µs. Waits mirror
-upstream pacers, so read the work rows first.</figcaption>
+header). Scan a row straight across for the trend; hover any bar for exact µs. The dashed boxes
+mark the low-tok/rank stall: ① the fc1 weight stream is the pacer (its µs barely move from 8 to
+128 tokens), ② the serial barriers are a fixed ~40 µs floor on top, and ③ the big wait rows are
+just ① seen from downstream — the compute warps are starved, not slow.</figcaption>
 <details><summary>Table view — phase µs per token count</summary><table><tr><th>phase</th><th>8 µs</th><th>64 µs</th><th>128 µs</th><th>256 µs</th><th>256T µs</th><th>512 µs</th><th>1k µs</th><th>2k µs</th><th>4k µs</th><th>8k µs</th></tr><tr><td>mma_fc1 (fc1 GEMM)</td><td>51.3</td><td>56.0</td><td>57.9</td><td>62.2</td><td>61.4</td><td>73.1</td><td>82.0</td><td>138.2</td><td>213.6</td><td>402.9</td></tr><tr><td>mma_fc2 (fc2 GEMM)</td><td>18.4</td><td>21.1</td><td>22.1</td><td>40.7</td><td>22.3</td><td>26.7</td><td>38.7</td><td>73.9</td><td>134.5</td><td>276.1</td></tr><tr><td>epi_fc1 work (swiglu+quant+store)</td><td>9.8</td><td>11.0</td><td>11.5</td><td>14.0</td><td>13.0</td><td>24.3</td><td>43.1</td><td>84.4</td><td>157.9</td><td>334.3</td></tr><tr><td>epi_fc2 work (combine STG)</td><td>16.3</td><td>21.5</td><td>26.0</td><td>72.1</td><td>12.9</td><td>25.6</td><td>45.9</td><td>96.9</td><td>192.7</td><td>409.7</td></tr><tr><td>dispatch_pull</td><td>4.2</td><td>10.2</td><td>14.8</td><td>23.5</td><td>22.1</td><td>47.5</td><td>91.8</td><td>155.3</td><td>293.2</td><td>608.4</td></tr><tr><td>dispatch_barrier</td><td>12.7</td><td>11.3</td><td>14.7</td><td>13.6</td><td>15.1</td><td>16.0</td><td>16.5</td><td>32.9</td><td>56.7</td><td>25.8</td></tr><tr><td>tail NVLink drain+publish</td><td>26.1</td><td>19.5</td><td>17.6</td><td>22.4</td><td>23.8</td><td>25.6</td><td>26.5</td><td>16.5</td><td>58.6</td><td>29.9</td></tr><tr><td>epi_fc1_wait (acc TMEM)</td><td>84.0</td><td>88.6</td><td>93.0</td><td>100.2</td><td>103.0</td><td>107.2</td><td>112.1</td><td>159.9</td><td>207.3</td><td>336.8</td></tr><tr><td>mma consume_work (idle)</td><td>87.8</td><td>93.5</td><td>99.8</td><td>124.9</td><td>104.8</td><td>122.1</td><td>144.3</td><td>254.3</td><td>422.1</td><td>743.8</td></tr><tr><td>sched_publish (backpressure)</td><td>92.3</td><td>99.4</td><td>100.5</td><td>140.8</td><td>116.7</td><td>133.0</td><td>176.9</td><td>314.4</td><td>530.1</td><td>1061.4</td></tr><tr><td><b>kernel_total</b></td><td><b>173.1</b></td><td><b>185.4</b></td><td><b>199.7</b></td><td><b>255.1</b></td><td><b>234.4</b></td><td><b>263.2</b></td><td><b>371.8</b></td><td><b>570.4</b></td><td><b>1022.0</b></td><td><b>1990.7</b></td></tr></table></details>
 
 <h2>5 · Deferred: e2e / barrier-cold behavior (not kernel)</h2>
