@@ -267,7 +267,23 @@ exporting `FLASHINFER_MOE_EP_KNOB_CACHE` to skip the ~4-compile sweep.
 ### 8c. Comparability rules
 
 Compare fi `e2e_pipelined` p50 against MoK's forward ms (both steady-state
-back-to-back CUDA-event timing). Normalize FLOPs before quoting a ratio:
-MoK computes a shared expert on top of the routed ones (T·(topk+1) vs
-T·topk), and fi excludes input activation quant from the timed region
-while MoK includes it. Full caveat list in `EXPECTED_RESULTS.md`.
+back-to-back CUDA-event timing; `e2e` adds a per-iteration barrier + idle
+GPU and measures cold-start latency instead — see the plain-language
+timing-mode note in `EXPECTED_RESULTS.md`). Run the fi side with
+`MEGA_SHARED_EXPERT=1` so the per-iteration work matches MoK's fused
+routed+shared forward — `run_shared_and_xcheck.sh` does this. Remaining
+scope difference: fi excludes input activation quant from the timed
+region while MoK quantizes in-kernel. Full caveat list in
+`EXPECTED_RESULTS.md`.
+
+### 8d. Same-input output cross-check
+
+`run_shared_and_xcheck.sh` also verifies both implementations compute the
+same function: `xcheck_common.py` generates bit-identical inputs for both
+sides (deterministic CUDA-generator seeds — same container/GPU on both
+runs), the fi harness dumps its output when `MEGA_XCHECK_DIR` is set
+(use `MEGA_ACC=0`: the dense-reference accuracy pass assumes
+`make_problem` seed-derived weights), `xcheck_mok.py` (torchrun, MoK repo)
+dumps MoK's, and `xcheck_compare.py` reports per-rank rel-L2 with a 5%
+pass threshold (~1.5% expected — MXFP8 noise; bitwise equality is not
+possible across different kernels/quantizers).

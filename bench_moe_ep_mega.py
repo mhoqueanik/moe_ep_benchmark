@@ -176,6 +176,8 @@ def _mega_variant_suffix() -> str:
         parts.append("ikr")
     if _mega_combine_dtype() != "bf16":
         parts.append(f"combine_{_mega_combine_dtype()}")
+    if bool(int(os.environ.get("MEGA_SHARED_EXPERT", "0"))):
+        parts.append("shared")
     return ("+" + "+".join(parts)) if parts else ""
 
 
@@ -399,6 +401,34 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
             device=device,
         )
 
+        # MEGA_XCHECK_DIR: cross-implementation check against MoK. Replace the
+        # random problem with the deterministic shared-input protocol
+        # (xcheck_common.py, copied into that dir) and dump the forward output
+        # there at the end. Run with MEGA_ACC=0: the dense-reference accuracy
+        # pass regenerates weights from make_problem's seeds, which no longer
+        # match. See mok_comparison/ for the MoK-side runner and comparer.
+        xcheck_dir = os.environ.get("MEGA_XCHECK_DIR", "")
+        xcheck = None
+        if xcheck_dir:
+            import sys
+
+            if xcheck_dir not in sys.path:
+                sys.path.insert(0, xcheck_dir)
+            from bench_common import BenchProblem
+            from xcheck_common import xcheck_tensors
+
+            xcheck = xcheck_tensors(
+                rank, world, m, cfg.hidden, cfg.intermediate,
+                cfg.num_experts, cfg.top_k, device,
+            )
+            problem = BenchProblem(
+                hidden_states=xcheck["x"],
+                topk_weights=xcheck["topk_w"],
+                topk_ids=xcheck["topk_ids"],
+                w13_bf16=torch.cat([xcheck["w_gate"], xcheck["w_up"]], dim=1).contiguous(),
+                w2_bf16=xcheck["w_down"].contiguous(),
+            )
+
         if cfg.mega_backend == "deep_gemm_mega":
             from flashinfer.moe_ep import MoEWeightPack
 
@@ -433,9 +463,45 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
 
         y = torch.empty(m, cfg.hidden, dtype=torch.bfloat16, device=device)
 
-        def run():
+        # MEGA_SHARED_EXPERT=1: also compute a MoK-style dense shared expert
+        # (SwiGLU MLP with the same intermediate size, bf16 cuBLAS) inside the
+        # timed region, so per-iteration work matches harnesses that fuse a
+        # shared expert into the MoE forward (e.g. Cursor Mixture-of-Kittens).
+        # Timed region only — the accuracy pass reruns the plain kernel and is
+        # unaffected. Not supported with MEGA_TIMING=kernel (bare-launch thunk
+        # bypasses this closure).
+        def kernel_run():
             mega._kernel.compute(workspace, transformed, output=y)
             return y
+
+        shared_expert = bool(int(os.environ.get("MEGA_SHARED_EXPERT", "0")))
+        if shared_expert:
+            x_bf16 = problem.hidden_states.to(torch.bfloat16)
+            if xcheck is not None:
+                w_shared_gate = xcheck["w_shared_gate"]
+                w_shared_up = xcheck["w_shared_up"]
+                w_shared_down = xcheck["w_shared_down"]
+            else:
+                w_shared_gate = (
+                    torch.randn(cfg.intermediate, cfg.hidden, dtype=torch.bfloat16, device=device) / 32
+                )
+                w_shared_up = (
+                    torch.randn(cfg.intermediate, cfg.hidden, dtype=torch.bfloat16, device=device) / 32
+                )
+                w_shared_down = (
+                    torch.randn(cfg.hidden, cfg.intermediate, dtype=torch.bfloat16, device=device) / 32
+                )
+
+            def run():
+                kernel_run()
+                h = torch.nn.functional.silu(x_bf16 @ w_shared_gate.T) * (
+                    x_bf16 @ w_shared_up.T
+                )
+                y.add_(h @ w_shared_down.T)
+                return y
+
+        else:
+            run = kernel_run
 
         # MEGA_TIMING selects the timed region:
         #   e2e (default) - the full FI forward path (arg prep, workspace
@@ -457,6 +523,11 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
         if timing_mode not in ("e2e", "e2e_pipelined", "kernel"):
             raise ValueError(
                 f"MEGA_TIMING must be e2e|e2e_pipelined|kernel, got {timing_mode!r}"
+            )
+        if shared_expert and timing_mode == "kernel":
+            raise ValueError(
+                "MEGA_SHARED_EXPERT=1 requires MEGA_TIMING=e2e|e2e_pipelined "
+                "(the bare-launch thunk cannot include the shared expert)"
             )
 
         thunk = None
@@ -527,9 +598,17 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
         # rel-L2 percentage — it captures the full low-precision cost of the
         # path (weight quant + activation quant + fc1-out requant + combine
         # wire) relative to bf16 model math.
+        if xcheck_dir:
+            run()  # full forward (incl. shared expert if enabled)
+            torch.cuda.synchronize()
+            torch.save(y.cpu(), f"{xcheck_dir}/out_fi_rank{rank}.pt")
+            dist.barrier()
+            if rank == 0:
+                print(f"[xcheck] saved out_fi_rank*.pt to {xcheck_dir}", flush=True)
+
         acc_loss_pct = float("nan")
         if bool(int(os.environ.get("MEGA_ACC", "1"))):
-            run()
+            kernel_run()  # plain kernel: the dense reference has no shared expert
             torch.cuda.synchronize()
             y_val = y.float()
             y_ref = compute_dense_moe_reference(
@@ -600,6 +679,13 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
                     "e2e": "full FI forward, barrier-cold",
                 }[timing_mode]
                 + ")\n"
+                f"  shared expert    : "
+                + (
+                    "included (bf16 cuBLAS SwiGLU MLP in the timed region, MoK-parity)"
+                    if shared_expert
+                    else "absent (routed experts only)"
+                )
+                + "\n"
                 f"  E2E latency (us) : p50={us:.1f}  min={us_min:.1f}  max={us_max:.1f}  "
                 f"({cfg.iters} iters, {cfg.warmup} warmup, CUDA-event timed)\n"
                 f"  throughput       : {tok_s:.1f} tok/s\n"

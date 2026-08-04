@@ -31,14 +31,60 @@ intermediate 3072, EP = world size = 4, bf16 activations in/out.
 |---|---|---|
 | fi `mxfp8_cutedsl`, default knobs, `MEGA_TIMING=e2e_pipelined` | 1.599 ms | ~1016 |
 | fi `mxfp8_cutedsl`, tuned knobs, `e2e_pipelined` | 1.597 ms | ~1016 |
+| **fi `mxfp8_cutedsl` + shared expert, tuned, `e2e_pipelined`** | **1.782 ms** | **~1063** |
 | fi `mxfp8_cutedsl`, default knobs, `e2e` | 1.669 ms | ~973 |
 | fi `mxfp8_cutedsl`, tuned knobs, `e2e` | 1.659 ms | ~979 |
-| MoK MXFP8 forward | 2.562 ms | 739 |
-| MoK BF16 forward | 3.708 ms | 511 |
+| fi `mxfp8_cutedsl` + shared expert, tuned, `e2e` | 1.867 ms | ~1014 |
+| **MoK MXFP8 forward (routed + shared)** | **2.562 ms** | **739** |
+| MoK BF16 forward (routed + shared) | 3.708 ms | 511 |
 
-Headline: **fi is ~1.6× faster in raw latency, ~1.37× after FLOPs
-normalization** on this workload. CSVs of record:
-`results/bench_moklike_{pipelined,e2e,tuned_pipelined,tuned_e2e}_fi_mega.csv`.
+Headline (matched workload, shared expert included on both sides —
+compare the bold rows): **fi is ~1.44× faster than MoK** (1.782 ms vs
+2.562 ms, `e2e_pipelined`, the MoK-comparable timing mode). Routed-only fi
+is 1.597 ms (~1.6× vs MoK raw, but that under-counts fi's work — always
+quote the shared-expert row against MoK). CSVs of record:
+`results/bench_moklike_{pipelined,e2e,tuned_pipelined,tuned_e2e,shared_pipelined,shared_e2e}_fi_mega.csv`.
+
+### Timing modes (plain language)
+
+`MEGA_TIMING` selects how iterations are launched — the timed work is the
+same full FI forward either way:
+
+- `e2e_pipelined` — steady-state: iterations enqueued back-to-back, no
+  per-iteration barrier/sync (like a serving/training pipeline). **This is
+  the mode comparable to MoK's harness**, which also times back-to-back
+  forwards with per-iteration CUDA events.
+- `e2e` — cold-start: each iteration launched from a global barrier +
+  device sync on an idle GPU, so samples include collective start-up skew.
+  Always ≥ `e2e_pipelined`; the difference isolates launch/collective
+  overhead.
+- `kernel` — bare pre-built kernel launch (tester parity); excludes the FI
+  host wrapper. Not comparable to MoK; incompatible with
+  `MEGA_SHARED_EXPERT`.
+
+`MEGA_SHARED_EXPERT=1` adds a MoK-parity dense shared expert (SwiGLU MLP,
+same intermediate size, bf16 cuBLAS) inside the timed region; the CSV
+kernel column gains a `+shared` suffix. MoK fuses its shared expert into
+the megakernel, while fi runs it as three sequential cuBLAS GEMMs after the
+kernel — this costs fi ~185 µs and is, if anything, pessimistic for fi
+(no overlap).
+
+## Same-input output cross-check (2026-08-04): PASS
+
+Both implementations were fed bit-identical inputs (tokens, top-k routing,
+bf16 expert + shared-expert weights; `mok_comparison/xcheck_common.py`
+deterministic protocol) and their MXFP8 forward outputs compared:
+
+```
+rank 0: rel-L2 1.559%   rank 1: 1.551%   rank 2: 1.553%   rank 3: 1.553%
+overall: rel-L2 1.554%, max|diff| 0.07 -> PASS (tol 5%)
+```
+
+Bitwise equality is not expected — each side quantizes weights/activations
+to MXFP8 with its own kernels and accumulates in a different order — so
+agreement at ~1.5% rel-L2 (within MXFP8 noise, and consistent across
+ranks) confirms the two compute the same function. Rerun:
+`mok_comparison/run_shared_and_xcheck.sh`.
 
 ### FLOPs normalization
 
