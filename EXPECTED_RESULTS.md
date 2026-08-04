@@ -63,11 +63,13 @@ same full FI forward either way:
   overhead.
 - `kernel` — bare pre-built kernel launch (tester parity); excludes the FI
   host wrapper. Not comparable to MoK; incompatible with
-  `MEGA_SHARED_EXPERT`.
+  `MEGA_SHARED_EXPERT` and `MEGA_TIMED_QUANT`.
 
 `MEGA_SHARED_EXPERT=1` adds a MoK-parity dense shared expert (SwiGLU MLP,
-same intermediate size, bf16 cuBLAS) inside the timed region; the CSV
-kernel column gains a `+shared` suffix. MoK fuses its shared expert into
+same intermediate size, bf16 cuBLAS) inside the timed region;
+`MEGA_TIMED_QUANT=1` moves the fused bf16→MXFP8 activation quant + staging
+kernel into it as well. The CSV kernel column gains `+shared`/`+quant`
+suffixes and `quant_timed` flips to `yes`. MoK fuses its shared expert into
 the megakernel, while fi runs it as three sequential cuBLAS GEMMs after the
 kernel — this costs fi ~185 µs and is, if anything, pessimistic for fi
 (no overlap).
@@ -138,29 +140,30 @@ structural at this scale, not a tuning artifact:
 
 ### Caveats
 
-1. **Activation quantization scope**: the fi harness lifts bf16→MXFP8 input
-   staging out of the timed region; MoK quantizes activations inside the
-   timed forward. A small part of the gap is timing scope, not kernel
-   speed.
-2. **Shared expert implementation**: fi's shared expert runs as three
+The timed scope is fully matched (shared expert and activation
+quant/staging are inside the timed region on both sides). What remains:
+
+1. **Shared expert implementation**: fi's shared expert runs as three
    sequential bf16 cuBLAS GEMMs after the fused kernel (~185 µs); MoK
    overlaps its shared expert inside the megakernel. This is pessimistic
    for fi.
-3. **Timing statistic**: fi reports p50 across 100 CUDA-event-timed iters
+2. **Timing statistic**: fi reports p50 across 100 CUDA-event-timed iters
    (100 warmup); MoK reports median-across-iters of max-across-ranks over
    100 iters (500 warmup). Both steady-state, back-to-back launches;
    `e2e_pipelined` is the MoK-comparable fi mode.
-4. **Accuracy metrics are not comparable across rows**: fi reports 6.36%
+3. **Accuracy metrics are not comparable across rows**: fi reports 6.36%
    rel-L2 vs its bf16 *dense* reference (routed only); MoK reports 2.6%
    relative error vs its own bf16 MoE reference. The same-input
    cross-check above is the apples-to-apples correctness signal.
-5. **Knob tuning is a wash here**: the offline tuner's winner
+4. **Both sides are effectively tuned.** fi: the offline tuner's winner
    (`flag_batch=4, token_back_mode=epi_warps`, see
    `mok_comparison/moe_ep_knob_cache_moklike.json`) matches the built-in
-   heuristic at this token bucket (≤0.6% difference). Expect tuning to
-   matter more at other token counts.
-6. MoK ran at its benchmark defaults (minibatch 4096, MXFP8 fwd comm
-   SMs 36); its hyperparameters were **not** swept, mirroring fi's
-   heuristic-default posture. MoK's README performance claims target
-   NVL72-scale EP on SM103 — this single-node SM100 comparison does not
-   contradict them.
+   heuristic at this token bucket (≤0.6% difference; expect tuning to
+   matter more at other token counts). MoK: a 12-config sweep over
+   `fwd_num_comm_sms` × `minibatch_size` (see "Why is MoK slower" item 5)
+   confirms its defaults are within 1% of its best here.
+5. **MoK has no inference mode** — its forward always builds the backward
+   stash (see "Why is MoK slower" item 1). This comparison is "each
+   library used as-is for inference", not two inference kernels.
+6. MoK's README performance claims target NVL72-scale EP on SM103; this
+   single-node SM100 comparison does not contradict them.
