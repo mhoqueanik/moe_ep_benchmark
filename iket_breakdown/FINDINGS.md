@@ -65,6 +65,36 @@ because dg carries other overheads).
 3. Dispatch count-exchange: overlap the ~14 µs barrier with input staging.
 4. Do NOT pursue IKR in this regime.
 
+## Phase flow through the megakernel
+
+One launch = one MoE layer; a token is *pulled* to the rank owning its experts,
+run through fc1 → SwiGLU → fc2 there, and *pushed* back home. Stations in
+causal order (marker names in backticks; steps 3-8 run concurrently on their
+own warps):
+
+1. **Prologue** — `pipeline_init_wait`: cluster rendezvous, pipelines armed.
+2. **Dispatch counts** — `Dispatch_Prep`: scan local top-k, count tokens per
+   expert; `Dispatch_Barrier`: all ranks exchange counts (first cross-rank
+   sync).
+3. **Token pull** — `Dispatch_Pull`: copy each assigned token's NVFP4 data +
+   SFs + weight from its home rank into the local pool; bump `fc1_ready`.
+4. **Scheduler** — `Sched_PreInit_Wait` (≈0) then tile generation +
+   `sched_publish` into the consumer queue (full queue = backpressure).
+5. **TMA loads** — `tma_weight_fc1/fc2`: stream expert weights (the low-token
+   floor); `tma_token_fc1` + `tma_token_fc1_wait`: load tokens once step 3
+   delivered them; `tma_token_fc2_wait`: spin on fc1 output readiness.
+6. **MMA** — `mma_fc1` (gate+up), `mma_fc2` (down-proj); `mma_acquire` for
+   slot handoffs.
+7. **fc1 epilogue** — `fc1_epi_wait`/`fc1_epi`: SwiGLU + NVFP4 requant +
+   store, signal `fc1_done` (releases fc2's B-side load).
+8. **fc2 epilogue + combine** — `fc2_epi_wait`/`fc2_epi`: scale and write the
+   result back to the token's home rank. epi_warps mode: the cross-rank store
+   is `fc2_store_combine` here; standalone/reuse modes: local store + push by
+   dedicated warps (`token_back_push`). `epi_flag` publishes done counters.
+9. **Kernel tail** — `Tail.Rendezvous`, then `Tail.NvlinkDrain` (all pushes
+   landed), `Tail.SharedReset`, `Tail.NvlinkPublish`, `Tail.LocalReset` —
+   serial fixed cost, the residual-gap culprit.
+
 ## Fixed in-kernel floor (absolute decode latency, both-backends-relative)
 
 These are steady-state kernel costs on every launch — they don't explain a gap

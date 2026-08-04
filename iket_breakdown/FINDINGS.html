@@ -129,10 +129,56 @@ hump at 256, decisively faster ≥512. Hover for raw µs.</figcaption></figure>
 <figure><div id="gap"></div>
 <figcaption>Kernel µs, 128–512 tok/rank (job 2359949). IKR is worse everywhere; the winning knob
 (standalone-warps token-back) closes ~40% of the 256 gap and was reproduced pinned (232.5 µs, job
-2360287). The remaining +12.9% is the serial barrier tail — see the tuned-256 chart in section 3.</figcaption></figure>
+2360287). The remaining +12.9% is the serial barrier tail — see the tuned-256 column in section 4.</figcaption></figure>
 <details><summary>Table view</summary><table id="gtable"></table></details>
 
-<h2>3 · Where kernel time goes (rank 0, phase timing)</h2>
+<h2>3 · Phase flow through the megakernel</h2>
+<p style="font-size:13.5px">One launch = one MoE layer. A token's journey: it is <i>pulled</i> to
+whichever rank owns its experts, run through fc1 → SwiGLU → fc2 there, and <i>pushed</i> back home.
+The phases below are the stations along that path, in causal order (marker names in
+<code>code</code>; every arrow is a producer→consumer handoff that the wait slots measure):</p>
+
+<ol style="font-size:13.5px; line-height:1.65">
+  <li><b>Prologue</b> — <code>pipeline_init_wait</code>: cluster-wide rendezvous, SMEM/TMEM pipelines armed. Negligible.</li>
+  <li><b>Dispatch, count exchange</b> — <code>Dispatch_Prep</code>: dispatch warps scan the local
+      top-k table and count how many tokens go to each expert. <code>Dispatch_Barrier</code>: all 8
+      ranks exchange those counts over NVLink — after this, every rank knows exactly how many rows
+      it will receive per local expert. <i>First cross-rank sync point.</i></li>
+  <li><b>Dispatch, token pull</b> — <code>Dispatch_Pull</code>: for each assigned token, read its
+      NVFP4 data + scale factors + top-k weight from the home rank's symmetric buffer and write it
+      into the local input pool; bump that tile's <code>fc1_ready</code> counter. Runs continuously,
+      overlapped with everything below.</li>
+  <li><b>Scheduler</b> — <code>Sched_PreInit_Wait</code>: waits for step 2's counts (measured ≈ 0 —
+      dispatch is never the straggler). Then turns per-expert row counts into work tiles and
+      <code>sched_publish</code>-es them into a small queue; a full queue (consumers busy) shows up
+      as publish backpressure.</li>
+  <li><b>TMA loads</b> — <code>tma_weight_fc1/fc2</code> (A-side): stream expert weights from HBM to
+      SMEM — at low tokens this is the floor, since every expert's full weights move regardless of
+      token count. <code>tma_token_fc1</code> (B-side): load the tile's tokens from the pool;
+      <code>tma_token_fc1_wait</code> spins until step 3 has delivered them.
+      <code>tma_token_fc2_wait</code> later spins on fc1 output readiness.</li>
+  <li><b>MMA</b> — <code>mma_fc1</code>: gate+up GEMM into tensor memory. <code>mma_fc2</code>:
+      down-projection GEMM. <code>mma_acquire</code> covers grabbing input/accumulator slots.</li>
+  <li><b>fc1 epilogue</b> — <code>fc1_epi_wait</code> then <code>fc1_epi</code>: read the fc1
+      accumulator, apply SwiGLU, re-quantize to NVFP4, store to the intermediate workspace and
+      signal <code>fc1_done</code> — which releases step 5's fc2 B-side load.</li>
+  <li><b>fc2 epilogue + combine</b> — <code>fc2_epi_wait</code> then <code>fc2_epi</code>: read the
+      fc2 accumulator, scale, and write the result <i>back to the token's home rank</i>. In the
+      default <code>epi_warps</code> mode that cross-rank store is <code>fc2_store_combine</code>
+      inside this phase; in <code>standalone_warps</code>/<code>reuse_dispatch_warps</code> the
+      epilogue stores locally and dedicated warps do the push
+      (<code>token_back_push</code> / <code>Token_Back_By_Push*</code>). <code>epi_flag</code>
+      publishes per-expert done counters that the token-back push consumes.</li>
+  <li><b>Kernel tail</b> — <code>Tail.Rendezvous</code>: all 12 warps meet.
+      <code>Tail.NvlinkDrain</code>: cross-rank barrier guaranteeing every rank's combine
+      stores/pushes have landed. <code>Tail.SharedReset</code> + <code>Tail.NvlinkPublish</code> +
+      <code>Tail.LocalReset</code>: zero the launch counters and publish the zeros so the next
+      layer can relaunch immediately. <i>Serial, fixed cost — the residual-gap culprit.</i></li>
+</ol>
+<p style="font-size:13.5px">Steps 3–8 all run concurrently on their own warps; the chart in
+section 4 shows how much of the kernel each station spends working vs waiting on its upstream.</p>
+
+<h2>4 · Where kernel time goes (rank 0, phase timing)</h2>
 
 <p style="font-size:13.5px">The mega kernel is <b>one fused launch</b> that does the whole MoE layer:
 tokens are exchanged between GPUs, run through both expert GEMMs, and combined back — with no
@@ -150,7 +196,7 @@ form a pipeline:</p>
 
 <p style="font-size:13.5px"><b>All four cases share the same overall shape</b> — a persistent,
 wait-dominated kernel where <code>sched_publish</code> and the idle/wait slots are always ~40–55% —
-so the chart below plots every case side by side on a common <b>% of kernel time</b> scale, with
+so the chart in this section plots every case side by side on a common <b>% of kernel time</b> scale, with
 phases in a fixed order. What differs between cases is which bars move:</p>
 <ul style="font-size:13.5px">
   <li><b>fixed costs amortize</b>: tail NVLink barriers 15% → 1.5% and dispatch_barrier 7% → 1.3%
@@ -458,7 +504,7 @@ header). Scan a row straight across for the trend; hover any bar for exact µs. 
 upstream pacers, so read the work rows first.</figcaption>
 <details><summary>Table view — phase µs per token count</summary><table><tr><th>phase</th><th>8 µs</th><th>64 µs</th><th>128 µs</th><th>256 µs</th><th>256T µs</th><th>512 µs</th><th>1k µs</th><th>2k µs</th><th>4k µs</th><th>8k µs</th></tr><tr><td>mma_fc1 (fc1 GEMM)</td><td>51.3</td><td>56.0</td><td>57.9</td><td>62.2</td><td>61.4</td><td>73.1</td><td>82.0</td><td>138.2</td><td>213.6</td><td>402.9</td></tr><tr><td>mma_fc2 (fc2 GEMM)</td><td>18.4</td><td>21.1</td><td>22.1</td><td>40.7</td><td>22.3</td><td>26.7</td><td>38.7</td><td>73.9</td><td>134.5</td><td>276.1</td></tr><tr><td>epi_fc1 work (swiglu+quant+store)</td><td>9.8</td><td>11.0</td><td>11.5</td><td>14.0</td><td>13.0</td><td>24.3</td><td>43.1</td><td>84.4</td><td>157.9</td><td>334.3</td></tr><tr><td>epi_fc2 work (combine STG)</td><td>16.3</td><td>21.5</td><td>26.0</td><td>72.1</td><td>12.9</td><td>25.6</td><td>45.9</td><td>96.9</td><td>192.7</td><td>409.7</td></tr><tr><td>dispatch_pull</td><td>4.2</td><td>10.2</td><td>14.8</td><td>23.5</td><td>22.1</td><td>47.5</td><td>91.8</td><td>155.3</td><td>293.2</td><td>608.4</td></tr><tr><td>dispatch_barrier</td><td>12.7</td><td>11.3</td><td>14.7</td><td>13.6</td><td>15.1</td><td>16.0</td><td>16.5</td><td>32.9</td><td>56.7</td><td>25.8</td></tr><tr><td>tail NVLink drain+publish</td><td>26.1</td><td>19.5</td><td>17.6</td><td>22.4</td><td>23.8</td><td>25.6</td><td>26.5</td><td>16.5</td><td>58.6</td><td>29.9</td></tr><tr><td>epi_fc1_wait (acc TMEM)</td><td>84.0</td><td>88.6</td><td>93.0</td><td>100.2</td><td>103.0</td><td>107.2</td><td>112.1</td><td>159.9</td><td>207.3</td><td>336.8</td></tr><tr><td>mma consume_work (idle)</td><td>87.8</td><td>93.5</td><td>99.8</td><td>124.9</td><td>104.8</td><td>122.1</td><td>144.3</td><td>254.3</td><td>422.1</td><td>743.8</td></tr><tr><td>sched_publish (backpressure)</td><td>92.3</td><td>99.4</td><td>100.5</td><td>140.8</td><td>116.7</td><td>133.0</td><td>176.9</td><td>314.4</td><td>530.1</td><td>1061.4</td></tr><tr><td><b>kernel_total</b></td><td><b>173.1</b></td><td><b>185.4</b></td><td><b>199.7</b></td><td><b>255.1</b></td><td><b>234.4</b></td><td><b>263.2</b></td><td><b>371.8</b></td><td><b>570.4</b></td><td><b>1022.0</b></td><td><b>1990.7</b></td></tr></table></details>
 
-<h2>4 · Deferred: e2e / barrier-cold behavior (not kernel)</h2>
+<h2>5 · Deferred: e2e / barrier-cold behavior (not kernel)</h2>
 <ul>
   <li>e2e (barrier-cold full FI forward) runs 1.19–1.36× at 8–256 tok/rank, crossing below 1.0
       between 512 and 1024 — a constant ~40–60 µs/launch cost dg does not pay
