@@ -6,8 +6,31 @@ kernel microbenchmark, the vLLM e2e sweeps and the accuracy gate. Commands are
 copied from the scripts that produced the recorded numbers.
 
 The numbers you should get are in [expected_results.md](expected_results.md),
-measured on one 1x8 B200 node with vLLM 0.25.1, flashinfer `4_5_2-perf-fix`
-@ `1ee41bcd` and cutlass-dsl 4.5.2.
+measured on one 1x8 B200 node.
+
+> **Currency note (2026-08-05).** The stack has moved since the original
+> recording, and expected_results.md is now split by section:
+>
+> * **§3 (kernel microbenchmark)** was re-measured on flashinfer
+>   `moe_ep-respect-caller-device` @ `e4d7c1b3` (post-restructure `main`
+>   plus flashinfer#4348) with cutlass-dsl **4.6.1** — reproduce it with
+>   `DSL_VERSION=4.6.1` on the §2 command. Every cell landed within the
+>   old tolerances, so the 4.5.2 tables it replaced remain a valid
+>   cross-check (`model_shapes/results_ep8/`).
+> * **§1 (Flash e2e), §2 (Pro e2e), §2b (serving), §4 (GSM8K)** still
+>   carry the original stack's numbers: vLLM 0.25.1 + `patch_0251`,
+>   flashinfer `4_5_2-perf-fix` @ `1ee41bcd`, cutlass-dsl 4.5.2 — the
+>   configuration the rest of this runbook describes. A 2026-08-05
+>   re-measurement attempt of §1 on the current stack (vLLM `fi-moe-ep-v4`
+>   built from source — see §1.2b — plus the flashinfer branch above) put
+>   BOTH fi backends at 0.42-0.67x native across all four cells, far
+>   outside tolerance; decode is eager-parity (0.91x) and clean of graph
+>   breaks, so the loss is real per-step device work in the fi staging
+>   path, still under investigation. Until that is root-caused, treat the
+>   §1/§2 fi columns as reproducible ONLY on the original stack.
+> * cutlass-dsl **4.7.0 is broken** for these kernels
+>   (`CUDA_ERROR_MISALIGNED_ADDRESS` in the CuTeDSL megamoe path); pin
+>   4.6.1 or 4.5.2, never 4.7.0.
 
 This is the only runbook you need. The one other document worth knowing about
 is in the flashinfer checkout — `docs/design_docs/moe_ep_runbook.md`, which
@@ -83,11 +106,14 @@ have to supply.
 ```bash
 mkdir -p $ROOT/flashinfer-2
 
-# (1) harness, runbook, and the vLLM patch     -- branch vllm_repro_8_gpu
+# (1) harness, runbook, and the vLLM patch     -- branch vllm_repro_8_gpu_v2
 git clone https://github.com/mhoqueanik/moe_ep_benchmark.git $ROOT/moe_ep_benchmark
-git -C $ROOT/moe_ep_benchmark switch vllm_repro_8_gpu
+git -C $ROOT/moe_ep_benchmark switch vllm_repro_8_gpu_v2
 
-# (2) flashinfer kernels + moe_ep runtime            -- branch 4_5_2-perf-fix
+# (2) flashinfer kernels + moe_ep runtime
+#     -- 4_5_2-perf-fix reproduces the ORIGINAL e2e numbers (SS2/2b/4);
+#        moe_ep-respect-caller-device (or flashinfer main once #4348
+#        merges) reproduces the re-measured SS1/SS3 numbers
 git clone https://github.com/mhoqueanik/flashinfer-moe_ep.git \
     $ROOT/flashinfer-2/flashinfer-moe_ep
 git -C $ROOT/flashinfer-2/flashinfer-moe_ep switch 4_5_2-perf-fix
@@ -97,7 +123,7 @@ git -C $ROOT/flashinfer-2/flashinfer-moe_ep submodule update --init --recursive
 Flashinfer's 4 submodules (cccl, cutlass, nixl, spdlog) are required — both the
 image build and the editable install compile against them.
 
-`vllm_repro_8_gpu` is the reproduction branch and is what this file documents:
+`vllm_repro_8_gpu_v2` is the reproduction branch and is what this file documents:
 1x8 only, one set of results. Other branches of this repo carry development
 history and are not needed here — clone the branch above and everything in this
 runbook applies.
@@ -110,21 +136,27 @@ git clone https://github.com/mhoqueanik/vllm.git $ROOT/vllm-fi-moe-ep
 git -C $ROOT/vllm-fi-moe-ep switch fi-moe-ep-v4
 ```
 
-Nothing in `moe_ep_benchmark` references this path — no script, no import. Skip
-it unless you want to diff the port. The PR sits on a much newer vLLM `main`
-than 0.25.1, so the validated path patches a 0.25.1 wheel instead (§1.4e);
-building it from source is untried. `patch_0251/flashinfer_moe_ep.py` is
-byte-identical to the PR's copy, so repo (1) already gives you that file;
-`patch_0251/model.py` is a 0.25.1 port and differs by ~90 lines of unrelated
-upstream drift.
+Nothing in `moe_ep_benchmark` references this path — no script, no import.
+The PR sits on a much newer vLLM `main` than 0.25.1; the original recording
+patched a 0.25.1 wheel instead (§1.4e), but **building the PR from source is
+now validated** (2026-08-05): inside the §1.2c container,
+`use_existing_torch.py` + `pip install -e .` with `VLLM_USE_PRECOMPILED=0
+TORCH_CUDA_ARCH_LIST=10.0a MAX_JOBS=32` builds in ~15 minutes, and the §1
+Flash e2e numbers in expected_results.md were re-measured on that build.
+Note the PR's review restructure renamed the files `patch_0251/` carries
+(`fi_utils.py` → `vllm/utils/flashinfer_moe_ep.py` + a new
+`models/deepseek_v4/nvidia/fi_moe.py`), so the patch no longer mirrors the
+PR tree — it remains valid only as the frozen 0.25.1 port behind the §2/§2b/§4
+numbers.
 
 Commits the recorded numbers were taken at:
 
-| repo | branch | commit |
-|---|---|---|
-| `moe_ep_benchmark` | `vllm_repro_8_gpu` | `5810ef1` or later |
-| `flashinfer-2/flashinfer-moe_ep` | `4_5_2-perf-fix` | `1ee41bcd` |
-| `vllm-fi-moe-ep` (optional) | `fi-moe-ep-v4` | `c019433` |
+| repo | branch | commit | for |
+|---|---|---|---|
+| `moe_ep_benchmark` | `vllm_repro_8_gpu_v2` | `d43827f` or later | everything |
+| `flashinfer-2/flashinfer-moe_ep` | `4_5_2-perf-fix` | `1ee41bcd` | §2/§2b/§4 (original stack) |
+| `flashinfer-2/flashinfer-moe_ep` | `moe_ep-respect-caller-device` | `e4d7c1b3` | §1/§3 (2026-08-05 re-measurement) |
+| `vllm-fi-moe-ep` | `fi-moe-ep-v4` | `8db32724` | §1 (2026-08-05, built from source) |
 
 > The job scripts echo `git log --oneline -1` at startup, which reports the last
 > *commit* rather than the working tree. The verification logs therefore say
