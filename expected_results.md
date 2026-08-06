@@ -39,18 +39,31 @@ cross-checkpoint, which is why §4 exists and is not optional.
 
 ## 1. vLLM e2e — DeepSeek-V4-Flash, EP8
 
-`sbatch vllm_e2e/job_vllm_pr_runbook_sweep_ep8.sh` (~1 h).
+Re-measured 2026-08-06 on the current stack: vLLM `fi-moe-ep-v4` @
+`756a6dd07` **built from source** (RUNBOOK §1.2b), flashinfer
+`moe_ep-respect-caller-device` @ `e4d7c1b3`, cutlass-dsl 4.6.1 (job
+2368118). Requires the sequence-parallel fix `aa0317318` — without it the
+fi backends run the MoE block full-batch on every rank and land at
+0.42-0.65x.
 
 | cell | native tok/s | fi_dg | fi_cutedsl |
 |---|---|---|---|
-| prefill-8k | 38986 | 40225 (1.032x) | 46584 (**1.195x**) |
-| decode-1k | 30845 | 31494 (1.021x) | 32741 (**1.061x**) |
-| 100K ISL / 1K | 29632 | 30230 (1.020x) | 32913 (**1.111x**) |
-| 32K ISL / 32 | 35700 | 36597 (1.025x) | 42028 (**1.177x**) |
+| prefill-8k | 95238 | 95019 (0.998x) | 94310 (0.990x) |
+| decode-1k | 47564 | 47444 (0.997x) | 45510 (0.957x) |
+| 100K ISL / 1K | 54225 | 54218 (1.000x) | 50956 (0.940x) |
+| 32K ISL / 32 | 75046 | 74976 (0.999x) | 74320 (0.990x) |
 
-Latency on the interactivity cells (`REQUIRE_LATENCY=1`), fi_cutedsl vs native:
-TTFT 42.2s vs 49.3s at 100K, 12.8s vs 15.1s at 32K; ITL p50 51.9ms vs 56.1ms
-and 191.2ms vs 226.5ms.
+Native is 1.6-2.4x the July 0.25.1 recording (sequence-parallel MoE, fp8
+sparse MLA attention, fused allreduce_rms); fi_dg tracks it at parity —
+with the `prepare_megamoe` staging commit its output is bitwise-identical
+to native. fi_cutedsl no longer shows the July 1.06-1.20x wins: under
+sequence parallelism the MoE sees tokens/rank 8x smaller, which puts
+every cell at or below the §3 DeepGEMM↔CuteDSL crossover (512-1024
+tok/rank). Its knob cache also predates the sharded sizes; retune before
+reading its sub-1.0x as kernel regression.
+
+The July 0.25.1+patch numbers this table replaced: native 38986/30845/
+29632/35700 tok/s with fi_dg ~1.02x and fi_cutedsl 1.06-1.20x.
 
 ## 2. vLLM e2e — DeepSeek-V4-Pro, EP8
 

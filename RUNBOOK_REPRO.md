@@ -17,17 +17,17 @@ measured on one 1x8 B200 node.
 >   `DSL_VERSION=4.6.1` on the §2 command. Every cell landed within the
 >   old tolerances, so the 4.5.2 tables it replaced remain a valid
 >   cross-check (`model_shapes/results_ep8/`).
-> * **§1 (Flash e2e), §2 (Pro e2e), §2b (serving), §4 (GSM8K)** still
->   carry the original stack's numbers: vLLM 0.25.1 + `patch_0251`,
->   flashinfer `4_5_2-perf-fix` @ `1ee41bcd`, cutlass-dsl 4.5.2 — the
->   configuration the rest of this runbook describes. A 2026-08-05
->   re-measurement attempt of §1 on the current stack (vLLM `fi-moe-ep-v4`
->   built from source — see §1.2b — plus the flashinfer branch above) put
->   BOTH fi backends at 0.42-0.67x native across all four cells, far
->   outside tolerance; decode is eager-parity (0.91x) and clean of graph
->   breaks, so the loss is real per-step device work in the fi staging
->   path, still under investigation. Until that is root-caused, treat the
->   §1/§2 fi columns as reproducible ONLY on the original stack.
+> * **§1 (Flash e2e)** — re-measured 2026-08-06 on the vLLM PR branch
+>   (`fi-moe-ep-v4` @ `756a6dd07`) built from source (§1.2b). Native is
+>   1.6-2.4x the July recording and both fi backends track it (fi_dg at
+>   parity and bitwise-identical). Two PR commits are load-bearing for
+>   that table: `aa0317318` (sequence-parallel MoE was silently disabled
+>   for the fi backends — without it they land at 0.42-0.65x) and
+>   `756a6dd07` (native staging in the fi deep_gemm fast path).
+> * **§2 (Pro e2e), §2b (serving), §4 (GSM8K)** still carry the original
+>   stack's numbers: vLLM 0.25.1 + `patch_0251`, flashinfer
+>   `4_5_2-perf-fix` @ `1ee41bcd`, cutlass-dsl 4.5.2 — the configuration
+>   the rest of this runbook describes.
 > * cutlass-dsl **4.7.0 is broken** for these kernels
 >   (`CUDA_ERROR_MISALIGNED_ADDRESS` in the CuTeDSL megamoe path); pin
 >   4.6.1 or 4.5.2, never 4.7.0.
@@ -156,7 +156,7 @@ Commits the recorded numbers were taken at:
 | `moe_ep_benchmark` | `vllm_repro_8_gpu_v2` | `d43827f` or later | everything |
 | `flashinfer-2/flashinfer-moe_ep` | `4_5_2-perf-fix` | `1ee41bcd` | §2/§2b/§4 (original stack) |
 | `flashinfer-2/flashinfer-moe_ep` | `moe_ep-respect-caller-device` | `e4d7c1b3` | §1/§3 (2026-08-05 re-measurement) |
-| `vllm-fi-moe-ep` | `fi-moe-ep-v4` | `8db32724` | §1 (2026-08-05, built from source) |
+| `vllm-fi-moe-ep` | `fi-moe-ep-v4` | `756a6dd07` | §1 (2026-08-06, built from source) |
 
 > The job scripts echo `git log --oneline -1` at startup, which reports the last
 > *commit* rather than the working tree. The verification logs therefore say
