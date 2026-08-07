@@ -109,11 +109,18 @@ def _worker_entry(local_rank, world_size, init_method, cfg):
     torch.accelerator.set_device_index(device_index)
     device = torch.device("cuda", device_index)
     if _single_gpu_gloo():
+        import datetime
+
         dist.init_process_group(
             backend="gloo",
             init_method=init_method,
             rank=local_rank,
             world_size=world_size,
+            # Rank-sharing OOMs kill one rank while peers sit in collectives;
+            # gloo's default 30-min timeout turns each such failure into a
+            # 30-min hang per sweep point. 10 min covers worst-case first-run
+            # kernel compiles with headroom.
+            timeout=datetime.timedelta(minutes=10),
         )
         dist.all_reduce(torch.tensor([local_rank]))
     else:
@@ -503,6 +510,16 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
                 preprocess_weights=True,
             ),
         )
+
+        # MoEEpLayer does not retain the bf16 pack (the kernel owns its
+        # transformed copies) and compute_dense_moe_reference regenerates
+        # expert weights from their deterministic seeds, so drop the source
+        # copies now. Under rank-sharing (N ranks on one GPU) these copies
+        # are the difference between fitting and OOM (e.g. 4 ranks x 5.6 GiB
+        # at EP=4 / 256 experts / 7168x2048).
+        del weights
+        problem = dataclasses.replace(problem, w13_bf16=None, w2_bf16=None)
+        torch.cuda.empty_cache()
 
         tensor_kwargs = _prestage_inputs(cfg, rank, world, device, problem)
         t = MoEEpTensors(**tensor_kwargs)
