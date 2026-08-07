@@ -14,7 +14,20 @@ Launch (4 GPUs, Blackwell sm_100+):
         --tokens-per-rank 8 --num-experts 256 --top-k 8 \\
         --hidden 7168 --intermediate 2048
 
-Backends: deep_gemm_mega | mxfp8_cutedsl | nvfp4_cutedsl
+Backends: deep_gemm_mega | mxfp8_cutedsl | nvfp4_cutedsl | sm120_mxfp8_cutedsl
+
+sm120_mxfp8_cutedsl (RTX PRO 6000 / sm_120) notes:
+  - E4M3 only; gate_up_clamp is rejected by the backend (dead plumbing in the
+    current kernel drop), so this script forces it to None for sm120 (both the
+    kernel config and the accuracy reference).
+  - All sm_120 nodes on our cluster are single-GPU. Set MEGA_SINGLE_GPU_GLOO=1
+    to run world_size > 1 as N ranks sharing one GPU (gloo process group,
+    CPU-staged collectives, LOCAL_RANK folded modulo device count). Latency
+    numbers under rank-sharing are contended and NOT comparable to real
+    multi-GPU EP; accuracy and functional behavior are.
+  - world_size == 1 defaults the kernel to mma_tiler_mnk=(64, 64, 128):
+    the drop's ws1 path with tiler N=128 (the shim default) produces silently
+    wrong cells (5-20%). Override via MEGA_KNOBS at your own risk.
 """
 
 from __future__ import annotations
@@ -42,7 +55,7 @@ from bench_common import (
 @dataclasses.dataclass
 class Cfg:
     world_size: int
-    mega_backend: str  # deep_gemm_mega | mxfp8_cutedsl | nvfp4_cutedsl
+    mega_backend: str  # deep_gemm_mega | mxfp8_cutedsl | nvfp4_cutedsl | sm120_mxfp8_cutedsl
     tokens_per_rank: int
     num_experts: int
     top_k: int
@@ -50,7 +63,7 @@ class Cfg:
     intermediate: int
     warmup: int
     iters: int
-    gate_up_clamp: float
+    gate_up_clamp: float | None  # forced to None for sm120_mxfp8_cutedsl
     fast_math: bool
     mxfp8_kind: str  # mxfp8_e4m3 | mxfp8_e5m2
     out_csv: str | None = None
@@ -70,6 +83,18 @@ def _get_open_port() -> int:
         return s.getsockname()[1]
 
 
+def _single_gpu_gloo() -> bool:
+    """MEGA_SINGLE_GPU_GLOO=1 -> N ranks share one GPU over a gloo PG.
+
+    Mirrors the flashinfer moe_ep test-suite knob of the same name (the
+    bootstrap folds LOCAL_RANK modulo device count and CPU-stages the NVSHMEM
+    UID exchange). NCCL cannot host multiple ranks on one device, and gloo
+    silently corrupts CUDA-tensor collectives, so under this mode the PG is
+    CPU-only gloo and every dist collective here is CPU-staged.
+    """
+    return bool(int(os.environ.get("MEGA_SINGLE_GPU_GLOO", "0")))
+
+
 def _worker_entry(local_rank, world_size, init_method, cfg):
     # FlashInfer's moe_ep runtime binds each process to its GPU via
     # os.environ["LOCAL_RANK"] (moe_ep/core/runtime/bootstrap.py: _ensure_cuda_device,
@@ -78,16 +103,28 @@ def _worker_entry(local_rank, world_size, init_method, cfg):
     # causing illegal-address (deep_gemm_mega weight transform) or device-mismatch
     # (nvshmem uid broadcast for cutedsl) failures. Override it per-spawned-rank.
     os.environ["LOCAL_RANK"] = str(local_rank)
-    torch.accelerator.set_device_index(local_rank)
-    device = torch.device("cuda", local_rank)
-    dist.init_process_group(
-        backend="cpu:gloo,cuda:nccl",
-        init_method=init_method,
-        rank=local_rank,
-        world_size=world_size,
-        device_id=device,
-    )
-    dist.all_reduce(torch.tensor([local_rank], device=device))
+    device_index = local_rank
+    if _single_gpu_gloo():
+        device_index = local_rank % torch.cuda.device_count()
+    torch.accelerator.set_device_index(device_index)
+    device = torch.device("cuda", device_index)
+    if _single_gpu_gloo():
+        dist.init_process_group(
+            backend="gloo",
+            init_method=init_method,
+            rank=local_rank,
+            world_size=world_size,
+        )
+        dist.all_reduce(torch.tensor([local_rank]))
+    else:
+        dist.init_process_group(
+            backend="cpu:gloo,cuda:nccl",
+            init_method=init_method,
+            rank=local_rank,
+            world_size=world_size,
+            device_id=device,
+        )
+        dist.all_reduce(torch.tensor([local_rank], device=device))
     try:
         _worker(
             ProcessGroupInfo(
@@ -192,6 +229,30 @@ def _build_megakernel_config(cfg: Cfg):
             in_kernel_fc2_reduce=_mega_ikr(),
             combine_dtype=_mega_combine_dtype(),
             knobs=_mega_knobs(),
+        )
+    if cfg.mega_backend == "sm120_mxfp8_cutedsl":
+        from flashinfer.moe_ep import Sm120_Mxfp8_Mxfp8_Bf16_Cutedsl_MegaMoeConfig
+
+        knobs = _mega_knobs()
+        if knobs == "auto":
+            raise ValueError(
+                "sm120_mxfp8_cutedsl has no autotune/knob cache; MEGA_KNOBS "
+                "must be unset or an explicit JSON dict"
+            )
+        if knobs is None and cfg.world_size == 1:
+            # The drop's single-rank path with the shim-default tiler N=128
+            # produces silently wrong cells (VENDOR.md ws1 numerics gap);
+            # N=64 is validated. Multi-rank keeps the shim default.
+            knobs = {"mma_tiler_mnk": (64, 64, 128)}
+        return Sm120_Mxfp8_Mxfp8_Bf16_Cutedsl_MegaMoeConfig(
+            intermediate_size=cfg.intermediate,
+            top_k=cfg.top_k,
+            # cfg.gate_up_clamp is forced to None for sm120 in _parse (the
+            # backend rejects a set clamp: dead plumbing in the kernel drop).
+            gate_up_clamp=cfg.gate_up_clamp,
+            fast_math=cfg.fast_math,
+            in_kernel_fc2_reduce=_mega_ikr(),
+            knobs=knobs,
         )
     raise ValueError(f"unknown mega backend: {cfg.mega_backend}")
 
@@ -308,6 +369,45 @@ def _prestage_inputs(cfg, rank, world, device, problem):
             buf.x_sf[:m],
             buf.topk_idx[:m],
             buf.topk_weights[:m],
+        )
+        t_hidden = buf.x[:m].clone()
+        t_scales = buf.x_sf[:m].clone()
+        buf.destroy()
+        return dict(
+            hidden_states=t_hidden,
+            scales=t_scales,
+            topk_ids=topk_ids,
+            topk_weights=topk_w,
+        )
+
+    if cfg.mega_backend == "sm120_mxfp8_cutedsl":
+        from flashinfer.moe_ep.kernel_src.sm120.swapab_cutedsl_megakernel import (
+            get_symm_buffer_for_sm120_mxfp8_mega_moe,
+        )
+        from flashinfer.moe_ep.backends.mega.kernel.sm120.mxfp8_mxfp8_bf16_cutedsl.staging import (
+            stage_mega_moe_inputs,
+        )
+
+        buf = get_symm_buffer_for_sm120_mxfp8_mega_moe(
+            cfg.num_experts,
+            max_m,
+            cfg.top_k,
+            cfg.hidden,
+            cfg.intermediate,
+            rank,
+            world,
+            kind=cfg.mxfp8_kind,
+            gate_up_clamp=cfg.gate_up_clamp,
+        )
+        stage_mega_moe_inputs(
+            bf16_hidden,
+            topk_w,
+            topk_ids,
+            buf.x,
+            buf.x_sf,
+            buf.topk_idx,
+            buf.topk_weights,
+            kind=cfg.mxfp8_kind,
         )
         t_hidden = buf.x[:m].clone()
         t_scales = buf.x_sf[:m].clone()
@@ -460,6 +560,14 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
                 thunk = mxfp8_mega_launch_thunk(
                     transformed[0], transformed[1], workspace
                 )
+            elif cfg.mega_backend == "sm120_mxfp8_cutedsl":
+                from flashinfer.moe_ep.kernel_src.sm120.swapab_cutedsl_megakernel import (
+                    sm120_mxfp8_mega_launch_thunk,
+                )
+
+                thunk = sm120_mxfp8_mega_launch_thunk(
+                    transformed[0], transformed[1], workspace
+                )
         timed = thunk if thunk is not None else run
 
         for _ in range(cfg.warmup):
@@ -524,6 +632,9 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
             sums = torch.stack(
                 [(y_val - y_ref).square().sum(), y_ref.square().sum()]
             )
+            if _single_gpu_gloo():
+                # gloo silently corrupts CUDA-tensor collectives; CPU-stage.
+                sums = sums.cpu()
             dist.all_reduce(sums)
             acc_loss_pct = 100.0 * (sums[0] / sums[1].clamp_min(1e-30)).sqrt().item()
             dist.barrier()
@@ -535,14 +646,17 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
             comm_backend = "fused_symm_mega"
             compute_kernel = cfg.mega_backend + (
                 _mega_variant_suffix()
-                if cfg.mega_backend in ("nvfp4_cutedsl", "mxfp8_cutedsl")
+                if cfg.mega_backend
+                in ("nvfp4_cutedsl", "mxfp8_cutedsl", "sm120_mxfp8_cutedsl")
                 else ""
             )
+            if _single_gpu_gloo():
+                compute_kernel += "+1gpu_shared"
 
             if cfg.mega_backend == "deep_gemm_mega":
                 weight_dtype = "fp4_int8_block32"
                 act_compute_dtype = "fp8_e4m3fn_block32"
-            elif cfg.mega_backend == "mxfp8_cutedsl":
+            elif cfg.mega_backend in ("mxfp8_cutedsl", "sm120_mxfp8_cutedsl"):
                 weight_dtype = f"mxfp8_{cfg.mxfp8_kind}_block32"
                 act_compute_dtype = f"mxfp8_{cfg.mxfp8_kind}_block32"
             else:
@@ -614,7 +728,12 @@ def _parse() -> Cfg:
     p.add_argument(
         "--mega-backend",
         required=True,
-        choices=["deep_gemm_mega", "mxfp8_cutedsl", "nvfp4_cutedsl"],
+        choices=[
+            "deep_gemm_mega",
+            "mxfp8_cutedsl",
+            "nvfp4_cutedsl",
+            "sm120_mxfp8_cutedsl",
+        ],
     )
     p.add_argument("--tokens-per-rank", type=int, default=8)
     p.add_argument("--num-experts", type=int, default=256)
@@ -632,6 +751,19 @@ def _parse() -> Cfg:
     )
     p.add_argument("--out-csv", default=None)
     a = p.parse_args()
+    if a.mega_backend == "sm120_mxfp8_cutedsl":
+        if a.gate_up_clamp != p.get_default("gate_up_clamp"):
+            raise SystemExit(
+                "sm120_mxfp8_cutedsl: gate_up_clamp is not functional in the "
+                "current SM120 kernel drop (the backend rejects it); drop the "
+                "--gate-up-clamp flag"
+            )
+        # Forced to None (not just left at the 10.0 default) for both the
+        # kernel config and the accuracy reference, keeping the two on the
+        # same (unclamped) math.
+        a.gate_up_clamp = None
+        if a.mxfp8_kind != "mxfp8_e4m3":
+            raise SystemExit("sm120_mxfp8_cutedsl is E4M3-only")
     return Cfg(
         world_size=a.world_size,
         mega_backend=a.mega_backend,
@@ -657,6 +789,10 @@ def main():
     if cfg.mega_backend in ("mxfp8_cutedsl", "nvfp4_cutedsl"):
         importlib.import_module(
             "flashinfer.moe_ep.kernel_src.cutedsl_megamoe"
+        )
+    if cfg.mega_backend == "sm120_mxfp8_cutedsl":
+        importlib.import_module(
+            "flashinfer.moe_ep.kernel_src.sm120.swapab_cutedsl_megakernel"
         )
     if cfg.mega_backend == "deep_gemm_mega":
         import deep_gemm  # noqa: F401

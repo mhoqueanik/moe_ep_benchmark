@@ -15,7 +15,12 @@
 #
 # Mega path (fused dispatch+GEMM+combine):
 #   vLLM : vllm_deep_gemm_mega (DeepseekV4MegaMoEExperts / deep_gemm.fp8_fp4_mega_moe)
-#   FI   : deep_gemm_mega | mxfp8_cutedsl | nvfp4_cutedsl
+#   FI   : deep_gemm_mega | mxfp8_cutedsl | nvfp4_cutedsl | sm120_mxfp8_cutedsl
+#          (sm120_mxfp8_cutedsl is sm_120-only and not in the default
+#           MEGA_LIST; select it explicitly:
+#           MEGA_LIST=sm120_mxfp8_cutedsl SECTION=fi_mega ./run.sh.
+#           On a single-GPU sm_120 node set MEGA_SINGLE_GPU_GLOO=1 to run
+#           GPUS>1 as rank-sharing.)
 #
 #   ALGO=ll ./moe_ep_benchmark/run.sh
 #   SECTION=vllm_split ./moe_ep_benchmark/run.sh
