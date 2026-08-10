@@ -236,7 +236,7 @@ variants.
 `deep_gemm_mega`, 23.1-24.9% for the CuteDSL variants), **not** a model-quality
 number. Model quality is §4.
 
-## 3b. Kernel microbenchmark — split path and mxfp8
+## 3b. Kernel microbenchmark — split path, mxfp8, and bf16
 
 Same harness and geometry as §3, adding the variants the `fi_split_path`
 branch introduced: `fi_fp8` (mxfp8 CuteDSL MegaMoE) and the FlashInfer
