@@ -1,0 +1,93 @@
+{
+ "tag": "bb5_fi32kc24",
+ "workload": "prefill",
+ "input_len": 1024,
+ "output_len": 1,
+ "num_prompts": 384,
+ "max_num_seqs": null,
+ "max_model_len": 2048,
+ "eager": false,
+ "model": "/lustre/fsw/coreai_libraries_cudnn/mhoqueanik/scratch_runbook/checkpoints/deepseek-v4-pro-nvfp4",
+ "cutlass_dsl_version": "4.6.1",
+ "moe_backend": "flashinfer_moe_ep_mega_cutedsl",
+ "median_total_tok_per_s": 43520.58639938893,
+ "median_latency": {
+  "ttft_s_p50": 5.034241437911987,
+  "ttft_s_p90": 8.231723403930664,
+  "ttft_s_p99": 8.999453971385956
+ },
+ "rounds": [
+  {
+   "round": 0,
+   "warmup": true,
+   "elapsed_s": 9.577601621858776,
+   "total_tok_per_s": 41095.88345183353,
+   "output_tok_per_s": 40.0935448310571,
+   "latency": {
+    "ttft_s": {
+     "n": 384,
+     "p50": 5.452669739723206,
+     "p90": 8.840548944473266,
+     "p99": 9.496491093635559,
+     "mean": 5.35902464389801,
+     "max": 9.496838569641113
+    },
+    "itl_s": null
+   }
+  },
+  {
+   "round": 1,
+   "warmup": false,
+   "elapsed_s": 9.043995785992593,
+   "total_tok_per_s": 43520.58639938893,
+   "output_tok_per_s": 42.45910868233066,
+   "latency": {
+    "ttft_s": {
+     "n": 384,
+     "p50": 5.020953178405762,
+     "p90": 8.308494949340817,
+     "p99": 8.999453971385956,
+     "mean": 4.851050379375617,
+     "max": 8.999798774719238
+    },
+    "itl_s": null
+   }
+  },
+  {
+   "round": 2,
+   "warmup": false,
+   "elapsed_s": 9.037091986974701,
+   "total_tok_per_s": 43553.833530443386,
+   "output_tok_per_s": 42.49154490774965,
+   "latency": {
+    "ttft_s": {
+     "n": 384,
+     "p50": 5.034241437911987,
+     "p90": 8.099003887176513,
+     "p99": 8.992914865016937,
+     "mean": 4.8410811219364405,
+     "max": 8.993261337280273
+    },
+    "itl_s": null
+   }
+  },
+  {
+   "round": 3,
+   "warmup": false,
+   "elapsed_s": 9.080421447986737,
+   "total_tok_per_s": 43346.00571730808,
+   "output_tok_per_s": 42.28878606566642,
+   "latency": {
+    "ttft_s": {
+     "n": 384,
+     "p50": 5.165308713912964,
+     "p90": 8.231723403930664,
+     "p99": 9.038811719417572,
+     "mean": 4.804096514979999,
+     "max": 9.03915286064148
+    },
+    "itl_s": null
+   }
+  }
+ ]
+}
