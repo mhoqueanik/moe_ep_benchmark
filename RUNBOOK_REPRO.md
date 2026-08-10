@@ -8,26 +8,34 @@ copied from the scripts that produced the recorded numbers.
 The numbers you should get are in [expected_results.md](expected_results.md),
 measured on one 1x8 B200 node.
 
-> **Currency note (2026-08-05).** The stack has moved since the original
-> recording, and expected_results.md is now split by section:
+> **Currency note (2026-08-10, branch `v_0_26`).** This branch's
+> expected_results.md carries the vLLM 0.26 stack: the PR branch
+> `fi-moe-ep-v4` @ `9dbb4c7e0` **built from source** (§1.2b), flashinfer
+> `moe_ep-respect-caller-device` @ `e4d7c1b3` (post-restructure `main`
+> plus flashinfer#4348), cutlass-dsl **4.6.1**. By section:
 >
-> * **§3 (kernel microbenchmark)** was re-measured on flashinfer
->   `moe_ep-respect-caller-device` @ `e4d7c1b3` (post-restructure `main`
->   plus flashinfer#4348) with cutlass-dsl **4.6.1** — reproduce it with
->   `DSL_VERSION=4.6.1` on the §2 command. Every cell landed within the
->   old tolerances, so the 4.5.2 tables it replaced remain a valid
->   cross-check (`model_shapes/results_ep8/`).
-> * **§1 (Flash e2e)** — re-measured 2026-08-06 on the vLLM PR branch
->   (`fi-moe-ep-v4` @ `756a6dd07`) built from source (§1.2b). Native is
->   1.6-2.4x the July recording and both fi backends track it (fi_dg at
->   parity and bitwise-identical). Two PR commits are load-bearing for
->   that table: `aa0317318` (sequence-parallel MoE was silently disabled
->   for the fi backends — without it they land at 0.42-0.65x) and
->   `756a6dd07` (native staging in the fi deep_gemm fast path).
-> * **§2 (Pro e2e), §2b (serving), §4 (GSM8K)** still carry the original
->   stack's numbers: vLLM 0.25.1 + `patch_0251`, flashinfer
+> * **§3 (kernel microbenchmark)** — re-measured 2026-08-05 on that
+>   flashinfer/DSL pair; reproduce with `DSL_VERSION=4.6.1` on the §2
+>   command. Every cell landed within the old tolerances, so the 4.5.2
+>   tables remain a valid cross-check (`model_shapes/results_ep8/`).
+> * **§1/§1b (Flash e2e) and §2 (Pro e2e)** — measured 2026-08-06 on the
+>   source-built PR. Two PR commits are load-bearing: `aa0317318`
+>   (sequence-parallel MoE was silently disabled for the fi backends —
+>   without it they land at 0.42-0.65x) and `9dbb4c7e0` (reverts the
+>   `756a6dd07` staging experiment; fi_dg is no longer bitwise-identical
+>   to native, 6/8 smoke prompts exact). The **tuned** fi_cutedsl columns
+>   (§1b, §2) additionally used per-shape knob caches
+>   (`vllm_e2e/results/retune_20260806/knob_cache_*_nvfp4_*.json`) and
+>   the nvfp4 combine wire, selected via a local `build_fi_mega_config`
+>   override reading `FI_COMBINE_DTYPE` that is **not yet in the PR**
+>   (ship default is bf16 combine + heuristic knobs — that default is
+>   what §1's table measures).
+> * **§4 (GSM8K)** — re-measured 2026-08-05..06 on the same stack, at
+>   200q and 500q, including the Pro checkpoint-vs-kernel discriminators.
+> * **§2b (serving)** — *not* re-measured; still the July 0.25.1
+>   recording (vLLM 0.25.1 wheel + `patch_0251`, flashinfer
 >   `4_5_2-perf-fix` @ `1ee41bcd`, cutlass-dsl 4.5.2 — the configuration
->   the rest of this runbook describes.
+>   the venv-based parts of this runbook describe).
 > * cutlass-dsl **4.7.0 is broken** for these kernels
 >   (`CUDA_ERROR_MISALIGNED_ADDRESS` in the CuTeDSL megamoe path); pin
 >   4.6.1 or 4.5.2, never 4.7.0.
@@ -106,57 +114,63 @@ have to supply.
 ```bash
 mkdir -p $ROOT/flashinfer-2
 
-# (1) harness, runbook, and the vLLM patch     -- branch vllm_repro_8_gpu_v2
+# (1) harness, runbook, and the vLLM patch     -- branch v_0_26
 git clone https://github.com/mhoqueanik/moe_ep_benchmark.git $ROOT/moe_ep_benchmark
-git -C $ROOT/moe_ep_benchmark switch vllm_repro_8_gpu_v2
+git -C $ROOT/moe_ep_benchmark switch v_0_26
 
 # (2) flashinfer kernels + moe_ep runtime
-#     -- 4_5_2-perf-fix reproduces the ORIGINAL e2e numbers (SS2/2b/4);
-#        moe_ep-respect-caller-device (or flashinfer main once #4348
-#        merges) reproduces the re-measured SS1/SS3 numbers
+#     -- moe_ep-respect-caller-device (or flashinfer main once #4348
+#        merges) reproduces the SS1/SS1b/SS2/SS3/SS4 numbers;
+#        4_5_2-perf-fix reproduces the frozen 0.25.1 stack (SS2b)
 git clone https://github.com/mhoqueanik/flashinfer-moe_ep.git \
     $ROOT/flashinfer-2/flashinfer-moe_ep
-git -C $ROOT/flashinfer-2/flashinfer-moe_ep switch 4_5_2-perf-fix
+git -C $ROOT/flashinfer-2/flashinfer-moe_ep switch moe_ep-respect-caller-device
 git -C $ROOT/flashinfer-2/flashinfer-moe_ep submodule update --init --recursive
 ```
 
 Flashinfer's 4 submodules (cccl, cutlass, nixl, spdlog) are required — both the
 image build and the editable install compile against them.
 
-`vllm_repro_8_gpu_v2` is the reproduction branch and is what this file documents:
-1x8 only, one set of results. Other branches of this repo carry development
-history and are not needed here — clone the branch above and everything in this
-runbook applies.
+`v_0_26` is the reproduction branch for the vLLM 0.26 stack and is what this
+file documents: 1x8 only, one set of results. `vllm_repro_8_gpu_v2` is the
+same harness frozen at the July 0.25.1 recording (the stack §2b's serving
+numbers still belong to); other branches carry development history and are
+not needed here.
 
-#### 1.2b. Optional third repo — the PR, for reading only
+#### 1.2b. Third repo — the vLLM PR, built from source
 
 ```bash
-# branch fi-moe-ep-v4 -- REFERENCE ONLY, never built, nothing here imports it
+# branch fi-moe-ep-v4 -- the vLLM the SS1/SS1b/SS2/SS4 numbers ran on
 git clone https://github.com/mhoqueanik/vllm.git $ROOT/vllm-fi-moe-ep
 git -C $ROOT/vllm-fi-moe-ep switch fi-moe-ep-v4
 ```
 
-Nothing in `moe_ep_benchmark` references this path — no script, no import.
-The PR sits on a much newer vLLM `main` than 0.25.1; the original recording
-patched a 0.25.1 wheel instead (§1.4e), but **building the PR from source is
-now validated** (2026-08-05): inside the §1.2c container,
-`use_existing_torch.py` + `pip install -e .` with `VLLM_USE_PRECOMPILED=0
-TORCH_CUDA_ARCH_LIST=10.0a MAX_JOBS=32` builds in ~15 minutes, and the §1
-Flash e2e numbers in expected_results.md were re-measured on that build.
-Note the PR's review restructure renamed the files `patch_0251/` carries
-(`fi_utils.py` → `vllm/utils/flashinfer_moe_ep.py` + a new
-`models/deepseek_v4/nvidia/fi_moe.py`), so the patch no longer mirrors the
-PR tree — it remains valid only as the frozen 0.25.1 port behind the §2/§2b/§4
-numbers.
+The PR sits on vLLM `main` past 0.25.1 (the 0.26 development line), and
+**building it from source is the validated path** for this branch's e2e
+numbers: inside the §1.2c container, `use_existing_torch.py` +
+`pip install -e .` with `VLLM_USE_PRECOMPILED=0
+TORCH_CUDA_ARCH_LIST=10.0a MAX_JOBS=32` builds in ~15 minutes.
+The 0.25.1-wheel path (§1.4e + `patch_0251/`) is the frozen port behind
+§2b's serving numbers only. Note the PR's review restructure renamed the
+files `patch_0251/` carries (`fi_utils.py` →
+`vllm/utils/flashinfer_moe_ep.py` + a new
+`models/deepseek_v4/nvidia/fi_moe.py`), so the patch no longer mirrors
+the PR tree.
 
 Commits the recorded numbers were taken at:
 
 | repo | branch | commit | for |
 |---|---|---|---|
-| `moe_ep_benchmark` | `vllm_repro_8_gpu_v2` | `d43827f` or later | everything |
-| `flashinfer-2/flashinfer-moe_ep` | `4_5_2-perf-fix` | `1ee41bcd` | §2/§2b/§4 (original stack) |
-| `flashinfer-2/flashinfer-moe_ep` | `moe_ep-respect-caller-device` | `e4d7c1b3` | §1/§3 (2026-08-05 re-measurement) |
-| `vllm-fi-moe-ep` | `fi-moe-ep-v4` | `756a6dd07` | §1 (2026-08-06, built from source) |
+| `moe_ep_benchmark` | `v_0_26` | this branch | everything |
+| `flashinfer-2/flashinfer-moe_ep` | `moe_ep-respect-caller-device` | `e4d7c1b3` | §1/§1b/§2/§3/§4 |
+| `vllm-fi-moe-ep` | `fi-moe-ep-v4` | `9dbb4c7e0` | §1/§1b/§2/§4 (built from source) |
+| `flashinfer-2/flashinfer-moe_ep` | `4_5_2-perf-fix` | `1ee41bcd` | §2b (frozen 0.25.1 stack) |
+
+The §1 default-config sweep (job 2368118) predates the `9dbb4c7e0`
+staging revert by one commit (it ran `756a6dd07`); the revert's own A/B
+showed the fi_dg delta is +0.003-0.008x, inside the §6 tolerance. The
+§1b/§2 tuned columns ran `9dbb4c7e0` plus the uncommitted
+`FI_COMBINE_DTYPE` override described in the currency note.
 
 > The job scripts echo `git log --oneline -1` at startup, which reports the last
 > *commit* rather than the working tree. The verification logs therefore say

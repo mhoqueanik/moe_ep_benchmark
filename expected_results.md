@@ -2,11 +2,17 @@
 
 Every number here was measured from a scratch clone on one **8x B200** node.
 If your run lands outside the tolerances below, something is different — §5
-lists the two ways that has actually happened.
+lists the three ways that has actually happened.
 
-**Configuration.** vLLM 0.25.1 (wheel + `vllm_e2e/patch_0251/`), flashinfer
-branch `4_5_2-perf-fix` @ `1ee41bcd`, nvidia-cutlass-dsl **4.5.2** (vLLM
-0.25.1's own pin).
+**Configuration (this branch, `v_0_26`).** vLLM 0.26 development tree —
+the PR branch `fi-moe-ep-v4` @ `9dbb4c7e0` **built from source** (RUNBOOK
+§1.2b) — flashinfer `moe_ep-respect-caller-device` @ `e4d7c1b3`,
+nvidia-cutlass-dsl **4.6.1**. §1, §2, §3 and §4 carry numbers measured on
+this stack (2026-08-05..07); §2b (serving) has not been re-measured and
+still carries the July 0.25.1 recording (vLLM 0.25.1 wheel +
+`vllm_e2e/patch_0251/`, flashinfer `4_5_2-perf-fix` @ `1ee41bcd`,
+cutlass-dsl 4.5.2 — the branch `vllm_repro_8_gpu_v2` documents that stack
+in full).
 
 **EP8 throughout, but the two levels reach it differently.** The e2e sweeps
 (§1, §2, §4) run **TP8 + EP8, DP1** — one engine sharded eight ways. The kernel
@@ -26,25 +32,28 @@ median of the timed rounds (3 for every cell except the 100K one, which runs 2).
 | `fi_dg` | `flashinfer_moe_ep_mega_deep_gemm` | FlashInfer `moe_ep` DeepGEMM MegaMoE — **the same kernel as native**, reached through different glue: the `moe_ep` wrapper rather than a torch op. So `fi_dg` vs `native` isolates integration overhead, not kernel work, and ~1.00x is the expected answer. |
 | `fi_cutedsl` | `flashinfer_moe_ep_mega_cutedsl` | FlashInfer `moe_ep` NVFP4 CuteDSL MegaMoE — a **different kernel**, and the one the work is actually about. Its speedup is the result. |
 
-Read the two columns differently: `fi_dg` at 1.02x says the wrapper costs
+Read the two columns differently: `fi_dg` at ~1.00x says the wrapper costs
 nothing (and, at 0.44x, said something was badly wrong — §5.1). `fi_cutedsl`
-at 1.32x is the kernel win.
+above 1.0x is the kernel win — 1.05-1.09x tuned on this stack (§1b, §2),
+down from July's 1.19-1.32x for the structural reason §2 explains.
 
 **Two checkpoints, deliberately.** native and fi_dg run the mx original;
 fi_cutedsl runs the NVFP4 cast of the same base weights, because that is the
 format its kernel consumes. That makes every throughput ratio
-cross-checkpoint, which is why §4 exists and is not optional.
+cross-checkpoint, which is why §4 exists and is not optional. On Pro the
+prequant NVFP4 checkpoint turned out to be the dominant accuracy cost —
+§4 separates checkpoint from kernel with a requant-at-load discriminator.
 
 ---
 
 ## 1. vLLM e2e — DeepSeek-V4-Flash, EP8
 
-Re-measured 2026-08-06 on the current stack: vLLM `fi-moe-ep-v4` @
-`756a6dd07` **built from source** (RUNBOOK §1.2b), flashinfer
-`moe_ep-respect-caller-device` @ `e4d7c1b3`, cutlass-dsl 4.6.1 (job
-2368118). Requires the sequence-parallel fix `aa0317318` — without it the
-fi backends run the MoE block full-batch on every rank and land at
-0.42-0.65x.
+Measured 2026-08-06 on the configuration above (job 2368118; result JSONs
+in `vllm_e2e/results/sweep_ep8pr_*.json`). Requires the sequence-parallel
+fix `aa0317318` — without it the fi backends run the MoE block full-batch
+on every rank and land at 0.42-0.65x. This table is the **default-config**
+sweep: fi_cutedsl on heuristic knobs and the bf16 combine wire (the ship
+default); §1b below is the tuned reading.
 
 | cell | native tok/s | fi_dg | fi_cutedsl |
 |---|---|---|---|
@@ -54,36 +63,90 @@ fi backends run the MoE block full-batch on every rank and land at
 | 32K ISL / 32 | 75046 | 74976 (0.999x) | 74320 (0.990x) |
 
 Native is 1.6-2.4x the July 0.25.1 recording (sequence-parallel MoE, fp8
-sparse MLA attention, fused allreduce_rms); fi_dg tracks it at parity —
-with the `prepare_megamoe` staging commit its output is bitwise-identical
-to native. fi_cutedsl no longer shows the July 1.06-1.20x wins: under
-sequence parallelism the MoE sees tokens/rank 8x smaller, which puts
-every cell at or below the §3 DeepGEMM↔CuteDSL crossover (512-1024
-tok/rank). Its knob cache also predates the sharded sizes; retune before
-reading its sub-1.0x as kernel regression.
+sparse MLA attention, fused allreduce_rms); fi_dg tracks it at parity.
+An earlier staging experiment (`756a6dd07`) made fi_dg bitwise-identical
+to native, but an A/B showed FI's own CuTeDSL DataPreprocess staging is
+faster (fi_dg 1.003-1.008x vs 0.999-1.002x), so it was reverted
+(`9dbb4c7e0`) — fi_dg now matches native on 6 of 8 smoke prompts exactly,
+not 8 of 8, and no doc should claim bitwise equality. fi_cutedsl's
+sub-1.0x column here is the untuned reading: under sequence parallelism
+the MoE sees tokens/rank 8x smaller, which puts these cells at or near
+the §3 DeepGEMM↔CuteDSL crossover (512-1024 tok/rank), and the default
+knob cache predates the sharded sizes.
 
 The July 0.25.1+patch numbers this table replaced: native 38986/30845/
 29632/35700 tok/s with fi_dg ~1.02x and fi_cutedsl 1.06-1.20x.
 
+## 1b. Flash, fi_cutedsl tuned — nvfp4 combine + retuned knobs
+
+Jobs 2370725 + 2370799 (2026-08-06); result JSONs and the knob caches in
+`vllm_e2e/results/retune_20260806/`. Knobs tuned per capacity/live-token
+operating point into `knob_cache_flash_nvfp4_{pre,dec}.json`; combine wire
+switched to nvfp4. Both levers are follow-up-PR material — the shipped
+default remains bf16 combine + heuristic fallback — so read this table as
+the kernel's tuned potential on the 0.26 stack, not as what a stock build
+produces:
+
+| cell | tok/rank at MoE | native tok/s | fi_cutedsl (nvfp4 combine, tuned) |
+|---|---|---|---|
+| prefill-8k | 1024 | 94972 | 100141 (**1.054x**) |
+| prefill-16k | 2048 | 103105 | 109130 (**1.058x**) |
+| decode-1k | 128 | 49049 | 47407 (0.967x) |
+| decode-2k | 256 | 53481 | 56374 (**1.054x**) |
+
+Prefill recovers a 5-6% win over native (vs 0.99x untuned); decode-2k
+flips positive with decode-shape knobs. decode-1k's 128 tok/rank sits
+well below the §3 crossover and stays a small loss — expected, not a
+regression. Accuracy under both levers is gated in §4 (Flash 500q: fi
+nvfp4 combine 0.960 vs native 0.956).
+
 ## 2. vLLM e2e — DeepSeek-V4-Pro, EP8
 
-`sbatch vllm_e2e/job_vllm_pr_runbook_sweep_pro.sh` (~2 h).
+Measured 2026-08-06 (job 2370724) on the configuration above, same
+tuned-fi_cutedsl setup as §1b (nvfp4 combine + `knob_cache_pro_nvfp4_*`);
+result JSONs in `vllm_e2e/results/retune_20260806/pro/`. The 100K-ISL and
+32K-ISL cells and the fi_dg perf rows have **not** been re-measured on
+the 0.26 stack — fi_dg's wrapper parity is established on Flash (§1) and
+its Pro accuracy in §4.
 
-| cell | native tok/s | fi_dg | fi_cutedsl |
+| cell | tok/rank at MoE | native tok/s | fi_cutedsl (nvfp4 combine, tuned) |
 |---|---|---|---|
-| prefill-8k | 15240 | 15630 (1.026x) | 20074 (**1.317x**) |
-| decode-1k | 12897 | 13157 (1.020x) | 15368 (**1.192x**) |
-| 100K ISL / 1K | 12223 | 12453 (1.019x) | 15053 (**1.231x**) |
-| 32K ISL / 32 | 14117 | 14435 (1.023x) | 18250 (**1.293x**) |
+| prefill-8k | 1024 | 39120 | 42432 (**1.085x**) |
+| prefill-16k | 2048 | 40967 | 44754 (**1.092x**) |
+| decode-1k | 128 | 20573 | 21924 (**1.066x**) |
+| decode-2k | 256 | 19473 | 17938 (0.921x) |
 
-Latency, fi_cutedsl vs native: TTFT 95.0s vs 122.3s at 100K and 29.5s vs 38.4s
-at 32K; ITL p50 111.8ms vs 134.3ms and 441.3ms vs 573.9ms.
+decode-2k is a genuine tuned loss at 256 tok/rank; oddly non-monotonic
+against decode-1k's win at 128 (Flash shows the mirror image — loses at
+128, wins at 256). Unexplained, tracked as an FI-team follow-up.
 
-**The fi_cutedsl win grows with model size** — 1.19-1.32x on Pro against
-1.06-1.20x on Flash, on identical cells. fi_dg is at parity (1.02x) everywhere,
-on both models. If you see fi_dg far from 1.02x, read §5.1 before believing it.
+**Do not compare this table to July's 1.19-1.32x and read a regression.**
+The July win was structural, not kernel: pre-SP native ran the MoE block
+full-batch on every rank (8x redundant at TP8) and fi's in-kernel
+dispatch/combine ate that entire slice. Sequence parallelism removed it
+for both backends. The 2026-08-07 recovery campaign
+([reports/pro_perf_recovery_20260807.md](reports/pro_perf_recovery_20260807.md))
+measured the walls: the kernel is still ~2x native's mega kernel at equal
+tokens/rank (nsys, 443us vs 858us at 1024 tok/rank), but the MoE is now
+~40% of step time (Amdahl ceiling ~1.15x) and Pro's KV cache caps batches
+at 4096 tok/rank. Best measured big-batch cell: 32k-token capacity with
+capture capped at 8192 — native 41925, fi_cutedsl **45559** (1.087x),
+the highest Pro fi absolute of the campaign. July's 1.317x is
+structurally unreachable on this stack at equal workloads; ~1.09x
+best-vs-best is the honest ceiling.
+
+The July 0.25.1+patch numbers this section replaced: native
+15240/12897/12223/14117 tok/s (prefill-8k/decode-1k/100K/32K), fi_dg
+1.019-1.026x, fi_cutedsl 1.192-1.317x.
 
 ## 2b. vLLM serving mode — server + client, both models
+
+> **Not re-measured on the 0.26 stack.** Everything in this section is
+> the July 0.25.1 recording, kept because what it establishes — that the
+> serving harness reproduces the offline *ratios* to ±0.022x — is a
+> property of the harness, not of the kernel stack. Expect current
+> serving ratios to track §1/§1b/§2's offline columns the same way; the
+> absolute tok/s below belong to the old stack and old (pre-SP) native.
 
 `sbatch vllm_e2e/job_vllm_serving_sweep_ep8.sh` (Flash, ~2.5 h) and
 `job_vllm_serving_sweep_pro.sh` (Pro, ~3.7 h); RUNBOOK §3g. One process runs
@@ -258,29 +321,62 @@ number. Model quality is §4.
 
 ## 4. Accuracy gate — GSM8K, both checkpoints
 
-`sbatch vllm_e2e/job_gsm8k_flash_pro.sh` (~35 min, both models, both at TP8).
+Re-measured 2026-08-05..06 on the 0.26 stack, at 200 questions (the
+gate's default, `sbatch vllm_e2e/job_gsm8k_flash_pro.sh`, ~35 min) and at
+500 questions where 200q granularity (0.005/question) could not separate
+the hypotheses.
 
-| model | native | fi_dg | fi_cutedsl (NVFP4 cast) | delta |
-|---|---|---|---|---|
-| Flash | 0.965 | 0.965 | **0.965** | +0.000 |
-| Pro | 0.880 | 0.880 | **0.890** | +0.010 |
+**Flash — passes cleanly, both combine wires** (500q, job 2370839;
+fi_cutedsl on the prequant NVFP4 cast, truncations 0-1 everywhere):
 
-**The delta is the number that gates a perf claim.** Because fi_cutedsl runs a
-different checkpoint, its throughput is only comparable if its accuracy is —
-±0.010 on 200 questions is 2 questions, i.e. noise. Both models pass.
+| backend | 200q | 500q |
+|---|---|---|
+| native | 0.965 | 0.956 |
+| fi_cutedsl, bf16 combine | 0.965 | 0.966 |
+| fi_cutedsl, nvfp4 combine | — | 0.960 |
 
-**Do not read Pro's 0.880 as a regression.** All three backends agree exactly
-(176/176/178 correct; Flash is 193/193/193), so it is a property of the model
-and this eval, not of
-`moe_ep`. It is not a truncation artifact either: raising `--max-tokens`
-512 -> 1024 -> 2048 moves accuracy 0.8800 -> 0.8750 -> 0.8750 while truncated
-completions only fall 15 -> 14 -> 13, i.e. a handful never terminate at any
-budget. `--min-acc 0.93` is calibrated for Flash; for Pro it will fail and that
-failure is expected.
+fi ≥ native on both wires; the §1b perf claims carry no accuracy
+asterisk on Flash.
+
+**Pro — the prequant NVFP4 checkpoint is the culprit, not the kernel.**
+Native on the 0.26 stack scores 0.895 at 200q / 0.904 at 500q (job
+2370516/2370584) — the recorded 0.880-0.890 band held, so any fi drop is
+real. fi_cutedsl on the prequant `deepseek-v4-pro-nvfp4` checkpoint drops
+hard: 0.806 at 500q bf16 combine (0.784 nvfp4 combine), with 2-5x more
+truncations. Two discriminators (job 2370724, Phase C) isolate the cause:
+
+| Pro configuration | 200q | 500q |
+|---|---|---|
+| native, mx original | 0.895 | 0.904 |
+| fi_dg, mx original | 0.895 | — |
+| fi_cutedsl, **requant-at-load** from mx original, bf16 combine | 0.885 | 0.866 |
+| fi_cutedsl, prequant NVFP4 ckpt, bf16 combine | — | 0.806 |
+| fi_cutedsl, requant-at-load, nvfp4 combine | 0.855 | 0.842 |
+
+Three verdicts, in order of size:
+
+1. **Checkpoint.** fi_dg on the mx original matches native exactly
+   (179/200), and requant-at-load recovers most of the prequant drop
+   (0.806 → 0.866) — regenerate the Pro NVFP4 checkpoint before quoting
+   any accuracy number from it.
+2. **Residual kernel gap, Pro-specific.** Requant bf16-combine still
+   sits ~0.04 below native at 500q (2.8σ — not noise). Flash shows no
+   such gap (fi ≥ native on the *prequant* cast), so it is tied to Pro's
+   scale/shape, not to nvfp4-vs-fp8 generically. Reported to the FI team.
+3. **nvfp4 combine costs ~2.4-3.0% on Pro** (two consistent samples),
+   ~0 on Flash — which is why bf16 combine ships as the default and the
+   nvfp4 wire stays a tuning lever (§1b). Note it becomes mandatory at
+   32k-token capacity on Pro, where bf16 combine staging does not fit.
+
+**Do not read Pro's ~0.90 native as a regression** — all backends on the
+mx original agree, and it is not a truncation artifact (raising
+`--max-tokens` 512→2048 moves accuracy <0.005 while a handful of
+completions never terminate at any budget). `--min-acc 0.93` is
+calibrated for Flash; for Pro it will fail and that failure is expected.
 
 ---
 
-## 5. The two ways this has actually gone wrong
+## 5. The three ways this has actually gone wrong
 
 Both produced *plausible wrong numbers* rather than errors, which is why they
 are documented rather than merely fixed.
@@ -324,6 +420,22 @@ row carries the mx checkpoint under an NVFP4 label.
 the container. **Check the `model` field in each result JSON** — it records
 what was actually loaded, and the job's summary flags any fi_cutedsl row that
 did not run an nvfp4 checkpoint.
+
+### 5.3 A big-batch cell whose batches never form
+
+Raising `MAX_BATCHED_TOKENS` only raises a *ceiling*; the scheduler fills
+batches from resident sequences, and those are capped by KV cache. On Pro
+at 32k capacity with `gpu_memory_utilization=0.90` + graph profiling, only
+14,143 KV tokens survived — 3.45x concurrency — so the "pre32k" cell
+silently ran ~4k-token steps and reported roughly half the real number
+for both backends. The starved config also crashed fi_cutedsl+nvfp4-combine
+deterministically under a 32768-token graph (clean with headroom — an
+FI-team item). Fix: `GPU_MEM_UTIL=0.95`,
+`VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0`, `MAX_MODEL_LEN` no larger
+than the workload needs. **Check `GPU KV cache size` / `Maximum
+concurrency` in the engine log for every big-batch cell** before believing
+its tok/s; details in
+[reports/pro_perf_recovery_20260807.md](reports/pro_perf_recovery_20260807.md).
 
 ---
 
