@@ -14,7 +14,11 @@ Launch (8 GPUs, Blackwell sm_100+):
         --tokens-per-rank 8 --num-experts 256 --top-k 8 \\
         --hidden 7168 --intermediate 2048
 
-Backends: deep_gemm_mega | mxfp8_cutedsl | nvfp4_cutedsl
+Backends: deep_gemm_mega | mxfp8_cutedsl | nvfp4_cutedsl | bf16_cutedsl
+(bf16_cutedsl needs the taxonomy-restructured flashinfer branches, e.g.
+sm100_bf16_implementation; there is no activation quant, so "staging" is just
+the copy into the symmetric buffer and stays out of the timed region like the
+quantized backends'.)
 """
 
 from __future__ import annotations
@@ -42,7 +46,7 @@ from bench_common import (
 @dataclasses.dataclass
 class Cfg:
     world_size: int
-    mega_backend: str  # deep_gemm_mega | mxfp8_cutedsl | nvfp4_cutedsl
+    mega_backend: str  # deep_gemm_mega | mxfp8_cutedsl | nvfp4_cutedsl | bf16_cutedsl
     tokens_per_rank: int
     num_experts: int
     top_k: int
@@ -193,6 +197,17 @@ def _build_megakernel_config(cfg: Cfg):
             combine_dtype=_mega_combine_dtype(),
             knobs=_mega_knobs(),
         )
+    if cfg.mega_backend == "bf16_cutedsl":
+        from flashinfer.moe_ep import Bf16CutedslMegaMoeConfig
+
+        return Bf16CutedslMegaMoeConfig(
+            intermediate_size=cfg.intermediate,
+            top_k=cfg.top_k,
+            gate_up_clamp=cfg.gate_up_clamp,
+            fast_math=cfg.fast_math,
+            in_kernel_fc2_reduce=_mega_ikr(),
+            knobs=_mega_knobs(),
+        )
     raise ValueError(f"unknown mega backend: {cfg.mega_backend}")
 
 
@@ -204,12 +219,26 @@ def _prestage_inputs(cfg, rank, world, device, problem):
     topk_w = problem.topk_weights
     topk_ids = problem.topk_ids
 
+    if cfg.mega_backend == "bf16_cutedsl":
+        # No activation quant: the layer's own stage_inputs copies these bf16
+        # tensors into the symmetric buffer (outside the timed region).
+        return dict(
+            hidden_states=bf16_hidden,
+            topk_ids=topk_ids,
+            topk_weights=topk_w,
+        )
+
     if cfg.mega_backend == "deep_gemm_mega":
         import deep_gemm
 
-        from flashinfer.moe_ep.backends.mega.kernel.deep_gemm_mega.staging import (
-            stage_mega_moe_inputs,
-        )
+        try:  # taxonomy layout (kernel_src_restructure and later)
+            from flashinfer.moe_ep.backends.mega.kernel.sm100.fp8_fp4_bf16_deepgemm.staging import (
+                stage_mega_moe_inputs,
+            )
+        except ImportError:  # pre-taxonomy layout (e.g. 4_5_2-perf-fix)
+            from flashinfer.moe_ep.backends.mega.kernel.deep_gemm_mega.staging import (
+                stage_mega_moe_inputs,
+            )
 
         buf = deep_gemm.get_symm_buffer_for_mega_moe(
             dist.group.WORLD,
@@ -242,9 +271,14 @@ def _prestage_inputs(cfg, rank, world, device, problem):
         from flashinfer.moe_ep.kernel_src.cutedsl_megamoe import (
             get_symm_buffer_for_mxfp8_mega_moe,
         )
-        from flashinfer.moe_ep.backends.mega.kernel.mxfp8_cutedsl.staging import (
-            stage_mega_moe_inputs,
-        )
+        try:  # taxonomy layout (kernel_src_restructure and later)
+            from flashinfer.moe_ep.backends.mega.kernel.sm100.mxfp8_mxfp8_bf16_cutedsl.staging import (
+                stage_mega_moe_inputs,
+            )
+        except ImportError:  # pre-taxonomy layout (e.g. 4_5_2-perf-fix)
+            from flashinfer.moe_ep.backends.mega.kernel.mxfp8_cutedsl.staging import (
+                stage_mega_moe_inputs,
+            )
 
         buf = get_symm_buffer_for_mxfp8_mega_moe(
             cfg.num_experts,
@@ -281,9 +315,14 @@ def _prestage_inputs(cfg, rank, world, device, problem):
         from flashinfer.moe_ep.kernel_src.cutedsl_megamoe import (
             get_symm_buffer_for_mega_moe,
         )
-        from flashinfer.moe_ep.backends.mega.kernel.nvfp4_cutedsl.staging import (
-            stage_mega_moe_inputs,
-        )
+        try:  # taxonomy layout (kernel_src_restructure and later)
+            from flashinfer.moe_ep.backends.mega.kernel.sm100.nvfp4_nvfp4_bf16_cutedsl.staging import (
+                stage_mega_moe_inputs,
+            )
+        except ImportError:  # pre-taxonomy layout (e.g. 4_5_2-perf-fix)
+            from flashinfer.moe_ep.backends.mega.kernel.nvfp4_cutedsl.staging import (
+                stage_mega_moe_inputs,
+            )
 
         # Identity epilogue scalars (fc1_alpha = fc2_alpha = fc1_norm_const = 1,
         # the symm-buffer defaults): the kernel loads them either way (zero perf
@@ -399,7 +438,10 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
             weights=weights,
             backend=MegaConfig(
                 megakernel=megakernel_cfg,
-                quantize_input=False,
+                # bf16 has no pre-quantized activation path (its staging IS
+                # just the bf16 copy); the quantized backends get activations
+                # pre-staged by _prestage_inputs.
+                quantize_input=(cfg.mega_backend == "bf16_cutedsl"),
                 preprocess_weights=True,
             ),
         )
@@ -409,7 +451,9 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
 
         workspace = mega._ensure_workspace()
         transformed = mega._transformed
-        mega._kernel.stage_inputs(t, workspace, quantize_input=False)
+        mega._kernel.stage_inputs(
+            t, workspace, quantize_input=(cfg.mega_backend == "bf16_cutedsl")
+        )
 
         y = torch.empty(m, cfg.hidden, dtype=torch.bfloat16, device=device)
 
@@ -535,7 +579,8 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
             comm_backend = "fused_symm_mega"
             compute_kernel = cfg.mega_backend + (
                 _mega_variant_suffix()
-                if cfg.mega_backend in ("nvfp4_cutedsl", "mxfp8_cutedsl")
+                if cfg.mega_backend
+                in ("nvfp4_cutedsl", "mxfp8_cutedsl", "bf16_cutedsl")
                 else ""
             )
 
@@ -545,6 +590,9 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
             elif cfg.mega_backend == "mxfp8_cutedsl":
                 weight_dtype = f"mxfp8_{cfg.mxfp8_kind}_block32"
                 act_compute_dtype = f"mxfp8_{cfg.mxfp8_kind}_block32"
+            elif cfg.mega_backend == "bf16_cutedsl":
+                weight_dtype = "bfloat16"
+                act_compute_dtype = "bfloat16"
             else:
                 weight_dtype = "nvfp4_block16"
                 act_compute_dtype = "nvfp4_block16"
@@ -614,7 +662,7 @@ def _parse() -> Cfg:
     p.add_argument(
         "--mega-backend",
         required=True,
-        choices=["deep_gemm_mega", "mxfp8_cutedsl", "nvfp4_cutedsl"],
+        choices=["deep_gemm_mega", "mxfp8_cutedsl", "nvfp4_cutedsl", "bf16_cutedsl"],
     )
     p.add_argument("--tokens-per-rank", type=int, default=8)
     p.add_argument("--num-experts", type=int, default=256)
@@ -654,7 +702,7 @@ def main():
 
     cfg = _parse()
 
-    if cfg.mega_backend in ("mxfp8_cutedsl", "nvfp4_cutedsl"):
+    if cfg.mega_backend in ("mxfp8_cutedsl", "nvfp4_cutedsl", "bf16_cutedsl"):
         importlib.import_module(
             "flashinfer.moe_ep.kernel_src.cutedsl_megamoe"
         )

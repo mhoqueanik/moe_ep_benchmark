@@ -252,6 +252,22 @@ p50 µs, speedup vs `deep_gemm_mega` in brackets. The `_split.csv` files also
 carry per-stage p50 columns (`dispatch_us_p50`, `compute_us_p50`,
 `combine_us_p50`).
 
+The `bf16` column (`fi_bf16`, the unquantized `bf16_cutedsl` MegaMoE — bf16
+weights, activations and combine, no quant anywhere) was measured later:
+2026-08-10, jobs 2384005-2384012, CSVs in
+`model_shapes/results_ep8_bf16_20260810/`, on the flashinfer
+`sm100_bf16_implementation` branch (the kernel only exists there) with
+cutlass-dsl pinned to 4.6.1, the version that branch lineage is validated
+against — NOT this table's 4_5_2-perf-fix/4.5.2 stack. Its bracket ratios are
+vs the *same-session* `dg`, and the session reran `fi_dg` and `fi_fp8` as
+cross-stack controls: every shared cell agrees with this table's 2026-07-29
+columns within ~1% at 8-2048 tok/rank (worst cell +3.5%, v4_pro mxfp8@512), so
+the columns are comparable despite the branch/DSL change. bf16 accuracy loss
+in the CSVs is ~0.3% rel-L2 (bf16 model math, no quantization error) vs
+20.6-24.9% for the quantized variants. bf16 sits at 0.23-0.36x of `dg` at
+small batches, climbing to ~0.5x at 8192 tok/rank — always behind mxfp8, at
+roughly half mxfp8's speed below 512 tok/rank.
+
 **The split path is not competitive at any point measured: 0.07-0.21x of
 `dg` on every shape and token count**, i.e. 5-14x slower, with split-trtllm
 behind split-cutedsl everywhere. The gap is not the NCCL dispatch/combine —
@@ -262,69 +278,72 @@ approaches parity only at 8192 tok/rank; it never beats nvfp4.
 
 **`deepseek_v4_flash`** — hidden 4096, inter 2048, 256 experts, top-6 — the geometry the §1 e2e sweep uses.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | split nvfp4 cutedsl | split nvfp4 trtllm |
-|---|---|---|---|---|---|
-| 8 | 108.5 | 121.7 (0.89x) | 171.1 (0.63x) | 832.5 (0.13x) | 1642.2 (0.07x) |
-| 64 | 125.4 | 134.1 (0.94x) | 197.7 (0.63x) | 884.8 (0.14x) | 1922.1 (0.07x) |
-| 512 | 157.8 | 191.4 (0.82x) | 263.2 (0.60x) | 1158.6 (0.14x) | 1643.1 (0.10x) |
-| 2048 | 383.0 | 335.5 (1.14x) | 437.1 (0.88x) | 3979.9 (0.10x) | 4811.5 (0.08x) |
-| 8192 | 1324.1 | 1101.9 (1.20x) | 1364.0 (0.97x) | 9423.6 (0.14x) | 11777.9 (0.11x) |
+| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm |
+|---|---|---|---|---|---|---|
+| 8 | 108.5 | 121.7 (0.89x) | 171.1 (0.63x) | 336.9 (0.32x) | 832.5 (0.13x) | 1642.2 (0.07x) |
+| 64 | 125.4 | 134.1 (0.94x) | 197.7 (0.63x) | 392.2 (0.32x) | 884.8 (0.14x) | 1922.1 (0.07x) |
+| 512 | 157.8 | 191.4 (0.82x) | 263.2 (0.60x) | 433.7 (0.36x) | 1158.6 (0.14x) | 1643.1 (0.10x) |
+| 2048 | 383.0 | 335.5 (1.14x) | 437.1 (0.88x) | 822.2 (0.46x) | 3979.9 (0.10x) | 4811.5 (0.08x) |
+| 8192 | 1324.1 | 1101.9 (1.20x) | 1364.0 (0.97x) | 2705.9 (0.49x) | 9423.6 (0.14x) | 11777.9 (0.11x) |
 
 **`deepseek_v4_pro`** — hidden 7168, inter 3072, 384 experts, top-6 — the geometry the §2 e2e sweep uses.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | split nvfp4 cutedsl | split nvfp4 trtllm |
-|---|---|---|---|---|---|
-| 8 | 260.2 | 259.1 (1.00x) | 467.9 (0.56x) | 1741.6 (0.15x) | 2636.0 (0.10x) |
-| 64 | 329.7 | 334.8 (0.98x) | 646.1 (0.51x) | 1631.9 (0.20x) | 2478.1 (0.13x) |
-| 512 | 374.8 | 394.3 (0.95x) | 732.3 (0.51x) | 1838.3 (0.20x) | 2526.9 (0.15x) |
-| 2048 | 884.3 | 618.9 (1.43x) | 1166.4 (0.76x) | 6317.2 (0.14x) | 7631.7 (0.12x) |
-| 8192 | 3176.0 | 1890.2 (1.68x) | 3552.3 (0.89x) | 19984.6 (0.16x) | 22681.1 (0.14x) |
+| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm |
+|---|---|---|---|---|---|---|
+| 8 | 260.2 | 259.1 (1.00x) | 467.9 (0.56x) | 1032.7 (0.25x) | 1741.6 (0.15x) | 2636.0 (0.10x) |
+| 64 | 329.7 | 334.8 (0.98x) | 646.1 (0.51x) | 1449.0 (0.23x) | 1631.9 (0.20x) | 2478.1 (0.13x) |
+| 512 | 374.8 | 394.3 (0.95x) | 732.3 (0.51x) | 1580.0 (0.24x) | 1838.3 (0.20x) | 2526.9 (0.15x) |
+| 2048 | 884.3 | 618.9 (1.43x) | 1166.4 (0.76x) | 2434.1 (0.37x) | 6317.2 (0.14x) | 7631.7 (0.12x) |
+| 8192 | 3176.0 | 1890.2 (1.68x) | 3552.3 (0.89x) | 7117.0 (0.45x) | 19984.6 (0.16x) | 22681.1 (0.14x) |
 
 **`deepseek_v3`** — hidden 7168, inter 2048, 256 experts, top-8.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | split nvfp4 cutedsl | split nvfp4 trtllm |
-|---|---|---|---|---|---|
-| 8 | 170.6 | 171.1 (1.00x) | 275.6 (0.62x) | 1676.0 (0.10x) | 2122.1 (0.08x) |
-| 64 | 184.4 | 185.2 (1.00x) | 306.2 (0.60x) | 1647.7 (0.11x) | 1831.6 (0.10x) |
-| 512 | 278.5 | 267.2 (1.04x) | 445.4 (0.63x) | 1673.1 (0.17x) | 2277.2 (0.12x) |
-| 2048 | 803.9 | 576.4 (1.39x) | 980.5 (0.82x) | 6026.5 (0.13x) | 7186.4 (0.11x) |
-| 8192 | 3056.1 | 2021.3 (1.51x) | 3256.8 (0.94x) | 18715.2 (0.16x) | 21387.2 (0.14x) |
+| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm |
+|---|---|---|---|---|---|---|
+| 8 | 170.6 | 171.1 (1.00x) | 275.6 (0.62x) | 633.9 (0.27x) | 1676.0 (0.10x) | 2122.1 (0.08x) |
+| 64 | 184.4 | 185.2 (1.00x) | 306.2 (0.60x) | 732.3 (0.25x) | 1647.7 (0.11x) | 1831.6 (0.10x) |
+| 512 | 278.5 | 267.2 (1.04x) | 445.4 (0.63x) | 805.9 (0.35x) | 1673.1 (0.17x) | 2277.2 (0.12x) |
+| 2048 | 803.9 | 576.4 (1.39x) | 980.5 (0.82x) | 1931.7 (0.42x) | 6026.5 (0.13x) | 7186.4 (0.11x) |
+| 8192 | 3056.1 | 2021.3 (1.51x) | 3256.8 (0.94x) | 6504.4 (0.48x) | 18715.2 (0.16x) | 21387.2 (0.14x) |
 
 **`kimi_k2_6`** — hidden 7168, inter 2048, 384 experts, top-8.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | split nvfp4 cutedsl | split nvfp4 trtllm |
-|---|---|---|---|---|---|
-| 8 | 207.3 | 210.0 (0.99x) | 361.5 (0.57x) | 1350.0 (0.15x) | 2419.1 (0.09x) |
-| 64 | 253.8 | 246.7 (1.03x) | 439.4 (0.58x) | 1806.4 (0.14x) | 1879.3 (0.14x) |
-| 512 | 314.2 | 320.4 (0.98x) | 529.4 (0.59x) | 1716.8 (0.18x) | 2347.9 (0.13x) |
-| 2048 | 813.2 | 619.6 (1.31x) | 1082.4 (0.75x) | 6078.9 (0.13x) | 7221.1 (0.11x) |
-| 8192 | 3185.8 | 2069.5 (1.54x) | 3469.3 (0.92x) | 19153.0 (0.17x) | 21391.3 (0.15x) |
+| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm |
+|---|---|---|---|---|---|---|
+| 8 | 207.3 | 210.0 (0.99x) | 361.5 (0.57x) | 832.5 (0.25x) | 1350.0 (0.15x) | 2419.1 (0.09x) |
+| 64 | 253.8 | 246.7 (1.03x) | 439.4 (0.58x) | 1047.6 (0.24x) | 1806.4 (0.14x) | 1879.3 (0.14x) |
+| 512 | 314.2 | 320.4 (0.98x) | 529.4 (0.59x) | 1145.9 (0.28x) | 1716.8 (0.18x) | 2347.9 (0.13x) |
+| 2048 | 813.2 | 619.6 (1.31x) | 1082.4 (0.75x) | 2164.7 (0.38x) | 6078.9 (0.13x) | 7221.1 (0.11x) |
+| 8192 | 3185.8 | 2069.5 (1.54x) | 3469.3 (0.92x) | 6678.0 (0.47x) | 19153.0 (0.17x) | 21391.3 (0.15x) |
 
 **`qwen3_5_397b`** — hidden 4096, inter 1024, 512 experts, top-10.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | split nvfp4 cutedsl | split nvfp4 trtllm |
-|---|---|---|---|---|---|
-| 8 | 112.7 | 124.0 (0.91x) | 181.1 (0.62x) | 841.8 (0.13x) | 1594.5 (0.07x) |
-| 64 | 131.1 | 144.2 (0.91x) | 211.3 (0.62x) | 912.2 (0.14x) | 1370.1 (0.10x) |
-| 512 | 194.7 | 209.4 (0.93x) | 312.3 (0.62x) | 1198.7 (0.16x) | 2233.8 (0.09x) |
-| 2048 | 550.4 | 465.8 (1.18x) | 521.3 (1.06x) | 4322.5 (0.13x) | 4867.8 (0.11x) |
-| 8192 | 2018.9 | 1622.5 (1.24x) | 1750.0 (1.15x) | 9771.3 (0.21x) | 12108.0 (0.17x) |
+| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm |
+|---|---|---|---|---|---|---|
+| 8 | 112.7 | 124.0 (0.91x) | 181.1 (0.62x) | 349.2 (0.32x) | 841.8 (0.13x) | 1594.5 (0.07x) |
+| 64 | 131.1 | 144.2 (0.91x) | 211.3 (0.62x) | 414.7 (0.32x) | 912.2 (0.14x) | 1370.1 (0.10x) |
+| 512 | 194.7 | 209.4 (0.93x) | 312.3 (0.62x) | 453.6 (0.43x) | 1198.7 (0.16x) | 2233.8 (0.09x) |
+| 2048 | 550.4 | 465.8 (1.18x) | 521.3 (1.06x) | 1023.9 (0.53x) | 4322.5 (0.13x) | 4867.8 (0.11x) |
+| 8192 | 2018.9 | 1622.5 (1.24x) | 1750.0 (1.15x) | 3782.8 (0.54x) | 9771.3 (0.21x) | 12108.0 (0.17x) |
 
 **`gpt_oss_120b`** — hidden 2880, inter 2880, 128 experts, top-4.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | split nvfp4 cutedsl | split nvfp4 trtllm |
-|---|---|---|---|---|---|
-| 8 | — | 93.1 | 130.0 | — | — |
-| 64 | — | 95.2 | 132.2 | — | — |
-| 512 | — | 132.1 | 167.0 | — | — |
-| 2048 | — | 240.8 | 279.6 | — | — |
-| 8192 | — | 697.3 | 815.1 | — | — |
+| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm |
+|---|---|---|---|---|---|---|
+| 8 | — | 93.1 | 130.0 | — | — | — |
+| 64 | — | 95.2 | 132.2 | — | — | — |
+| 512 | — | 132.1 | 167.0 | — | — | — |
+| 2048 | — | 240.8 | 279.6 | — | — | — |
+| 8192 | — | 697.3 | 815.1 | — | — | — |
 
 `gpt_oss_120b`'s empty split columns are expected, like its `dg` column: the
 split path's nvfp4 weight prep rejects the shape with
 `ValueError: Scale factor tensor has 8294400 elements, expected 8478720 for
 m=2880, k=2880` — the scale-factor layout wants a padding that hidden =
 inter = 2880 does not satisfy. The harness logs it once per cell and moves on.
+Its `bf16` column is empty for the same family of reason: the bf16 mega path's
+fleet validation rejects the shape with `MoEEpConfigError: token_hidden_size
+(2880) must be a multiple of 128`.
 
 The `dg` and `nvfp4 bf16` columns here are an independent remeasurement of
 §3's, four days and a node assignment apart. At 8-2048 tok/rank every shared

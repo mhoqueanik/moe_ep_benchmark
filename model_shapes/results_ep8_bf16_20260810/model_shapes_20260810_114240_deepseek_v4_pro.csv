@@ -1,0 +1,16 @@
+path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s,acc_loss_pct
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8,8,384,6,7168,3072,258.1,254.0,262.3,247985.1,20.622
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,64,8,384,6,7168,3072,327.7,322.6,347.0,1562500.0,20.618
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,512,8,384,6,7168,3072,376.8,371.6,381.0,10870026.6,20.639
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,2048,8,384,6,7168,3072,905.2,873.5,927.9,18099867.3,20.641
+mega,mega,fused_symm_mega,deep_gemm_mega,no,fp4_int8_block32,bfloat16,fp8_e4m3fn_block32,8192,8,384,6,7168,3072,3193.4,3122.1,3294.3,20522378.5,20.642
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,8,8,384,6,7168,3072,472.2,468.0,601.1,135542.7,6.344
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,64,8,384,6,7168,3072,659.6,648.2,1571.9,776265.7,6.359
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,512,8,384,6,7168,3072,758.4,726.0,780.3,5401071.7,6.359
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,2048,8,384,6,7168,3072,1155.6,1129.4,1276.8,14178308.8,6.359
+mega,mega,fused_symm_mega,mxfp8_cutedsl,no,mxfp8_mxfp8_e4m3_block32,bfloat16,mxfp8_mxfp8_e4m3_block32,8192,8,384,6,7168,3072,3601.4,3469.3,3683.3,18197246.5,6.359
+mega,mega,fused_symm_mega,bf16_cutedsl,no,bfloat16,bfloat16,bfloat16,8,8,384,6,7168,3072,1032.7,1026.0,1078.2,61972.3,0.288
+mega,mega,fused_symm_mega,bf16_cutedsl,no,bfloat16,bfloat16,bfloat16,64,8,384,6,7168,3072,1449.0,1360.9,1471.7,353353.0,0.288
+mega,mega,fused_symm_mega,bf16_cutedsl,no,bfloat16,bfloat16,bfloat16,512,8,384,6,7168,3072,1580.0,1495.2,1633.2,2592483.8,0.289
+mega,mega,fused_symm_mega,bf16_cutedsl,no,bfloat16,bfloat16,bfloat16,2048,8,384,6,7168,3072,2434.1,2370.5,2487.4,6731085.2,0.289
+mega,mega,fused_symm_mega,bf16_cutedsl,no,bfloat16,bfloat16,bfloat16,8192,8,384,6,7168,3072,7117.0,6954.0,7736.4,9208426.3,0.289

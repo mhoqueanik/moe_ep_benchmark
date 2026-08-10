@@ -74,6 +74,7 @@ run_variant () {
         fi_combine_fp8) backend=nvfp4_cutedsl;  export MEGA_IKR=0 MEGA_COMBINE_DTYPE=mxfp8 ;;
         fi_combine_fp4) backend=nvfp4_cutedsl;  export MEGA_IKR=0 MEGA_COMBINE_DTYPE=nvfp4 ;;
         fi_fp8)         backend=mxfp8_cutedsl;  export MEGA_IKR=0 MEGA_COMBINE_DTYPE=bf16 ;;
+        fi_bf16)        backend=bf16_cutedsl;   export MEGA_IKR=0 MEGA_COMBINE_DTYPE=bf16 ;;
         fi_split_fp4|fi_split_trtllm)
             local fp4_be=cutedsl
             [ "$variant" = "fi_split_trtllm" ] && fp4_be=trtllm
