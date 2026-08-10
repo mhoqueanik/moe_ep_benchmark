@@ -343,9 +343,15 @@ split path's nvfp4 weight prep rejects the shape with
 `ValueError: Scale factor tensor has 8294400 elements, expected 8478720 for
 m=2880, k=2880` — the scale-factor layout wants a padding that hidden =
 inter = 2880 does not satisfy. The harness logs it once per cell and moves on.
-Its `bf16` column is empty for the same family of reason: the bf16 mega path's
-fleet validation rejects the shape with `MoEEpConfigError: token_hidden_size
-(2880) must be a multiple of 128`.
+Its `bf16` column is empty because at measurement time the bf16 mega path's
+fleet validation rejected the shape (`MoEEpConfigError: token_hidden_size
+(2880) must be a multiple of 128`). That gate was over-strict — the kernel's
+real bound is hidden % 32 / inter % 64 — and has since been relaxed on the
+flashinfer side (validated 2026-08-10, job 2384696: this geometry runs at
+0.29% rel-L2 vs the dense bf16 reference). The cells stay empty until a
+sweep rerun fills them; the job's spot numbers (barrier-cold `e2e` timing,
+NOT this table's `e2e_pipelined`) were 295/324/1500 µs at 8/512/8192
+tok/rank.
 
 The `dg` and `nvfp4 bf16` columns here are an independent remeasurement of
 §3's, four days and a node assignment apart. At 8-2048 tok/rank every shared
