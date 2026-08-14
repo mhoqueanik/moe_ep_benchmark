@@ -387,6 +387,86 @@ tolerance was measured same-node back-to-back; the largest batch point is
 where node and thermal state matter most, so read 8192 ratios with that wider
 error bar.
 
+## 3d. Split path at low latency — nccl_ep vs nixl_ep, w4a8 and packed dispatch
+
+The LL EXPERT_MAJOR counterpart of §3b's HT protocol, comparing the two EP
+transports under the same inner kernels. Measured 2026-08-14, job 2391254
+(single serialized job — parallel per-shape jobs race on the shared
+`3rdparty/nixl` patch + `build_nvep` build dir), 8x B200, cutlass-dsl 4.6.1,
+flashinfer `split_cutedsl_w4a8` branch (b3655421), image
+`nixl_ep_ci/fi-nixl-provisioned.sqsh` (UCX v1.21.x device API; the nixl-cu13
+wheel must be pinned ==1.3.1 to match the v1.3.1 submodule kernels — a 1.4.x
+wheel dies with device asserts). CSVs in
+`model_shapes/results_ep8_ll_nixl_20260814/`. nixl_ep is LL EXPERT_MAJOR-only
+with tokens/rank <= 1024, so this table sweeps 8/64/512 and adds two
+comm-only `identity` columns (dispatch/combine roundtrip, no expert compute).
+Cells are barrier-cold e2e p50 µs as in §3b; no `dg` anchor here (mega is a
+different protocol), so no brackets.
+
+Findings:
+
+- **nixl_ep's comm is cheaper than nccl_ep at decode batch sizes**: identity@8
+  is 82-128 µs vs nccl's 113-125 µs, and at 64 tok/rank nccl's combine stage
+  degrades sharply (identity@64: nccl 560-599 µs vs nixl 87-141 µs on three of
+  five shapes — the nccl LL combine blows up between 8 and 64 tok/rank). At
+  512 the transports converge (~165-300 µs).
+- The comm advantage carries to the kernels at 8-64 tok/rank: `nixl split
+  nvfp4`@8 beats the nccl column by 6-13% e2e on every shape; at 512 the
+  compute stage dominates (>90% of e2e) and the columns converge.
+- **`w4a8 packed` does not pay off even at LL**: the pre-dispatch quantize
+  adds ~100-160 µs to the dispatch stage at 8-64 tok/rank while the wire
+  saving is worth only tens of µs at these sizes — packed dispatch needs
+  either multi-node fabrics or a fused quantize+send to win. Output remains
+  bit-identical to unpacked.
+- **`qwen3_5_397b` (top-10) runs only on nixl_ep at LL**: the nccl_ep LL
+  device kernel asserts `numTopk <= kNumMaxTopK` (top-k cap 8;
+  low_latency.cu:1030). Its nccl HT cells in §3b are unaffected. The nixl
+  columns cover the shape.
+- `w4a8` tracks §3b's relative placement vs `split nvfp4` (equal-ish at 8,
+  behind at 512 — default tactic, untuned). Accuracy columns: same synthetic
+  bands as §3b (nvfp4 ~23.2%, w4a8 ~20.6%).
+
+**`deepseek_v3`** — hidden 7168, inter 2048, 256 experts, top-8
+
+| tok/rank | split nvfp4 cutedsl | split w4a8 | split w4a8 packed | nccl identity | nixl identity | nixl split nvfp4 | nixl split w4a8 |
+|---|---|---|---|---|---|---|---|
+| 8 | 688.1 | 756.1 | 840.5 | 119.6 | 82.4 | 628.1 | 696.4 |
+| 64 | 1370.2 | 1549.8 | 1775.6 | 560.4 | 100.9 | 1024.4 | 1162.8 |
+| 512 | 4802.0 | 6648.3 | 7251.3 | 273.8 | 268.1 | 4757.2 | 6498.1 |
+
+**`deepseek_v4_flash`** — hidden 4096, inter 2048, 256 experts, top-6
+
+| tok/rank | split nvfp4 cutedsl | split w4a8 | split w4a8 packed | nccl identity | nixl identity | nixl split nvfp4 | nixl split w4a8 |
+|---|---|---|---|---|---|---|---|
+| 8 | 683.0 | 742.5 | 840.7 | 113.0 | 127.8 | 596.1 | 666.6 |
+| 64 | 845.6 | 974.9 | 1073.0 | 144.2 | 87.2 | 787.0 | 906.0 |
+| 512 | 2910.6 | 4063.7 | 4457.2 | 186.9 | 165.0 | 2883.9 | 4037.5 |
+
+**`deepseek_v4_pro`** — hidden 7168, inter 3072, 384 experts, top-6
+
+| tok/rank | split nvfp4 cutedsl | split w4a8 | split w4a8 packed | nccl identity | nixl identity | nixl split nvfp4 | nixl split w4a8 |
+|---|---|---|---|---|---|---|---|
+| 8 | 851.3 | 926.1 | 1010.7 | 124.4 | 82.7 | 807.1 | 871.3 |
+| 64 | 1613.3 | 2003.6 | 2066.6 | 599.4 | 98.4 | 1678.5 | 1981.6 |
+| 512 | 9480.9 | 14063.7 | 14523.2 | 239.0 | 258.6 | 9506.8 | 13937.1 |
+
+**`kimi_k2_6`** — hidden 7168, inter 2048, 384 experts, top-8
+
+| tok/rank | split nvfp4 cutedsl | split w4a8 | split w4a8 packed | nccl identity | nixl identity | nixl split nvfp4 | nixl split w4a8 |
+|---|---|---|---|---|---|---|---|
+| 8 | 710.6 | 803.2 | 899.5 | 117.6 | 85.8 | 664.8 | 762.2 |
+| 64 | 1560.5 | 1618.4 | 1792.9 | 582.0 | 140.9 | 1307.2 | 1561.5 |
+| 512 | 7103.0 | 9961.7 | 10836.0 | 275.9 | 301.9 | 6971.7 | 9855.9 |
+
+**`qwen3_5_397b`** — hidden 4096, inter 1024, 512 experts, top-10
+
+| tok/rank | split nvfp4 cutedsl | split w4a8 | split w4a8 packed | nccl identity | nixl identity | nixl split nvfp4 | nixl split w4a8 |
+|---|---|---|---|---|---|---|---|
+| 8 | — | — | — | — | 84.4 | 593.5 | 668.4 |
+| 64 | — | — | — | — | 140.7 | 838.4 | 974.6 |
+| 512 | — | — | — | — | 226.0 | 3180.1 | 4220.3 |
+
+
 ## 3c. 2xB200 EP2 baseline — quantized speedup vs bf16
 
 Externally provided reference run (no SLURM job ID), same harness
