@@ -109,11 +109,12 @@ run_mega () {
 run_fi_split () {
     local quant="$1"; shift
     echo ""
-    echo ">>> RUN path=fi_split  quant=${quant}  algo=${ALGO}  tokens/rank=${TOKENS}  gpus=${GPUS}"
+    echo ">>> RUN path=fi_split  comm=${FI_SPLIT_COMM:-nccl_ep}  quant=${quant}  algo=${ALGO}  tokens/rank=${TOKENS}  gpus=${GPUS}"
     CUDA_VISIBLE_DEVICES="$DEVS" "$FI_PYTHON" "$HERE/bench_moe_ep_fi_split.py" \
         --world-size "$GPUS" \
         --algorithm "$ALGO" \
         --layout "$FI_SPLIT_LAYOUT" \
+        --comm-backend "${FI_SPLIT_COMM:-nccl_ep}" \
         --quant "$quant" \
         --tokens-per-rank "$TOKENS" \
         --num-experts "$NUM_EXPERTS" \

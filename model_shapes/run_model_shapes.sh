@@ -83,6 +83,26 @@ run_variant () {
                 || echo "[warn] shape=${SHAPE_NAME} variant=${variant} tokens/rank=${TOKENS} failed (continuing)"
             return
             ;;
+        fi_split_id)
+            # comm-only identity baseline (dispatch/combine roundtrip).
+            CSV="$CSV_SPLIT" ALGO="$SPLIT_ALGO" \
+                run_fi_split identity \
+                || echo "[warn] shape=${SHAPE_NAME} variant=${variant} tokens/rank=${TOKENS} failed (continuing)"
+            return
+            ;;
+        fi_nixl_id|fi_nixl_fp4|fi_nixl_w4a8)
+            # nixl_ep transport (LL EXPERT_MAJOR only; set SPLIT_ALGO=ll).
+            local nixl_quant
+            case "$variant" in
+                fi_nixl_id)   nixl_quant=identity ;;
+                fi_nixl_fp4)  nixl_quant=nvfp4 ;;
+                fi_nixl_w4a8) nixl_quant=w4a8 ;;
+            esac
+            CSV="$CSV_SPLIT" ALGO="$SPLIT_ALGO" FI_SPLIT_COMM=nixl_ep \
+                run_fi_split "$nixl_quant" \
+                || echo "[warn] shape=${SHAPE_NAME} variant=${variant} tokens/rank=${TOKENS} failed (continuing)"
+            return
+            ;;
         fi_split_w4a8|fi_split_w4a8p)
             # sm100_mxfp8_mxfp4_bf16_cutedsl split kernel: MXFP8 acts x MXFP4
             # weights; the p variant sends the MXFP8-packed dispatch payload.

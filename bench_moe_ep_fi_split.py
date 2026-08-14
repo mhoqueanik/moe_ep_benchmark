@@ -57,6 +57,7 @@ class Cfg:
     intermediate: int
     warmup: int
     iters: int
+    comm_backend: str = "nccl_ep"  # nccl_ep | nixl_ep (nixl: LL EXPERT_MAJOR only)
     out_csv: str | None = None
 
 
@@ -203,10 +204,13 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
         MoEEpTensors,
         MoEWeightPack,
         NcclEpConfig,
+        NvepConfig,
         SplitConfig,
         dummy_moe_weights,
     )
     from flashinfer.moe_ep.modes.split_layer import MoEEpSplitLayer
+
+    comm_cfg = NvepConfig() if cfg.comm_backend == "nixl_ep" else NcclEpConfig()
 
     device = pgi.device
     world, rank = pgi.world_size, pgi.rank
@@ -255,7 +259,7 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
         compute_max_tokens = num_local * m * world
 
     if cfg.quant == "identity":
-        layer_backend = SplitConfig(comm=NcclEpConfig(), kernel=IdentityConfig())
+        layer_backend = SplitConfig(comm=comm_cfg, kernel=IdentityConfig())
         layer_weights = dummy_moe_weights(
             num_local_experts=num_local, hidden=cfg.hidden, device=device
         )
@@ -268,7 +272,7 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
         from flashinfer.moe_ep import Sm100_Mxfp8_Mxfp4_Bf16_Cutedsl_SplitConfig
 
         layer_backend = SplitConfig(
-            comm=NcclEpConfig(),
+            comm=comm_cfg,
             kernel=Sm100_Mxfp8_Mxfp4_Bf16_Cutedsl_SplitConfig(
                 mxfp8_dispatch=(cfg.quant == "w4a8_packed")
             ),
@@ -276,7 +280,7 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
         layer_weights = MoEWeightPack(w13=problem.w13_bf16, w2=problem.w2_bf16)
     else:
         layer_backend = SplitConfig(
-            comm=NcclEpConfig(),
+            comm=comm_cfg,
             kernel=FusedMoeKernelConfig(
                 moe_config=_build_fused_moe_config(cfg, rank, compute_max_tokens)
             ),
@@ -385,7 +389,7 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
             tok_s = tokens_total / (us * 1e-6) if us > 0 else float("nan")
 
             layout_name = "ht_flat" if cfg.algorithm == "ht" else cfg.layout
-            comm_backend = f"nccl_ep_{layout_name}"
+            comm_backend = f"{cfg.comm_backend}_{layout_name}"
             if cfg.quant == "identity":
                 compute_kernel = "identity"
                 weight_dtype = "none"
@@ -494,6 +498,13 @@ def _parse() -> Cfg:
         "mxfp8_mxfp4_cutedsl split kernel (w4a8_packed = MXFP8-quantized "
         "dispatch payload), or the comm-only identity baseline",
     )
+    p.add_argument(
+        "--comm-backend",
+        choices=["nccl_ep", "nixl_ep"],
+        default="nccl_ep",
+        help="EP dispatch/combine transport (nixl_ep: LL EXPERT_MAJOR only, "
+        "tokens/rank <= 1024, hidden in its supported set)",
+    )
     p.add_argument("--tokens-per-rank", type=int, default=8)
     p.add_argument("--num-experts", type=int, default=256)
     p.add_argument("--top-k", type=int, default=8)
@@ -515,6 +526,7 @@ def _parse() -> Cfg:
         intermediate=a.intermediate,
         warmup=a.warmup,
         iters=a.iters,
+        comm_backend=a.comm_backend,
         out_csv=a.out_csv,
     )
 

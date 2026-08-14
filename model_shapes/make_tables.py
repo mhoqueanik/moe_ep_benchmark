@@ -35,6 +35,14 @@ KERNEL_TO_VARIANT = {
     "fused_moe_nvfp4_trtllm": "fi_split_trtllm",
     "mxfp8_mxfp4_cutedsl": "fi_split_w4a8",
     "mxfp8_mxfp4_cutedsl_packed": "fi_split_w4a8p",
+    "identity": "fi_split_id",
+}
+# Split rows carry a comm_backend column; nixl_ep rows become their own
+# fi_nixl_* variants so a {nccl_ep, nixl_ep} x kernel matrix tabulates.
+_NIXL_VARIANTS = {
+    "fi_split_id": "fi_nixl_id",
+    "fi_split_fp4": "fi_nixl_fp4",
+    "fi_split_w4a8": "fi_nixl_w4a8",
 }
 # Column order and display labels of the emitted tables (matches the variant
 # naming of RUNBOOK_REPRO.md §2a: the CSV keeps the fi_* names). Only the
@@ -51,6 +59,10 @@ VARIANTS = [
     "fi_split_trtllm",
     "fi_split_w4a8",
     "fi_split_w4a8p",
+    "fi_split_id",
+    "fi_nixl_id",
+    "fi_nixl_fp4",
+    "fi_nixl_w4a8",
 ]
 VARIANT_LABELS = {
     "fi_dg": "dg",
@@ -64,6 +76,10 @@ VARIANT_LABELS = {
     "fi_split_trtllm": "split nvfp4 trtllm",
     "fi_split_w4a8": "split w4a8",
     "fi_split_w4a8p": "split w4a8 packed",
+    "fi_split_id": "nccl identity",
+    "fi_nixl_id": "nixl identity",
+    "fi_nixl_fp4": "nixl split nvfp4",
+    "fi_nixl_w4a8": "nixl split w4a8",
 }
 
 
@@ -95,6 +111,10 @@ def main():
                 variant = KERNEL_TO_VARIANT.get(row["compute_kernel"])
                 if variant is None:
                     continue
+                if (row.get("comm_backend") or "").startswith("nixl"):
+                    variant = _NIXL_VARIANTS.get(variant)
+                    if variant is None:
+                        continue
                 geom = (
                     int(row["hidden"]),
                     int(row["inter"]),
