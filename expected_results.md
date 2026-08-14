@@ -270,6 +270,32 @@ per-point ratios on a 2-GPU reference). Accuracy loss in the CSVs: bf16
 ~0.29% rel-L2 (bf16 model math, no quantization error), mxfp8 ~6.4%, the
 nvfp4/fp4 family 20.6-24.9%.
 
+The `split w4a8` / `split w4a8 packed` columns were measured 2026-08-13
+(jobs 2391067-72, CSVs in `model_shapes/results_ep8_w4a8_20260813/`) on the
+flashinfer `split_cutedsl_w4a8` branch (d5ad8f00) with cutlass-dsl 4.6.1.
+They run the dedicated `sm100_mxfp8_mxfp4_bf16_cutedsl` split kernel —
+MXFP8 activations x MXFP4 weights via `cute_dsl_fused_moe_mxfp8_mxfp4`, no
+`MoELayer`, default kernel tactic (no autotune). `packed` additionally
+quantizes BEFORE dispatch and sends the fp8+UE8M0 payload padded to the
+transport's width whitelist (0.57-0.63x the BF16 wire bytes at these
+hiddens), bit-identical output to the unpacked variant. The session reran
+`fi_dg` and `fi_split_fp4` as controls: every shared `dg` cell agrees with
+this table within ~2%, and the split control agrees within ~3% at 512+
+tok/rank; the 8-64 tok/rank split cells swing +/-10-20% between sessions
+(v4_pro split@8: 1741.6 then, 1370.5 now — small-batch split latency is
+noisy), so treat small-batch split comparisons as directional only.
+Brackets use the same-run `dg`. Findings:
+`w4a8` tracks `split nvfp4 cutedsl` at small batch and falls behind at
+512+ tok/rank (mxfp4 grouped-GEMM tactic untuned); `packed` matches
+unpacked within noise at >=512 tok/rank with a 16% faster dispatch stage at
+8192 (695 -> 585 µs on v4_flash), but is slower at 8-64 tok/rank under
+this table's HT protocol — the pre-dispatch quantize launch dominates tiny
+batches. Its target regime is LL decode, where wire bytes bound dispatch;
+an LL sweep is a follow-up. `gpt_oss_120b` stays empty: hidden=inter=2880
+fails the kernel's hidden%128 weight-prep gate (same class of gate as `dg`).
+Accuracy loss in the CSVs: 20.59% — the same synthetic-reconstruction band
+as the rest of the fp4-weight family, not a model-quality number.
+
 **The split path is not competitive at any point measured: 0.07-0.21x of
 `dg` on every shape and token count**, i.e. 5-14x slower, with split-trtllm
 behind split-cutedsl everywhere. The gap is not the NCCL dispatch/combine —
@@ -280,63 +306,63 @@ approaches parity only at 8192 tok/rank; it never beats nvfp4.
 
 **`deepseek_v4_flash`** — hidden 4096, inter 2048, 256 experts, top-6 — the geometry the §1 e2e sweep uses.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm |
-|---|---|---|---|---|---|---|
-| 8 | 108.5 | 121.7 (0.89x) | 171.1 (0.63x) | 336.9 | 832.5 (0.13x) | 1642.2 (0.07x) |
-| 64 | 125.4 | 134.1 (0.94x) | 197.7 (0.63x) | 392.2 | 884.8 (0.14x) | 1922.1 (0.07x) |
-| 512 | 157.8 | 191.4 (0.82x) | 263.2 (0.60x) | 433.7 | 1158.6 (0.14x) | 1643.1 (0.10x) |
-| 2048 | 383.0 | 335.5 (1.14x) | 437.1 (0.88x) | 822.2 | 3979.9 (0.10x) | 4811.5 (0.08x) |
-| 8192 | 1324.1 | 1101.9 (1.20x) | 1364.0 (0.97x) | 2705.9 | 9423.6 (0.14x) | 11777.9 (0.11x) |
+| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm | split w4a8 | split w4a8 packed |
+|---|---|---|---|---|---|---|---|---|
+| 8 | 108.5 | 121.7 (0.89x) | 171.1 (0.63x) | 336.9 | 832.5 (0.13x) | 1642.2 (0.07x) | 928.4 (0.12x) | 1042.7 (0.11x) |
+| 64 | 125.4 | 134.1 (0.94x) | 197.7 (0.63x) | 392.2 | 884.8 (0.14x) | 1922.1 (0.07x) | 968.4 (0.13x) | 1093.7 (0.12x) |
+| 512 | 157.8 | 191.4 (0.82x) | 263.2 (0.60x) | 433.7 | 1158.6 (0.14x) | 1643.1 (0.10x) | 1410.0 (0.11x) | 1484.7 (0.11x) |
+| 2048 | 383.0 | 335.5 (1.14x) | 437.1 (0.88x) | 822.2 | 3979.9 (0.10x) | 4811.5 (0.08x) | 4949.4 (0.08x) | 4880.4 (0.08x) |
+| 8192 | 1324.1 | 1101.9 (1.20x) | 1364.0 (0.97x) | 2705.9 | 9423.6 (0.14x) | 11777.9 (0.11x) | 13437.1 (0.10x) | 13365.1 (0.10x) |
 
 **`deepseek_v4_pro`** — hidden 7168, inter 3072, 384 experts, top-6 — the geometry the §2 e2e sweep uses.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm |
-|---|---|---|---|---|---|---|
-| 8 | 260.2 | 259.1 (1.00x) | 467.9 (0.56x) | 1032.7 | 1741.6 (0.15x) | 2636.0 (0.10x) |
-| 64 | 329.7 | 334.8 (0.98x) | 646.1 (0.51x) | 1449.0 | 1631.9 (0.20x) | 2478.1 (0.13x) |
-| 512 | 374.8 | 394.3 (0.95x) | 732.3 (0.51x) | 1580.0 | 1838.3 (0.20x) | 2526.9 (0.15x) |
-| 2048 | 884.3 | 618.9 (1.43x) | 1166.4 (0.76x) | 2434.1 | 6317.2 (0.14x) | 7631.7 (0.12x) |
-| 8192 | 3176.0 | 1890.2 (1.68x) | 3552.3 (0.89x) | 7117.0 | 19984.6 (0.16x) | 22681.1 (0.14x) |
+| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm | split w4a8 | split w4a8 packed |
+|---|---|---|---|---|---|---|---|---|
+| 8 | 260.2 | 259.1 (1.00x) | 467.9 (0.56x) | 1032.7 | 1741.6 (0.15x) | 2636.0 (0.10x) | 1424.5 (0.18x) | 1959.0 (0.13x) |
+| 64 | 329.7 | 334.8 (0.98x) | 646.1 (0.51x) | 1449.0 | 1631.9 (0.20x) | 2478.1 (0.13x) | 1716.3 (0.19x) | 2247.7 (0.15x) |
+| 512 | 374.8 | 394.3 (0.95x) | 732.3 (0.51x) | 1580.0 | 1838.3 (0.20x) | 2526.9 (0.15x) | 2326.0 (0.16x) | 2356.6 (0.16x) |
+| 2048 | 884.3 | 618.9 (1.43x) | 1166.4 (0.76x) | 2434.1 | 6317.2 (0.14x) | 7631.7 (0.12x) | 8096.2 (0.11x) | 7907.6 (0.12x) |
+| 8192 | 3176.0 | 1890.2 (1.68x) | 3552.3 (0.89x) | 7117.0 | 19984.6 (0.16x) | 22681.1 (0.14x) | 27969.3 (0.12x) | 27637.4 (0.12x) |
 
 **`deepseek_v3`** — hidden 7168, inter 2048, 256 experts, top-8.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm |
-|---|---|---|---|---|---|---|
-| 8 | 170.6 | 171.1 (1.00x) | 275.6 (0.62x) | 633.9 | 1676.0 (0.10x) | 2122.1 (0.08x) |
-| 64 | 184.4 | 185.2 (1.00x) | 306.2 (0.60x) | 732.3 | 1647.7 (0.11x) | 1831.6 (0.10x) |
-| 512 | 278.5 | 267.2 (1.04x) | 445.4 (0.63x) | 805.9 | 1673.1 (0.17x) | 2277.2 (0.12x) |
-| 2048 | 803.9 | 576.4 (1.39x) | 980.5 (0.82x) | 1931.7 | 6026.5 (0.13x) | 7186.4 (0.11x) |
-| 8192 | 3056.1 | 2021.3 (1.51x) | 3256.8 (0.94x) | 6504.4 | 18715.2 (0.16x) | 21387.2 (0.14x) |
+| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm | split w4a8 | split w4a8 packed |
+|---|---|---|---|---|---|---|---|---|
+| 8 | 170.6 | 171.1 (1.00x) | 275.6 (0.62x) | 633.9 | 1676.0 (0.10x) | 2122.1 (0.08x) | 1450.6 (0.12x) | 1939.8 (0.09x) |
+| 64 | 184.4 | 185.2 (1.00x) | 306.2 (0.60x) | 732.3 | 1647.7 (0.11x) | 1831.6 (0.10x) | 1560.1 (0.12x) | 2049.4 (0.09x) |
+| 512 | 278.5 | 267.2 (1.04x) | 445.4 (0.63x) | 805.9 | 1673.1 (0.17x) | 2277.2 (0.12x) | 2124.9 (0.13x) | 2159.7 (0.13x) |
+| 2048 | 803.9 | 576.4 (1.39x) | 980.5 (0.82x) | 1931.7 | 6026.5 (0.13x) | 7186.4 (0.11x) | 7755.7 (0.10x) | 7584.7 (0.10x) |
+| 8192 | 3056.1 | 2021.3 (1.51x) | 3256.8 (0.94x) | 6504.4 | 18715.2 (0.16x) | 21387.2 (0.14x) | 26416.9 (0.12x) | 26429.0 (0.12x) |
 
 **`kimi_k2_6`** — hidden 7168, inter 2048, 384 experts, top-8.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm |
-|---|---|---|---|---|---|---|
-| 8 | 207.3 | 210.0 (0.99x) | 361.5 (0.57x) | 832.5 | 1350.0 (0.15x) | 2419.1 (0.09x) |
-| 64 | 253.8 | 246.7 (1.03x) | 439.4 (0.58x) | 1047.6 | 1806.4 (0.14x) | 1879.3 (0.14x) |
-| 512 | 314.2 | 320.4 (0.98x) | 529.4 (0.59x) | 1145.9 | 1716.8 (0.18x) | 2347.9 (0.13x) |
-| 2048 | 813.2 | 619.6 (1.31x) | 1082.4 (0.75x) | 2164.7 | 6078.9 (0.13x) | 7221.1 (0.11x) |
-| 8192 | 3185.8 | 2069.5 (1.54x) | 3469.3 (0.92x) | 6678.0 | 19153.0 (0.17x) | 21391.3 (0.15x) |
+| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm | split w4a8 | split w4a8 packed |
+|---|---|---|---|---|---|---|---|---|
+| 8 | 207.3 | 210.0 (0.99x) | 361.5 (0.57x) | 832.5 | 1350.0 (0.15x) | 2419.1 (0.09x) | 1451.9 (0.14x) | 1906.0 (0.11x) |
+| 64 | 253.8 | 246.7 (1.03x) | 439.4 (0.58x) | 1047.6 | 1806.4 (0.14x) | 1879.3 (0.14x) | 1622.5 (0.16x) | 2128.6 (0.12x) |
+| 512 | 314.2 | 320.4 (0.98x) | 529.4 (0.59x) | 1145.9 | 1716.8 (0.18x) | 2347.9 (0.13x) | 2150.4 (0.15x) | 2182.5 (0.14x) |
+| 2048 | 813.2 | 619.6 (1.31x) | 1082.4 (0.75x) | 2164.7 | 6078.9 (0.13x) | 7221.1 (0.11x) | 7711.8 (0.11x) | 7625.9 (0.11x) |
+| 8192 | 3185.8 | 2069.5 (1.54x) | 3469.3 (0.92x) | 6678.0 | 19153.0 (0.17x) | 21391.3 (0.15x) | 26691.1 (0.12x) | 26676.4 (0.12x) |
 
 **`qwen3_5_397b`** — hidden 4096, inter 1024, 512 experts, top-10.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm |
-|---|---|---|---|---|---|---|
-| 8 | 112.7 | 124.0 (0.91x) | 181.1 (0.62x) | 349.2 | 841.8 (0.13x) | 1594.5 (0.07x) |
-| 64 | 131.1 | 144.2 (0.91x) | 211.3 (0.62x) | 414.7 | 912.2 (0.14x) | 1370.1 (0.10x) |
-| 512 | 194.7 | 209.4 (0.93x) | 312.3 (0.62x) | 453.6 | 1198.7 (0.16x) | 2233.8 (0.09x) |
-| 2048 | 550.4 | 465.8 (1.18x) | 521.3 (1.06x) | 1023.9 | 4322.5 (0.13x) | 4867.8 (0.11x) |
-| 8192 | 2018.9 | 1622.5 (1.24x) | 1750.0 (1.15x) | 3782.8 | 9771.3 (0.21x) | 12108.0 (0.17x) |
+| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm | split w4a8 | split w4a8 packed |
+|---|---|---|---|---|---|---|---|---|
+| 8 | 112.7 | 124.0 (0.91x) | 181.1 (0.62x) | 349.2 | 841.8 (0.13x) | 1594.5 (0.07x) | 937.9 (0.12x) | 1042.2 (0.11x) |
+| 64 | 131.1 | 144.2 (0.91x) | 211.3 (0.62x) | 414.7 | 912.2 (0.14x) | 1370.1 (0.10x) | 999.0 (0.13x) | 1100.3 (0.12x) |
+| 512 | 194.7 | 209.4 (0.93x) | 312.3 (0.62x) | 453.6 | 1198.7 (0.16x) | 2233.8 (0.09x) | 1422.0 (0.14x) | 1487.4 (0.13x) |
+| 2048 | 550.4 | 465.8 (1.18x) | 521.3 (1.06x) | 1023.9 | 4322.5 (0.13x) | 4867.8 (0.11x) | 4933.3 (0.11x) | 4842.1 (0.11x) |
+| 8192 | 2018.9 | 1622.5 (1.24x) | 1750.0 (1.15x) | 3782.8 | 9771.3 (0.21x) | 12108.0 (0.17x) | 13321.3 (0.15x) | 13232.3 (0.15x) |
 
 **`gpt_oss_120b`** — hidden 2880, inter 2880, 128 experts, top-4.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm |
-|---|---|---|---|---|---|---|
-| 8 | — | 93.1 | 130.0 | — | — | — |
-| 64 | — | 95.2 | 132.2 | — | — | — |
-| 512 | — | 132.1 | 167.0 | — | — | — |
-| 2048 | — | 240.8 | 279.6 | — | — | — |
-| 8192 | — | 697.3 | 815.1 | — | — | — |
+| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm | split w4a8 | split w4a8 packed |
+|---|---|---|---|---|---|---|---|---|
+| 8 | — | 93.1 | 130.0 | — | — | — | — | — |
+| 64 | — | 95.2 | 132.2 | — | — | — | — | — |
+| 512 | — | 132.1 | 167.0 | — | — | — | — | — |
+| 2048 | — | 240.8 | 279.6 | — | — | — | — | — |
+| 8192 | — | 697.3 | 815.1 | — | — | — | — | — |
 
 `gpt_oss_120b`'s empty split columns are expected, like its `dg` column: the
 split path's nvfp4 weight prep rejects the shape with

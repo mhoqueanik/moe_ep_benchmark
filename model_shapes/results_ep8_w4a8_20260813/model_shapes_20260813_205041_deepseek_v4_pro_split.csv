@@ -1,0 +1,16 @@
+path,algo,comm_backend,compute_kernel,quant_timed,weight_dtype,input_dtype,act_compute_dtype,tokens_per_rank,gpus,num_experts,top_k,hidden,inter,e2e_us_p50,e2e_us_min,e2e_us_max,tok_s,dispatch_us_p50,compute_us_p50,combine_us_p50,acc_loss_pct
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_cutedsl,yes,nvfp4_block16,bfloat16,nvfp4_block16,8,8,384,6,7168,3072,1370.5,867.5,1972.2,46699.5,101.5,993.1,92.1,23.161
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_cutedsl,yes,nvfp4_block16,bfloat16,nvfp4_block16,64,8,384,6,7168,3072,1540.7,1103.2,1923.4,332308.7,158.0,791.5,422.9,23.142
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_cutedsl,yes,nvfp4_block16,bfloat16,nvfp4_block16,512,8,384,6,7168,3072,1853.7,1810.1,1951.6,2209582.3,170.1,1437.9,107.1,23.162
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_cutedsl,yes,nvfp4_block16,bfloat16,nvfp4_block16,2048,8,384,6,7168,3072,6310.7,6008.0,6544.3,2596217.2,341.0,3977.7,294.4,23.166
+fi_split,ht,nccl_ep_ht_flat,fused_moe_nvfp4_cutedsl,yes,nvfp4_block16,bfloat16,nvfp4_block16,8192,8,384,6,7168,3072,19928.8,19127.6,20642.5,3288515.0,1127.9,14401.0,1653.2,23.165
+fi_split,ht,nccl_ep_ht_flat,mxfp8_mxfp4_cutedsl,yes,mxfp4_block32,bfloat16,mxfp8_block32,8,8,384,6,7168,3072,1424.5,950.2,2204.6,44928.7,94.7,1022.7,75.3,20.567
+fi_split,ht,nccl_ep_ht_flat,mxfp8_mxfp4_cutedsl,yes,mxfp4_block32,bfloat16,mxfp8_block32,64,8,384,6,7168,3072,1716.3,1273.7,2266.3,298321.0,157.3,1383.0,43.6,20.611
+fi_split,ht,nccl_ep_ht_flat,mxfp8_mxfp4_cutedsl,yes,mxfp4_block32,bfloat16,mxfp8_block32,512,8,384,6,7168,3072,2326.0,2310.3,2767.6,1760987.3,171.0,1919.3,123.4,20.646
+fi_split,ht,nccl_ep_ht_flat,mxfp8_mxfp4_cutedsl,yes,mxfp4_block32,bfloat16,mxfp8_block32,2048,8,384,6,7168,3072,8096.2,7912.4,8423.9,2023663.4,351.7,5782.9,297.4,20.647
+fi_split,ht,nccl_ep_ht_flat,mxfp8_mxfp4_cutedsl,yes,mxfp4_block32,bfloat16,mxfp8_block32,8192,8,384,6,7168,3072,27969.3,27024.0,28912.9,2343136.8,1093.6,21939.0,2521.3,20.649
+fi_split,ht,nccl_ep_ht_flat,mxfp8_mxfp4_cutedsl_packed,yes,mxfp4_block32,bfloat16,mxfp8_block32,8,8,384,6,7168,3072,1959.0,1083.6,2221.3,32669.6,213.8,693.7,88.6,20.567
+fi_split,ht,nccl_ep_ht_flat,mxfp8_mxfp4_cutedsl_packed,yes,mxfp4_block32,bfloat16,mxfp8_block32,64,8,384,6,7168,3072,2247.7,1337.8,2399.4,227792.1,242.1,1051.0,65.1,20.611
+fi_split,ht,nccl_ep_ht_flat,mxfp8_mxfp4_cutedsl_packed,yes,mxfp4_block32,bfloat16,mxfp8_block32,512,8,384,6,7168,3072,2356.6,2334.8,2459.2,1738103.1,241.4,1879.4,112.2,20.646
+fi_split,ht,nccl_ep_ht_flat,mxfp8_mxfp4_cutedsl_packed,yes,mxfp4_block32,bfloat16,mxfp8_block32,2048,8,384,6,7168,3072,7907.6,7677.4,8114.8,2071939.2,354.4,5562.3,315.9,20.647
+fi_split,ht,nccl_ep_ht_flat,mxfp8_mxfp4_cutedsl_packed,yes,mxfp4_block32,bfloat16,mxfp8_block32,8192,8,384,6,7168,3072,27637.4,26929.9,28745.3,2371278.8,895.0,22098.6,2322.8,20.649
