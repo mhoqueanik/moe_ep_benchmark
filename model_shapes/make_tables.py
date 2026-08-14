@@ -33,6 +33,8 @@ KERNEL_TO_VARIANT = {
     # (default e2e_pipelined) — the speedup-vs-dg ratio crosses methodologies.
     "fused_moe_nvfp4_cutedsl": "fi_split_fp4",
     "fused_moe_nvfp4_trtllm": "fi_split_trtllm",
+    "mxfp8_mxfp4_cutedsl": "fi_split_w4a8",
+    "mxfp8_mxfp4_cutedsl_packed": "fi_split_w4a8p",
 }
 # Column order and display labels of the emitted tables (matches the variant
 # naming of RUNBOOK_REPRO.md §2a: the CSV keeps the fi_* names). Only the
@@ -47,6 +49,8 @@ VARIANTS = [
     "fi_combine_fp8",
     "fi_split_fp4",
     "fi_split_trtllm",
+    "fi_split_w4a8",
+    "fi_split_w4a8p",
 ]
 VARIANT_LABELS = {
     "fi_dg": "dg",
@@ -58,6 +62,8 @@ VARIANT_LABELS = {
     "fi_combine_fp8": "+combine_mxfp8",
     "fi_split_fp4": "split nvfp4 cutedsl",
     "fi_split_trtllm": "split nvfp4 trtllm",
+    "fi_split_w4a8": "split w4a8",
+    "fi_split_w4a8p": "split w4a8 packed",
 }
 
 

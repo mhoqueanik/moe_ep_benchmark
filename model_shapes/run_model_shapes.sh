@@ -83,6 +83,16 @@ run_variant () {
                 || echo "[warn] shape=${SHAPE_NAME} variant=${variant} tokens/rank=${TOKENS} failed (continuing)"
             return
             ;;
+        fi_split_w4a8|fi_split_w4a8p)
+            # sm100_mxfp8_mxfp4_bf16_cutedsl split kernel: MXFP8 acts x MXFP4
+            # weights; the p variant sends the MXFP8-packed dispatch payload.
+            local w4a8_quant=w4a8
+            [ "$variant" = "fi_split_w4a8p" ] && w4a8_quant=w4a8_packed
+            CSV="$CSV_SPLIT" ALGO="$SPLIT_ALGO" \
+                run_fi_split "$w4a8_quant" \
+                || echo "[warn] shape=${SHAPE_NAME} variant=${variant} tokens/rank=${TOKENS} failed (continuing)"
+            return
+            ;;
         *) echo "[error] unknown variant: $variant"; return 1 ;;
     esac
     run_mega "$backend" \

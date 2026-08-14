@@ -20,10 +20,13 @@ Launch (8 GPUs, Blackwell sm_100+):
         --tokens-per-rank 8 --num-experts 256 --top-k 8 \\
         --hidden 7168 --intermediate 2048
 
-Variants: --quant {bf16, nvfp4, identity}; identity times the comm-only
-dispatch/combine roundtrip (no expert compute).  --algorithm {ll, ht} selects
-the NCCL-EP algorithm; --layout {expert_major, rank_major} the LL receive
-layout (HT always uses FLAT).
+Variants: --quant {bf16, nvfp4, w4a8, w4a8_packed, identity}; identity times
+the comm-only dispatch/combine roundtrip (no expert compute).  w4a8 is the
+sm100_mxfp8_mxfp4_bf16_cutedsl split kernel (MXFP8 activations x MXFP4
+weights); w4a8_packed additionally quantizes BEFORE dispatch and sends the
+packed fp8+scale payload on the wire (mxfp8_dispatch=True).  --algorithm
+{ll, ht} selects the NCCL-EP algorithm; --layout {expert_major, rank_major}
+the LL receive layout (HT always uses FLAT).
 """
 
 from __future__ import annotations
@@ -46,7 +49,7 @@ class Cfg:
     world_size: int
     algorithm: str  # ll | ht
     layout: str  # expert_major | rank_major (ll only; ht forces FLAT)
-    quant: str  # bf16 | nvfp4 | identity
+    quant: str  # bf16 | nvfp4 | w4a8 | w4a8_packed | identity
     tokens_per_rank: int
     num_experts: int
     top_k: int
@@ -256,6 +259,21 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
         layer_weights = dummy_moe_weights(
             num_local_experts=num_local, hidden=cfg.hidden, device=device
         )
+    elif cfg.quant in ("w4a8", "w4a8_packed"):
+        # Dedicated split kernel backend (no MoELayer): MXFP8 activations x
+        # MXFP4 weights via cute_dsl_fused_moe_mxfp8_mxfp4. w4a8 quantizes
+        # after dispatch (bf16 wire); w4a8_packed quantizes before dispatch
+        # and sends the packed fp8+UE8M0 payload (padded to the transport's
+        # width whitelist — see packed_dispatch_width in the backend).
+        from flashinfer.moe_ep import Sm100_Mxfp8_Mxfp4_Bf16_Cutedsl_SplitConfig
+
+        layer_backend = SplitConfig(
+            comm=NcclEpConfig(),
+            kernel=Sm100_Mxfp8_Mxfp4_Bf16_Cutedsl_SplitConfig(
+                mxfp8_dispatch=(cfg.quant == "w4a8_packed")
+            ),
+        )
+        layer_weights = MoEWeightPack(w13=problem.w13_bf16, w2=problem.w2_bf16)
     else:
         layer_backend = SplitConfig(
             comm=NcclEpConfig(),
@@ -378,6 +396,14 @@ def _worker(pgi: ProcessGroupInfo, cfg: Cfg):
                 weight_dtype = "nvfp4_block16"
                 act_compute_dtype = "nvfp4_block16"
                 quant_timed = "yes"  # act quant runs inside the compute stage
+            elif cfg.quant in ("w4a8", "w4a8_packed"):
+                suffix = "_packed" if cfg.quant == "w4a8_packed" else ""
+                compute_kernel = f"mxfp8_mxfp4_cutedsl{suffix}"
+                weight_dtype = "mxfp4_block32"
+                act_compute_dtype = "mxfp8_block32"
+                # w4a8: act quant inside the compute stage; w4a8_packed: act
+                # quant runs pre-dispatch (inside the dispatch stage timing).
+                quant_timed = "yes"
             else:
                 compute_kernel = "fused_moe_bf16"
                 weight_dtype = "bfloat16"
@@ -462,10 +488,11 @@ def _parse() -> Cfg:
     )
     p.add_argument(
         "--quant",
-        choices=["bf16", "nvfp4", "identity"],
+        choices=["bf16", "nvfp4", "w4a8", "w4a8_packed", "identity"],
         default="bf16",
-        help="inner kernel: fused_moe at bf16/nvfp4, or the comm-only "
-        "identity baseline",
+        help="inner kernel: fused_moe at bf16/nvfp4, the W4A8 "
+        "mxfp8_mxfp4_cutedsl split kernel (w4a8_packed = MXFP8-quantized "
+        "dispatch payload), or the comm-only identity baseline",
     )
     p.add_argument("--tokens-per-rank", type=int, default=8)
     p.add_argument("--num-experts", type=int, default=256)
