@@ -368,16 +368,15 @@ sessions — read small-batch cross-column deltas as directional.
 cap 8 — runbook); `gpt_oss_120b` (hidden 2880) runs only the identity
 kernel (nvfp4/w4a8 geometry gates) and was not swept at LL.
 
-One table per geometry: rows are the tokens/rank sweep (as in the §1/§2
-e2e tables), columns are transport x protocol x kernel. Column legend —
-`id` = identity (comm-only roundtrip), `fp4t` = `fused_moe` nvfp4
-trtllm-gen, `fp4c` = `fused_moe` nvfp4 CuTeDSL, `w4a8` =
-`sm100_mxfp8_mxfp4_bf16_cutedsl`, `w4a8p` = same with `mxfp8_dispatch=True`
-(packed MXFP8 dispatch payload, bit-identical output, nccl_ep only). `—` =
-not measured or not supported: LL was swept at 8-512 tok/rank only (nixl_ep
-caps `max_tokens_per_rank` at 1024); `fp4t` was measured at HT only;
-qwen3_5's nccl LL cells hit the top-k cap; gpt_oss runs only the identity
-kernel (geometry gates) and was not swept at LL.
+The identity (comm-only) transport comparison comes first; then one
+kernel table per geometry — rows are the tokens/rank sweep (as in the
+§1/§2 e2e tables), grouped header transport > protocol > kernel. Kernel
+legend — `fp4t` = `fused_moe` nvfp4 trtllm-gen (measured at HT only),
+`fp4c` = `fused_moe` nvfp4 CuTeDSL, `w4a8` =
+`sm100_mxfp8_mxfp4_bf16_cutedsl`, `w4a8p` = same with
+`mxfp8_dispatch=True` (packed MXFP8 dispatch payload, bit-identical
+output, nccl_ep only). **Bold** marks the fastest cell in each row;
+every `—` is explained under its table.
 
 Transport findings (from the LL columns): nixl_ep's comm is cheaper at
 decode batch sizes — identity@8 82-128 µs vs nccl's 113-125 µs, and nccl's
@@ -387,65 +386,150 @@ hidden-7168 shapes, 4.1-6.1x; visible in HT too: ~800 µs @64) — carrying a
 (>90% of e2e) and the transports converge. nixl_ep also handles top-10
 routing, which nccl_ep LL cannot.
 
+#### identity — comm-only transport comparison
+
+The `identity` kernel is a pure dispatch/combine roundtrip (no expert
+compute), so this table is the transport comparison per geometry and batch
+size: **bold** = fastest comm option for that row. LL wins every decode-size
+row where it exists; nixl_ep wins most LL rows at 8-64 tok/rank (and avoids
+nccl's @64 combine anomaly — 560-599 µs vs 87-141 µs on the hidden-7168
+shapes, visible in HT too at ~800 µs); nccl_ep HT is the only option at
+2048+ tok/rank. LL cells are `—` at 2048/8192 (LL swept 8-512; nixl_ep caps
+`max_tokens_per_rank` at 1024) and gpt_oss was measured at HT only.
+
+| shape | tok/rank | nccl_ep HT | nccl_ep LL | nixl_ep LL |
+|---|---|---|---|---|
+| deepseek_v4_flash | 8 | 315.9 | **113.0** | 127.8 |
+| deepseek_v4_flash | 64 | 315.2 | 144.2 | **87.2** |
+| deepseek_v4_flash | 512 | 315.9 | 186.9 | **165.0** |
+| deepseek_v4_flash | 2048 | **1973.5** | — | — |
+| deepseek_v4_flash | 8192 | **3154.8** | — | — |
+| deepseek_v4_pro | 8 | 229.1 | 124.4 | **82.7** |
+| deepseek_v4_pro | 64 | 799.2 | 599.4 | **98.4** |
+| deepseek_v4_pro | 512 | 367.3 | **239.0** | 258.6 |
+| deepseek_v4_pro | 2048 | **2193.3** | — | — |
+| deepseek_v4_pro | 8192 | **3953.8** | — | — |
+| deepseek_v3 | 8 | 324.3 | 119.6 | **82.4** |
+| deepseek_v3 | 64 | 801.7 | 560.4 | **100.9** |
+| deepseek_v3 | 512 | 389.2 | 273.8 | **268.1** |
+| deepseek_v3 | 2048 | **2258.4** | — | — |
+| deepseek_v3 | 8192 | **4079.8** | — | — |
+| kimi_k2_6 | 8 | 331.3 | 117.6 | **85.8** |
+| kimi_k2_6 | 64 | 809.4 | 582.0 | **140.9** |
+| kimi_k2_6 | 512 | 388.0 | **275.9** | 301.9 |
+| kimi_k2_6 | 2048 | **2256.7** | — | — |
+| kimi_k2_6 | 8192 | **4314.7** | — | — |
+| qwen3_5_397b | 8 | 212.0 | — | **84.4** |
+| qwen3_5_397b | 64 | 342.8 | — | **140.7** |
+| qwen3_5_397b | 512 | 377.4 | — | **226.0** |
+| qwen3_5_397b | 2048 | **2183.2** | — | — |
+| qwen3_5_397b | 8192 | **3760.3** | — | — |
+| gpt_oss_120b | 8 | **318.8** | — | — |
+| gpt_oss_120b | 64 | **286.7** | — | — |
+| gpt_oss_120b | 512 | **298.0** | — | — |
+| gpt_oss_120b | 2048 | **436.0** | — | — |
+| gpt_oss_120b | 8192 | **2578.8** | — | — |
+
 #### `deepseek_v4_flash` — hidden 4096, inter 2048, 256 experts, top-6 — the geometry the §1 e2e sweep uses
 
-| tok/rank | nccl HT id | nccl HT fp4t | nccl HT fp4c | nccl HT w4a8 | nccl HT w4a8p | nccl LL id | nccl LL fp4c | nccl LL w4a8 | nccl LL w4a8p | nixl LL id | nixl LL fp4c | nixl LL w4a8 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 8 | 315.9 | 1642.2 | 832.5 | 928.4 | 1042.7 | 113.0 | 683.0 | 742.5 | 840.7 | 127.8 | 596.1 | 666.6 |
-| 64 | 315.2 | 1922.1 | 884.8 | 968.4 | 1093.7 | 144.2 | 845.6 | 974.9 | 1073.0 | 87.2 | 787.0 | 906.0 |
-| 512 | 315.9 | 1643.1 | 1158.6 | 1410.0 | 1484.7 | 186.9 | 2910.6 | 4063.7 | 4457.2 | 165.0 | 2883.9 | 4037.5 |
-| 2048 | 1973.5 | 4811.5 | 3979.9 | 4949.4 | 4880.4 | — | — | — | — | — | — | — |
-| 8192 | 3154.8 | 11777.9 | 9423.6 | 13437.1 | 13365.1 | — | — | — | — | — | — | — |
+<table>
+<thead>
+<tr><th rowspan="3">tok/rank</th><th colspan="7">nccl_ep</th><th colspan="2">nixl_ep</th></tr>
+<tr><th colspan="4">HT</th><th colspan="3">LL</th><th colspan="2">LL</th></tr>
+<tr><th>fp4t</th><th>fp4c</th><th>w4a8</th><th>w4a8p</th><th>fp4c</th><th>w4a8</th><th>w4a8p</th><th>fp4c</th><th>w4a8</th></tr>
+</thead>
+<tbody>
+<tr><td>8</td><td>1642.2</td><td>832.5</td><td>928.4</td><td>1042.7</td><td>683.0</td><td>742.5</td><td>840.7</td><td><b>596.1</b></td><td>666.6</td></tr>
+<tr><td>64</td><td>1922.1</td><td>884.8</td><td>968.4</td><td>1093.7</td><td>845.6</td><td>974.9</td><td>1073.0</td><td><b>787.0</b></td><td>906.0</td></tr>
+<tr><td>512</td><td>1643.1</td><td><b>1158.6</b></td><td>1410.0</td><td>1484.7</td><td>2910.6</td><td>4063.7</td><td>4457.2</td><td>2883.9</td><td>4037.5</td></tr>
+<tr><td>2048</td><td>4811.5</td><td><b>3979.9</b></td><td>4949.4</td><td>4880.4</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>8192</td><td>11777.9</td><td><b>9423.6</b></td><td>13437.1</td><td>13365.1</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+</tbody>
+</table>
+
+> LL columns are `—` at 2048/8192 tok/rank: the LL sweep runs 8-512 (nixl_ep caps `max_tokens_per_rank` at 1024; nccl_ep LL was swept at the same points for comparability).
 
 #### `deepseek_v4_pro` — hidden 7168, inter 3072, 384 experts, top-6 — the geometry the §2 e2e sweep uses
 
-| tok/rank | nccl HT id | nccl HT fp4t | nccl HT fp4c | nccl HT w4a8 | nccl HT w4a8p | nccl LL id | nccl LL fp4c | nccl LL w4a8 | nccl LL w4a8p | nixl LL id | nixl LL fp4c | nixl LL w4a8 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 8 | 229.1 | 2636.0 | 1741.6 | 1424.5 | 1959.0 | 124.4 | 851.3 | 926.1 | 1010.7 | 82.7 | 807.1 | 871.3 |
-| 64 | 799.2 | 2478.1 | 1631.9 | 1716.3 | 2247.7 | 599.4 | 1613.3 | 2003.6 | 2066.6 | 98.4 | 1678.5 | 1981.6 |
-| 512 | 367.3 | 2526.9 | 1838.3 | 2326.0 | 2356.6 | 239.0 | 9480.9 | 14063.7 | 14523.2 | 258.6 | 9506.8 | 13937.1 |
-| 2048 | 2193.3 | 7631.7 | 6317.2 | 8096.2 | 7907.6 | — | — | — | — | — | — | — |
-| 8192 | 3953.8 | 22681.1 | 19984.6 | 27969.3 | 27637.4 | — | — | — | — | — | — | — |
+<table>
+<thead>
+<tr><th rowspan="3">tok/rank</th><th colspan="7">nccl_ep</th><th colspan="2">nixl_ep</th></tr>
+<tr><th colspan="4">HT</th><th colspan="3">LL</th><th colspan="2">LL</th></tr>
+<tr><th>fp4t</th><th>fp4c</th><th>w4a8</th><th>w4a8p</th><th>fp4c</th><th>w4a8</th><th>w4a8p</th><th>fp4c</th><th>w4a8</th></tr>
+</thead>
+<tbody>
+<tr><td>8</td><td>2636.0</td><td>1741.6</td><td>1424.5</td><td>1959.0</td><td>851.3</td><td>926.1</td><td>1010.7</td><td><b>807.1</b></td><td>871.3</td></tr>
+<tr><td>64</td><td>2478.1</td><td>1631.9</td><td>1716.3</td><td>2247.7</td><td><b>1613.3</b></td><td>2003.6</td><td>2066.6</td><td>1678.5</td><td>1981.6</td></tr>
+<tr><td>512</td><td>2526.9</td><td><b>1838.3</b></td><td>2326.0</td><td>2356.6</td><td>9480.9</td><td>14063.7</td><td>14523.2</td><td>9506.8</td><td>13937.1</td></tr>
+<tr><td>2048</td><td>7631.7</td><td><b>6317.2</b></td><td>8096.2</td><td>7907.6</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>8192</td><td>22681.1</td><td><b>19984.6</b></td><td>27969.3</td><td>27637.4</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+</tbody>
+</table>
+
+> LL columns are `—` at 2048/8192 tok/rank: the LL sweep runs 8-512 (nixl_ep caps `max_tokens_per_rank` at 1024; nccl_ep LL was swept at the same points for comparability).
 
 #### `deepseek_v3` — hidden 7168, inter 2048, 256 experts, top-8
 
-| tok/rank | nccl HT id | nccl HT fp4t | nccl HT fp4c | nccl HT w4a8 | nccl HT w4a8p | nccl LL id | nccl LL fp4c | nccl LL w4a8 | nccl LL w4a8p | nixl LL id | nixl LL fp4c | nixl LL w4a8 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 8 | 324.3 | 2122.1 | 1676.0 | 1450.6 | 1939.8 | 119.6 | 688.1 | 756.1 | 840.5 | 82.4 | 628.1 | 696.4 |
-| 64 | 801.7 | 1831.6 | 1647.7 | 1560.1 | 2049.4 | 560.4 | 1370.2 | 1549.8 | 1775.6 | 100.9 | 1024.4 | 1162.8 |
-| 512 | 389.2 | 2277.2 | 1673.1 | 2124.9 | 2159.7 | 273.8 | 4802.0 | 6648.3 | 7251.3 | 268.1 | 4757.2 | 6498.1 |
-| 2048 | 2258.4 | 7186.4 | 6026.5 | 7755.7 | 7584.7 | — | — | — | — | — | — | — |
-| 8192 | 4079.8 | 21387.2 | 18715.2 | 26416.9 | 26429.0 | — | — | — | — | — | — | — |
+<table>
+<thead>
+<tr><th rowspan="3">tok/rank</th><th colspan="7">nccl_ep</th><th colspan="2">nixl_ep</th></tr>
+<tr><th colspan="4">HT</th><th colspan="3">LL</th><th colspan="2">LL</th></tr>
+<tr><th>fp4t</th><th>fp4c</th><th>w4a8</th><th>w4a8p</th><th>fp4c</th><th>w4a8</th><th>w4a8p</th><th>fp4c</th><th>w4a8</th></tr>
+</thead>
+<tbody>
+<tr><td>8</td><td>2122.1</td><td>1676.0</td><td>1450.6</td><td>1939.8</td><td>688.1</td><td>756.1</td><td>840.5</td><td><b>628.1</b></td><td>696.4</td></tr>
+<tr><td>64</td><td>1831.6</td><td>1647.7</td><td>1560.1</td><td>2049.4</td><td>1370.2</td><td>1549.8</td><td>1775.6</td><td><b>1024.4</b></td><td>1162.8</td></tr>
+<tr><td>512</td><td>2277.2</td><td><b>1673.1</b></td><td>2124.9</td><td>2159.7</td><td>4802.0</td><td>6648.3</td><td>7251.3</td><td>4757.2</td><td>6498.1</td></tr>
+<tr><td>2048</td><td>7186.4</td><td><b>6026.5</b></td><td>7755.7</td><td>7584.7</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>8192</td><td>21387.2</td><td><b>18715.2</b></td><td>26416.9</td><td>26429.0</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+</tbody>
+</table>
+
+> LL columns are `—` at 2048/8192 tok/rank: the LL sweep runs 8-512 (nixl_ep caps `max_tokens_per_rank` at 1024; nccl_ep LL was swept at the same points for comparability).
 
 #### `kimi_k2_6` — hidden 7168, inter 2048, 384 experts, top-8
 
-| tok/rank | nccl HT id | nccl HT fp4t | nccl HT fp4c | nccl HT w4a8 | nccl HT w4a8p | nccl LL id | nccl LL fp4c | nccl LL w4a8 | nccl LL w4a8p | nixl LL id | nixl LL fp4c | nixl LL w4a8 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 8 | 331.3 | 2419.1 | 1350.0 | 1451.9 | 1906.0 | 117.6 | 710.6 | 803.2 | 899.5 | 85.8 | 664.8 | 762.2 |
-| 64 | 809.4 | 1879.3 | 1806.4 | 1622.5 | 2128.6 | 582.0 | 1560.5 | 1618.4 | 1792.9 | 140.9 | 1307.2 | 1561.5 |
-| 512 | 388.0 | 2347.9 | 1716.8 | 2150.4 | 2182.5 | 275.9 | 7103.0 | 9961.7 | 10836.0 | 301.9 | 6971.7 | 9855.9 |
-| 2048 | 2256.7 | 7221.1 | 6078.9 | 7711.8 | 7625.9 | — | — | — | — | — | — | — |
-| 8192 | 4314.7 | 21391.3 | 19153.0 | 26691.1 | 26676.4 | — | — | — | — | — | — | — |
+<table>
+<thead>
+<tr><th rowspan="3">tok/rank</th><th colspan="7">nccl_ep</th><th colspan="2">nixl_ep</th></tr>
+<tr><th colspan="4">HT</th><th colspan="3">LL</th><th colspan="2">LL</th></tr>
+<tr><th>fp4t</th><th>fp4c</th><th>w4a8</th><th>w4a8p</th><th>fp4c</th><th>w4a8</th><th>w4a8p</th><th>fp4c</th><th>w4a8</th></tr>
+</thead>
+<tbody>
+<tr><td>8</td><td>2419.1</td><td>1350.0</td><td>1451.9</td><td>1906.0</td><td>710.6</td><td>803.2</td><td>899.5</td><td><b>664.8</b></td><td>762.2</td></tr>
+<tr><td>64</td><td>1879.3</td><td>1806.4</td><td>1622.5</td><td>2128.6</td><td>1560.5</td><td>1618.4</td><td>1792.9</td><td><b>1307.2</b></td><td>1561.5</td></tr>
+<tr><td>512</td><td>2347.9</td><td><b>1716.8</b></td><td>2150.4</td><td>2182.5</td><td>7103.0</td><td>9961.7</td><td>10836.0</td><td>6971.7</td><td>9855.9</td></tr>
+<tr><td>2048</td><td>7221.1</td><td><b>6078.9</b></td><td>7711.8</td><td>7625.9</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>8192</td><td>21391.3</td><td><b>19153.0</b></td><td>26691.1</td><td>26676.4</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+</tbody>
+</table>
+
+> LL columns are `—` at 2048/8192 tok/rank: the LL sweep runs 8-512 (nixl_ep caps `max_tokens_per_rank` at 1024; nccl_ep LL was swept at the same points for comparability).
 
 #### `qwen3_5_397b` — hidden 4096, inter 1024, 512 experts, top-10
 
-| tok/rank | nccl HT id | nccl HT fp4t | nccl HT fp4c | nccl HT w4a8 | nccl HT w4a8p | nccl LL id | nccl LL fp4c | nccl LL w4a8 | nccl LL w4a8p | nixl LL id | nixl LL fp4c | nixl LL w4a8 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 8 | 212.0 | 1594.5 | 841.8 | 937.9 | 1042.2 | — | — | — | — | 84.4 | 593.5 | 668.4 |
-| 64 | 342.8 | 1370.1 | 912.2 | 999.0 | 1100.3 | — | — | — | — | 140.7 | 838.4 | 974.6 |
-| 512 | 377.4 | 2233.8 | 1198.7 | 1422.0 | 1487.4 | — | — | — | — | 226.0 | 3180.1 | 4220.3 |
-| 2048 | 2183.2 | 4867.8 | 4322.5 | 4933.3 | 4842.1 | — | — | — | — | — | — | — |
-| 8192 | 3760.3 | 12108.0 | 9771.3 | 13321.3 | 13232.3 | — | — | — | — | — | — | — |
+<table>
+<thead>
+<tr><th rowspan="3">tok/rank</th><th colspan="7">nccl_ep</th><th colspan="2">nixl_ep</th></tr>
+<tr><th colspan="4">HT</th><th colspan="3">LL</th><th colspan="2">LL</th></tr>
+<tr><th>fp4t</th><th>fp4c</th><th>w4a8</th><th>w4a8p</th><th>fp4c</th><th>w4a8</th><th>w4a8p</th><th>fp4c</th><th>w4a8</th></tr>
+</thead>
+<tbody>
+<tr><td>8</td><td>1594.5</td><td>841.8</td><td>937.9</td><td>1042.2</td><td>—</td><td>—</td><td>—</td><td><b>593.5</b></td><td>668.4</td></tr>
+<tr><td>64</td><td>1370.1</td><td>912.2</td><td>999.0</td><td>1100.3</td><td>—</td><td>—</td><td>—</td><td><b>838.4</b></td><td>974.6</td></tr>
+<tr><td>512</td><td>2233.8</td><td><b>1198.7</b></td><td>1422.0</td><td>1487.4</td><td>—</td><td>—</td><td>—</td><td>3180.1</td><td>4220.3</td></tr>
+<tr><td>2048</td><td>4867.8</td><td><b>4322.5</b></td><td>4933.3</td><td>4842.1</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>8192</td><td>12108.0</td><td><b>9771.3</b></td><td>13321.3</td><td>13232.3</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+</tbody>
+</table>
 
-#### `gpt_oss_120b` — hidden 2880, inter 2880, 128 experts, top-4
+> LL columns are `—` at 2048/8192 tok/rank: the LL sweep runs 8-512 (nixl_ep caps `max_tokens_per_rank` at 1024; nccl_ep LL was swept at the same points for comparability).
 
-| tok/rank | nccl HT id | nccl HT fp4t | nccl HT fp4c | nccl HT w4a8 | nccl HT w4a8p | nccl LL id | nccl LL fp4c | nccl LL w4a8 | nccl LL w4a8p | nixl LL id | nixl LL fp4c | nixl LL w4a8 |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 8 | 318.8 | — | — | — | — | — | — | — | — | — | — | — |
-| 64 | 286.7 | — | — | — | — | — | — | — | — | — | — | — |
-| 512 | 298.0 | — | — | — | — | — | — | — | — | — | — | — |
-| 2048 | 436.0 | — | — | — | — | — | — | — | — | — | — | — |
-| 8192 | 2578.8 | — | — | — | — | — | — | — | — | — | — | — |
+> nccl_ep LL cells are `—`: top-10 routing aborts on the nccl_ep LL device kernel (`numTopk <= kNumMaxTopK`, cap 8 — see the flashinfer runbook); the nixl_ep columns cover this shape.
+
+`gpt_oss_120b` has no kernel table: hidden=inter=2880 fails the nvfp4
+scale-factor padding and w4a8 hidden%128 weight-prep gates on every
+kernel (its comm-only cells are in the identity table above).
 
 ### 3.3 2xB200 EP2 baseline — quantized speedup vs bf16
 
