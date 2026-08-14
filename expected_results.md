@@ -236,236 +236,98 @@ variants.
 `deep_gemm_mega`, 23.1-24.9% for the CuteDSL variants), **not** a model-quality
 number. Model quality is §4.
 
-## 3b. Kernel microbenchmark — split path, mxfp8, and bf16
+## 3b. Kernel microbenchmark — mega path, mxfp8 and bf16
 
-Same harness and geometry as §3, adding the variants the `fi_split_path`
-branch introduced: `fi_fp8` (mxfp8 CuteDSL MegaMoE) and the FlashInfer
-**split path** — NCCL-EP dispatch → `fused_moe` → combine as three separate
-stages, instead of one fused mega kernel. `fi_split_fp4` runs `fused_moe` on
-the nvfp4 CuteDSL backend, `fi_split_trtllm` on trtllm-gen (selected via
-`FI_SPLIT_NVFP4_BACKEND=trtllm`; the flashinfer `MoELayer` weight prep only
-supports a single backend candidate per config, so the two are separate runs).
+Same harness and geometry as §3, for the two mega backends §3 does not carry:
+`fi_fp8` (`sm100_mxfp8_mxfp8_bf16_cutedsl`) and `fi_bf16` (the unquantized
+`bf16_cutedsl` MegaMoE — bf16 weights, activations and combine, no quant
+anywhere). Values are `e2e_pipelined` p50 µs; **no speedup brackets here** —
+the dg/nvfp4 mega comparison lives in §3, the split path in §3d.
 
-Measured 2026-07-29, jobs 2347073-2347078 (v4_flash rerun as 2347255); CSVs in
-`model_shapes/results_ep8_split_20260729/`. Same layout as §3: `e2e_pipelined`
-p50 µs, speedup vs `deep_gemm_mega` in brackets. The `_split.csv` files also
-carry per-stage p50 columns (`dispatch_us_p50`, `compute_us_p50`,
-`combine_us_p50`).
-
-The `bf16` column (`fi_bf16`, the unquantized `bf16_cutedsl` MegaMoE — bf16
-weights, activations and combine, no quant anywhere) was measured later:
-2026-08-10, jobs 2384005-2384012, CSVs in
+Provenance: mxfp8 measured 2026-07-29, jobs 2347073-2347078 (v4_flash rerun
+as 2347255), CSVs in `model_shapes/results_ep8_split_20260729/`. bf16
+measured 2026-08-10, jobs 2384005-2384012, CSVs in
 `model_shapes/results_ep8_bf16_20260810/`, on the flashinfer
 `sm100_bf16_implementation` branch (the kernel only exists there) with
-cutlass-dsl pinned to 4.6.1, the version that branch lineage is validated
-against — NOT this table's 4_5_2-perf-fix/4.5.2 stack. The session reran
-`fi_dg` and `fi_fp8` as cross-stack controls: every shared cell agrees with
-this table's 2026-07-29 columns within ~1% at 8-2048 tok/rank (worst cell
-+3.5%, v4_pro mxfp8@512), so the columns are comparable despite the branch/DSL
-change. The bf16 cells deliberately carry no speedup-vs-`dg` bracket: bf16 is
-the unquantized *baseline*, not a competing quantized kernel, so the ratio
-that means something runs the other way — quantized-vs-bf16. On these shapes
-mxfp8 is 1.7-2.4x faster than bf16 (nvfp4 further still; §3c tabulates the
-per-point ratios on a 2-GPU reference). Accuracy loss in the CSVs: bf16
-~0.29% rel-L2 (bf16 model math, no quantization error), mxfp8 ~6.4%, the
-nvfp4/fp4 family 20.6-24.9%.
+cutlass-dsl 4.6.1; that session reran `fi_dg`/`fi_fp8` as cross-stack
+controls and every shared cell agrees with the 2026-07-29 columns within ~1%
+at 8-2048 tok/rank (worst +3.5%, v4_pro mxfp8@512), so the columns are
+comparable despite the branch/DSL change.
 
-The `split w4a8` / `split w4a8 packed` columns were measured 2026-08-13
-(jobs 2391067-72, CSVs in `model_shapes/results_ep8_w4a8_20260813/`) on the
-flashinfer `split_cutedsl_w4a8` branch (d5ad8f00) with cutlass-dsl 4.6.1.
-They run the dedicated `sm100_mxfp8_mxfp4_bf16_cutedsl` split kernel —
-MXFP8 activations x MXFP4 weights via `cute_dsl_fused_moe_mxfp8_mxfp4`, no
-`MoELayer`, default kernel tactic (no autotune). `packed` additionally
-quantizes BEFORE dispatch and sends the fp8+UE8M0 payload padded to the
-transport's width whitelist (0.57-0.63x the BF16 wire bytes at these
-hiddens), bit-identical output to the unpacked variant. The session reran
-`fi_dg` and `fi_split_fp4` as controls: every shared `dg` cell agrees with
-this table within ~2%, and the split control agrees within ~3% at 512+
-tok/rank; the 8-64 tok/rank split cells swing +/-10-20% between sessions
-(v4_pro split@8: 1741.6 then, 1370.5 now — small-batch split latency is
-noisy), so treat small-batch split comparisons as directional only.
-Brackets use the same-run `dg`. Findings:
-`w4a8` tracks `split nvfp4 cutedsl` at small batch and falls behind at
-512+ tok/rank (mxfp4 grouped-GEMM tactic untuned); `packed` matches
-unpacked within noise at >=512 tok/rank with a 16% faster dispatch stage at
-8192 (695 -> 585 µs on v4_flash), but is slower at 8-64 tok/rank under
-this table's HT protocol — the pre-dispatch quantize launch dominates tiny
-batches. Its target regime is LL decode, where wire bytes bound dispatch;
-an LL sweep is a follow-up. `gpt_oss_120b` stays empty: hidden=inter=2880
-fails the kernel's hidden%128 weight-prep gate (same class of gate as `dg`).
-Accuracy loss in the CSVs: 20.59% — the same synthetic-reconstruction band
-as the rest of the fp4-weight family, not a model-quality number.
-
-**The split path is not competitive at any point measured: 0.07-0.21x of
-`dg` on every shape and token count**, i.e. 5-14x slower, with split-trtllm
-behind split-cutedsl everywhere. The gap is not the NCCL dispatch/combine —
-at 8 tok/rank on v4_flash the stage breakdown is dispatch 93 µs, `fused_moe`
-compute 539 µs, combine 114 µs against the mega path's 108 µs *total*.
-`fi_fp8` (mxfp8 mega) sits at 0.51-0.63x of `dg` at small batches and
-approaches parity only at 8192 tok/rank; it never beats nvfp4.
+Context (prose, not per-cell brackets): on these shapes mxfp8 sits at
+0.51-0.63x of `dg` at small batches and approaches parity only at 8192
+tok/rank; mxfp8 is 1.7-2.4x faster than bf16 (§3c tabulates per-point
+quantized-vs-bf16 ratios on a 2-GPU reference). Accuracy loss in the CSVs:
+bf16 ~0.29% rel-L2 (bf16 model math, no quantization error), mxfp8 ~6.4% —
+synthetic-input reconstruction error, not a model-quality number (that is §4).
 
 **`deepseek_v4_flash`** — hidden 4096, inter 2048, 256 experts, top-6 — the geometry the §1 e2e sweep uses.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm | split w4a8 | split w4a8 packed |
-|---|---|---|---|---|---|---|---|---|
-| 8 | 108.5 | 121.7 (0.89x) | 171.1 (0.63x) | 336.9 | 832.5 (0.13x) | 1642.2 (0.07x) | 928.4 (0.12x) | 1042.7 (0.11x) |
-| 64 | 125.4 | 134.1 (0.94x) | 197.7 (0.63x) | 392.2 | 884.8 (0.14x) | 1922.1 (0.07x) | 968.4 (0.13x) | 1093.7 (0.12x) |
-| 512 | 157.8 | 191.4 (0.82x) | 263.2 (0.60x) | 433.7 | 1158.6 (0.14x) | 1643.1 (0.10x) | 1410.0 (0.11x) | 1484.7 (0.11x) |
-| 2048 | 383.0 | 335.5 (1.14x) | 437.1 (0.88x) | 822.2 | 3979.9 (0.10x) | 4811.5 (0.08x) | 4949.4 (0.08x) | 4880.4 (0.08x) |
-| 8192 | 1324.1 | 1101.9 (1.20x) | 1364.0 (0.97x) | 2705.9 | 9423.6 (0.14x) | 11777.9 (0.11x) | 13437.1 (0.10x) | 13365.1 (0.10x) |
+| tok/rank | mxfp8 | bf16 |
+|---|---|---|
+| 8 | 171.1 | 336.9 |
+| 64 | 197.7 | 392.2 |
+| 512 | 263.2 | 433.7 |
+| 2048 | 437.1 | 822.2 |
+| 8192 | 1364.0 | 2705.9 |
 
 **`deepseek_v4_pro`** — hidden 7168, inter 3072, 384 experts, top-6 — the geometry the §2 e2e sweep uses.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm | split w4a8 | split w4a8 packed |
-|---|---|---|---|---|---|---|---|---|
-| 8 | 260.2 | 259.1 (1.00x) | 467.9 (0.56x) | 1032.7 | 1741.6 (0.15x) | 2636.0 (0.10x) | 1424.5 (0.18x) | 1959.0 (0.13x) |
-| 64 | 329.7 | 334.8 (0.98x) | 646.1 (0.51x) | 1449.0 | 1631.9 (0.20x) | 2478.1 (0.13x) | 1716.3 (0.19x) | 2247.7 (0.15x) |
-| 512 | 374.8 | 394.3 (0.95x) | 732.3 (0.51x) | 1580.0 | 1838.3 (0.20x) | 2526.9 (0.15x) | 2326.0 (0.16x) | 2356.6 (0.16x) |
-| 2048 | 884.3 | 618.9 (1.43x) | 1166.4 (0.76x) | 2434.1 | 6317.2 (0.14x) | 7631.7 (0.12x) | 8096.2 (0.11x) | 7907.6 (0.12x) |
-| 8192 | 3176.0 | 1890.2 (1.68x) | 3552.3 (0.89x) | 7117.0 | 19984.6 (0.16x) | 22681.1 (0.14x) | 27969.3 (0.12x) | 27637.4 (0.12x) |
+| tok/rank | mxfp8 | bf16 |
+|---|---|---|
+| 8 | 467.9 | 1032.7 |
+| 64 | 646.1 | 1449.0 |
+| 512 | 732.3 | 1580.0 |
+| 2048 | 1166.4 | 2434.1 |
+| 8192 | 3552.3 | 7117.0 |
 
 **`deepseek_v3`** — hidden 7168, inter 2048, 256 experts, top-8.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm | split w4a8 | split w4a8 packed |
-|---|---|---|---|---|---|---|---|---|
-| 8 | 170.6 | 171.1 (1.00x) | 275.6 (0.62x) | 633.9 | 1676.0 (0.10x) | 2122.1 (0.08x) | 1450.6 (0.12x) | 1939.8 (0.09x) |
-| 64 | 184.4 | 185.2 (1.00x) | 306.2 (0.60x) | 732.3 | 1647.7 (0.11x) | 1831.6 (0.10x) | 1560.1 (0.12x) | 2049.4 (0.09x) |
-| 512 | 278.5 | 267.2 (1.04x) | 445.4 (0.63x) | 805.9 | 1673.1 (0.17x) | 2277.2 (0.12x) | 2124.9 (0.13x) | 2159.7 (0.13x) |
-| 2048 | 803.9 | 576.4 (1.39x) | 980.5 (0.82x) | 1931.7 | 6026.5 (0.13x) | 7186.4 (0.11x) | 7755.7 (0.10x) | 7584.7 (0.10x) |
-| 8192 | 3056.1 | 2021.3 (1.51x) | 3256.8 (0.94x) | 6504.4 | 18715.2 (0.16x) | 21387.2 (0.14x) | 26416.9 (0.12x) | 26429.0 (0.12x) |
+| tok/rank | mxfp8 | bf16 |
+|---|---|---|
+| 8 | 275.6 | 633.9 |
+| 64 | 306.2 | 732.3 |
+| 512 | 445.4 | 805.9 |
+| 2048 | 980.5 | 1931.7 |
+| 8192 | 3256.8 | 6504.4 |
 
 **`kimi_k2_6`** — hidden 7168, inter 2048, 384 experts, top-8.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm | split w4a8 | split w4a8 packed |
-|---|---|---|---|---|---|---|---|---|
-| 8 | 207.3 | 210.0 (0.99x) | 361.5 (0.57x) | 832.5 | 1350.0 (0.15x) | 2419.1 (0.09x) | 1451.9 (0.14x) | 1906.0 (0.11x) |
-| 64 | 253.8 | 246.7 (1.03x) | 439.4 (0.58x) | 1047.6 | 1806.4 (0.14x) | 1879.3 (0.14x) | 1622.5 (0.16x) | 2128.6 (0.12x) |
-| 512 | 314.2 | 320.4 (0.98x) | 529.4 (0.59x) | 1145.9 | 1716.8 (0.18x) | 2347.9 (0.13x) | 2150.4 (0.15x) | 2182.5 (0.14x) |
-| 2048 | 813.2 | 619.6 (1.31x) | 1082.4 (0.75x) | 2164.7 | 6078.9 (0.13x) | 7221.1 (0.11x) | 7711.8 (0.11x) | 7625.9 (0.11x) |
-| 8192 | 3185.8 | 2069.5 (1.54x) | 3469.3 (0.92x) | 6678.0 | 19153.0 (0.17x) | 21391.3 (0.15x) | 26691.1 (0.12x) | 26676.4 (0.12x) |
+| tok/rank | mxfp8 | bf16 |
+|---|---|---|
+| 8 | 361.5 | 832.5 |
+| 64 | 439.4 | 1047.6 |
+| 512 | 529.4 | 1145.9 |
+| 2048 | 1082.4 | 2164.7 |
+| 8192 | 3469.3 | 6678.0 |
 
 **`qwen3_5_397b`** — hidden 4096, inter 1024, 512 experts, top-10.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm | split w4a8 | split w4a8 packed |
-|---|---|---|---|---|---|---|---|---|
-| 8 | 112.7 | 124.0 (0.91x) | 181.1 (0.62x) | 349.2 | 841.8 (0.13x) | 1594.5 (0.07x) | 937.9 (0.12x) | 1042.2 (0.11x) |
-| 64 | 131.1 | 144.2 (0.91x) | 211.3 (0.62x) | 414.7 | 912.2 (0.14x) | 1370.1 (0.10x) | 999.0 (0.13x) | 1100.3 (0.12x) |
-| 512 | 194.7 | 209.4 (0.93x) | 312.3 (0.62x) | 453.6 | 1198.7 (0.16x) | 2233.8 (0.09x) | 1422.0 (0.14x) | 1487.4 (0.13x) |
-| 2048 | 550.4 | 465.8 (1.18x) | 521.3 (1.06x) | 1023.9 | 4322.5 (0.13x) | 4867.8 (0.11x) | 4933.3 (0.11x) | 4842.1 (0.11x) |
-| 8192 | 2018.9 | 1622.5 (1.24x) | 1750.0 (1.15x) | 3782.8 | 9771.3 (0.21x) | 12108.0 (0.17x) | 13321.3 (0.15x) | 13232.3 (0.15x) |
+| tok/rank | mxfp8 | bf16 |
+|---|---|---|
+| 8 | 181.1 | 349.2 |
+| 64 | 211.3 | 414.7 |
+| 512 | 312.3 | 453.6 |
+| 2048 | 521.3 | 1023.9 |
+| 8192 | 1750.0 | 3782.8 |
 
 **`gpt_oss_120b`** — hidden 2880, inter 2880, 128 experts, top-4.
 
-| tok/rank | dg | nvfp4 bf16 | mxfp8 | bf16 | split nvfp4 cutedsl | split nvfp4 trtllm | split w4a8 | split w4a8 packed |
-|---|---|---|---|---|---|---|---|---|
-| 8 | — | 93.1 | 130.0 | — | — | — | — | — |
-| 64 | — | 95.2 | 132.2 | — | — | — | — | — |
-| 512 | — | 132.1 | 167.0 | — | — | — | — | — |
-| 2048 | — | 240.8 | 279.6 | — | — | — | — | — |
-| 8192 | — | 697.3 | 815.1 | — | — | — | — | — |
+| tok/rank | mxfp8 | bf16 |
+|---|---|---|
+| 8 | 130.0 | — |
+| 64 | 132.2 | — |
+| 512 | 167.0 | — |
+| 2048 | 279.6 | — |
+| 8192 | 815.1 | — |
 
-`gpt_oss_120b`'s empty split columns are expected, like its `dg` column: the
-split path's nvfp4 weight prep rejects the shape with
-`ValueError: Scale factor tensor has 8294400 elements, expected 8478720 for
-m=2880, k=2880` — the scale-factor layout wants a padding that hidden =
-inter = 2880 does not satisfy. The harness logs it once per cell and moves on.
-Its `bf16` column is empty because at measurement time the bf16 mega path's
-fleet validation rejected the shape (`MoEEpConfigError: token_hidden_size
-(2880) must be a multiple of 128`). That gate was over-strict — the kernel's
-real bound is hidden % 32 / inter % 64 — and has since been relaxed on the
-flashinfer side (validated 2026-08-10, job 2384696: this geometry runs at
-0.29% rel-L2 vs the dense bf16 reference). The cells stay empty until a
-sweep rerun fills them; the job's spot numbers (barrier-cold `e2e` timing,
-NOT this table's `e2e_pipelined`) were 295/324/1500 µs at 8/512/8192
-tok/rank.
-
-The `dg` and `nvfp4 bf16` columns here are an independent remeasurement of
-§3's, four days and a node assignment apart. At 8-2048 tok/rank every shared
-point agrees with §3 within the §6 ±0.02x tolerance. At 8192 two shapes move
-more: `deepseek_v3` 1.59x -> 1.51x and `v4_pro` 1.64x -> 1.68x. The §6
-tolerance was measured same-node back-to-back; the largest batch point is
-where node and thermal state matter most, so read 8192 ratios with that wider
-error bar.
-
-## 3d. Split path at low latency — nccl_ep vs nixl_ep, w4a8 and packed dispatch
-
-The LL EXPERT_MAJOR counterpart of §3b's HT protocol, comparing the two EP
-transports under the same inner kernels. Measured 2026-08-14, job 2391254
-(single serialized job — parallel per-shape jobs race on the shared
-`3rdparty/nixl` patch + `build_nvep` build dir), 8x B200, cutlass-dsl 4.6.1,
-flashinfer `split_cutedsl_w4a8` branch (b3655421), image
-`nixl_ep_ci/fi-nixl-provisioned.sqsh` (UCX v1.21.x device API; the nixl-cu13
-wheel must be pinned ==1.3.1 to match the v1.3.1 submodule kernels — a 1.4.x
-wheel dies with device asserts). CSVs in
-`model_shapes/results_ep8_ll_nixl_20260814/`. nixl_ep is LL EXPERT_MAJOR-only
-with tokens/rank <= 1024, so this table sweeps 8/64/512 and adds two
-comm-only `identity` columns (dispatch/combine roundtrip, no expert compute).
-Cells are barrier-cold e2e p50 µs as in §3b; no `dg` anchor here (mega is a
-different protocol), so no brackets.
-
-Findings:
-
-- **nixl_ep's comm is cheaper than nccl_ep at decode batch sizes**: identity@8
-  is 82-128 µs vs nccl's 113-125 µs, and at 64 tok/rank nccl's combine stage
-  degrades sharply (identity@64: nccl 560-599 µs vs nixl 87-141 µs on three of
-  five shapes — the nccl LL combine blows up between 8 and 64 tok/rank). At
-  512 the transports converge (~165-300 µs).
-- The comm advantage carries to the kernels at 8-64 tok/rank: `nixl split
-  nvfp4`@8 beats the nccl column by 6-13% e2e on every shape; at 512 the
-  compute stage dominates (>90% of e2e) and the columns converge.
-- **`w4a8 packed` does not pay off even at LL**: the pre-dispatch quantize
-  adds ~100-160 µs to the dispatch stage at 8-64 tok/rank while the wire
-  saving is worth only tens of µs at these sizes — packed dispatch needs
-  either multi-node fabrics or a fused quantize+send to win. Output remains
-  bit-identical to unpacked.
-- **`qwen3_5_397b` (top-10) runs only on nixl_ep at LL**: the nccl_ep LL
-  device kernel asserts `numTopk <= kNumMaxTopK` (top-k cap 8;
-  low_latency.cu:1030). Its nccl HT cells in §3b are unaffected. The nixl
-  columns cover the shape.
-- `w4a8` tracks §3b's relative placement vs `split nvfp4` (equal-ish at 8,
-  behind at 512 — default tactic, untuned). Accuracy columns: same synthetic
-  bands as §3b (nvfp4 ~23.2%, w4a8 ~20.6%).
-
-**`deepseek_v3`** — hidden 7168, inter 2048, 256 experts, top-8
-
-| tok/rank | split nvfp4 cutedsl | split w4a8 | split w4a8 packed | nccl identity | nixl identity | nixl split nvfp4 | nixl split w4a8 |
-|---|---|---|---|---|---|---|---|
-| 8 | 688.1 | 756.1 | 840.5 | 119.6 | 82.4 | 628.1 | 696.4 |
-| 64 | 1370.2 | 1549.8 | 1775.6 | 560.4 | 100.9 | 1024.4 | 1162.8 |
-| 512 | 4802.0 | 6648.3 | 7251.3 | 273.8 | 268.1 | 4757.2 | 6498.1 |
-
-**`deepseek_v4_flash`** — hidden 4096, inter 2048, 256 experts, top-6
-
-| tok/rank | split nvfp4 cutedsl | split w4a8 | split w4a8 packed | nccl identity | nixl identity | nixl split nvfp4 | nixl split w4a8 |
-|---|---|---|---|---|---|---|---|
-| 8 | 683.0 | 742.5 | 840.7 | 113.0 | 127.8 | 596.1 | 666.6 |
-| 64 | 845.6 | 974.9 | 1073.0 | 144.2 | 87.2 | 787.0 | 906.0 |
-| 512 | 2910.6 | 4063.7 | 4457.2 | 186.9 | 165.0 | 2883.9 | 4037.5 |
-
-**`deepseek_v4_pro`** — hidden 7168, inter 3072, 384 experts, top-6
-
-| tok/rank | split nvfp4 cutedsl | split w4a8 | split w4a8 packed | nccl identity | nixl identity | nixl split nvfp4 | nixl split w4a8 |
-|---|---|---|---|---|---|---|---|
-| 8 | 851.3 | 926.1 | 1010.7 | 124.4 | 82.7 | 807.1 | 871.3 |
-| 64 | 1613.3 | 2003.6 | 2066.6 | 599.4 | 98.4 | 1678.5 | 1981.6 |
-| 512 | 9480.9 | 14063.7 | 14523.2 | 239.0 | 258.6 | 9506.8 | 13937.1 |
-
-**`kimi_k2_6`** — hidden 7168, inter 2048, 384 experts, top-8
-
-| tok/rank | split nvfp4 cutedsl | split w4a8 | split w4a8 packed | nccl identity | nixl identity | nixl split nvfp4 | nixl split w4a8 |
-|---|---|---|---|---|---|---|---|
-| 8 | 710.6 | 803.2 | 899.5 | 117.6 | 85.8 | 664.8 | 762.2 |
-| 64 | 1560.5 | 1618.4 | 1792.9 | 582.0 | 140.9 | 1307.2 | 1561.5 |
-| 512 | 7103.0 | 9961.7 | 10836.0 | 275.9 | 301.9 | 6971.7 | 9855.9 |
-
-**`qwen3_5_397b`** — hidden 4096, inter 1024, 512 experts, top-10
-
-| tok/rank | split nvfp4 cutedsl | split w4a8 | split w4a8 packed | nccl identity | nixl identity | nixl split nvfp4 | nixl split w4a8 |
-|---|---|---|---|---|---|---|---|
-| 8 | — | — | — | — | 84.4 | 593.5 | 668.4 |
-| 64 | — | — | — | — | 140.7 | 838.4 | 974.6 |
-| 512 | — | — | — | — | 226.0 | 3180.1 | 4220.3 |
-
+`gpt_oss_120b`'s bf16 cell history: at measurement time the bf16 mega
+fleet validation rejected hidden=2880 (`token_hidden_size must be a multiple
+of 128`); that gate was over-strict (kernel bound: hidden % 32 / inter % 64)
+and has since been relaxed (validated 2026-08-10, job 2384696: 0.29% rel-L2).
+The cells stay empty until a sweep rerun fills them; the job's spot numbers
+(barrier-cold `e2e`, NOT this table's `e2e_pipelined`) were 295/324/1500 µs
+at 8/512/8192 tok/rank.
 
 ## 3c. 2xB200 EP2 baseline — quantized speedup vs bf16
 
@@ -516,7 +378,7 @@ Throughput (tok/s):
 Accuracy loss (% rel-L2 vs bf16 dense reference) is flat across tokens/rank:
 bf16 0.286-0.288, mxfp8 6.357-6.371, nvfp4 23.144-23.324.
 
-**How this compares to the §3b EP8 run** (same `deepseek_v3` geometry; shared
+**How this compares to the EP8 runs (§3 nvfp4, §3b mxfp8/bf16)** (same `deepseek_v3` geometry; shared
 tokens/rank points are 8 and 64):
 
 * **Accuracy reproduces exactly across world sizes**: bf16 0.288 / mxfp8 ~6.36
@@ -532,6 +394,194 @@ tokens/rank points are 8 and 64):
   weight-bandwidth bound — per-rank weight bytes dominate and scale with
   1/world_size. Compare EP2 numbers to EP2 numbers only; the transferable
   quantities are the ratios and the accuracy losses, not the microseconds.
+
+## 3d. Split path microbenchmark — by comm backend
+
+The split path (dispatch → inner kernel → combine as three stages) under its
+two EP transports. All cells are barrier-cold e2e p50 µs
+(`bench_moe_ep_fi_split.py`), 8x B200, EP8, **values only** — the mega path
+is a different protocol (`e2e_pipelined`) and is deliberately not compared
+per cell here; as prose context, at every HT point measured the split path
+is 5-14x slower e2e than §3's `deep_gemm_mega`, and the gap is compute, not
+comm (v4_flash HT @8 tok/rank stage breakdown: dispatch 93 µs, `fused_moe`
+compute 539 µs, combine 114 µs vs the mega path's 108 µs total). The
+`*_split.csv` files carry per-stage `dispatch_us_p50` / `compute_us_p50` /
+`combine_us_p50` columns.
+
+Kernels: `nvfp4 cutedsl` / `nvfp4 trtllm` = `fused_moe` split kernel on the
+CuTeDSL / trtllm-gen NVFP4 backends; `w4a8` = the dedicated
+`sm100_mxfp8_mxfp4_bf16_cutedsl` split kernel (MXFP8 acts x MXFP4 weights,
+default tactic, untuned); `w4a8 packed` = same kernel with
+`mxfp8_dispatch=True` (MXFP8-quantized packed dispatch payload — bit-identical
+output, nccl_ep only); `identity` = comm-only dispatch/combine roundtrip.
+Accuracy columns in the CSVs are synthetic bands: nvfp4 ~23.2%, w4a8 ~20.6%.
+
+### 3d.1 nccl_ep
+
+**High throughput (HT FLAT), tok/rank 8-8192.** Measured: nvfp4 columns
+2026-07-29 (jobs 2347073-2347078, `model_shapes/results_ep8_split_20260729/`);
+w4a8 columns 2026-08-13 (jobs 2391067-2391072,
+`model_shapes/results_ep8_w4a8_20260813/`, flashinfer `split_cutedsl_w4a8`
+branch d5ad8f00, cutlass-dsl 4.6.1 — same-session `dg`/`split nvfp4` controls
+agree with the earlier columns within ~2-3% at 512+ tok/rank; 8-64 tok/rank
+split cells swing +/-10-20% between sessions, so read small-batch
+cross-column deltas as directional). split-trtllm trails split-cutedsl
+everywhere; `w4a8 packed` matches unpacked within noise at >=512 tok/rank
+(16% faster dispatch stage at 8192: 695 -> 585 µs on v4_flash) and is slower
+at 8-64 under HT (pre-dispatch quantize launch overhead).
+`gpt_oss_120b` is absent: hidden=inter=2880 fails the nvfp4 scale-factor
+padding and the w4a8 hidden%128 weight-prep gates.
+
+**`deepseek_v4_flash`** — hidden 4096, inter 2048, 256 experts, top-6 — the geometry the §1 e2e sweep uses.
+
+| tok/rank | nvfp4 cutedsl | nvfp4 trtllm | w4a8 | w4a8 packed |
+|---|---|---|---|---|
+| 8 | 832.5 | 1642.2 | 928.4 | 1042.7 |
+| 64 | 884.8 | 1922.1 | 968.4 | 1093.7 |
+| 512 | 1158.6 | 1643.1 | 1410.0 | 1484.7 |
+| 2048 | 3979.9 | 4811.5 | 4949.4 | 4880.4 |
+| 8192 | 9423.6 | 11777.9 | 13437.1 | 13365.1 |
+
+**`deepseek_v4_pro`** — hidden 7168, inter 3072, 384 experts, top-6 — the geometry the §2 e2e sweep uses.
+
+| tok/rank | nvfp4 cutedsl | nvfp4 trtllm | w4a8 | w4a8 packed |
+|---|---|---|---|---|
+| 8 | 1741.6 | 2636.0 | 1424.5 | 1959.0 |
+| 64 | 1631.9 | 2478.1 | 1716.3 | 2247.7 |
+| 512 | 1838.3 | 2526.9 | 2326.0 | 2356.6 |
+| 2048 | 6317.2 | 7631.7 | 8096.2 | 7907.6 |
+| 8192 | 19984.6 | 22681.1 | 27969.3 | 27637.4 |
+
+**`deepseek_v3`** — hidden 7168, inter 2048, 256 experts, top-8.
+
+| tok/rank | nvfp4 cutedsl | nvfp4 trtllm | w4a8 | w4a8 packed |
+|---|---|---|---|---|
+| 8 | 1676.0 | 2122.1 | 1450.6 | 1939.8 |
+| 64 | 1647.7 | 1831.6 | 1560.1 | 2049.4 |
+| 512 | 1673.1 | 2277.2 | 2124.9 | 2159.7 |
+| 2048 | 6026.5 | 7186.4 | 7755.7 | 7584.7 |
+| 8192 | 18715.2 | 21387.2 | 26416.9 | 26429.0 |
+
+**`kimi_k2_6`** — hidden 7168, inter 2048, 384 experts, top-8.
+
+| tok/rank | nvfp4 cutedsl | nvfp4 trtllm | w4a8 | w4a8 packed |
+|---|---|---|---|---|
+| 8 | 1350.0 | 2419.1 | 1451.9 | 1906.0 |
+| 64 | 1806.4 | 1879.3 | 1622.5 | 2128.6 |
+| 512 | 1716.8 | 2347.9 | 2150.4 | 2182.5 |
+| 2048 | 6078.9 | 7221.1 | 7711.8 | 7625.9 |
+| 8192 | 19153.0 | 21391.3 | 26691.1 | 26676.4 |
+
+**`qwen3_5_397b`** — hidden 4096, inter 1024, 512 experts, top-10.
+
+| tok/rank | nvfp4 cutedsl | nvfp4 trtllm | w4a8 | w4a8 packed |
+|---|---|---|---|---|
+| 8 | 841.8 | 1594.5 | 937.9 | 1042.2 |
+| 64 | 912.2 | 1370.1 | 999.0 | 1100.3 |
+| 512 | 1198.7 | 2233.8 | 1422.0 | 1487.4 |
+| 2048 | 4322.5 | 4867.8 | 4933.3 | 4842.1 |
+| 8192 | 9771.3 | 12108.0 | 13321.3 | 13232.3 |
+
+**Low latency (LL EXPERT_MAJOR), tok/rank 8-512.** Measured 2026-08-14, job
+2391254 (single serialized job — parallel per-shape jobs race on the shared
+`3rdparty/nixl` patch + `build_nvep` dir), image
+`nixl_ep_ci/fi-nixl-provisioned.sqsh`, flashinfer branch b3655421,
+cutlass-dsl 4.6.1, CSVs in `model_shapes/results_ep8_ll_nixl_20260814/`.
+The nccl_ep LL combine stage degrades sharply between 8 and 64 tok/rank
+(identity@64: 560-599 µs on 3/5 shapes vs ~120 µs @8); `w4a8 packed` does
+not pay off at single-node LL either (pre-dispatch quantize adds ~100-160 µs
+to the dispatch stage vs tens of µs saved on the wire).
+`qwen3_5_397b` (top-10) is absent: the nccl_ep LL device kernel asserts
+`numTopk <= kNumMaxTopK` (top-k cap 8; its HT cells above are unaffected —
+see the flashinfer runbook's "NCCL-EP low-latency device-kernel limits").
+
+**`deepseek_v3`** — hidden 7168, inter 2048, 256 experts, top-8
+
+| tok/rank | identity | nvfp4 cutedsl | w4a8 | w4a8 packed |
+|---|---|---|---|---|
+| 8 | 119.6 | 688.1 | 756.1 | 840.5 |
+| 64 | 560.4 | 1370.2 | 1549.8 | 1775.6 |
+| 512 | 273.8 | 4802.0 | 6648.3 | 7251.3 |
+
+**`deepseek_v4_flash`** — hidden 4096, inter 2048, 256 experts, top-6
+
+| tok/rank | identity | nvfp4 cutedsl | w4a8 | w4a8 packed |
+|---|---|---|---|---|
+| 8 | 113.0 | 683.0 | 742.5 | 840.7 |
+| 64 | 144.2 | 845.6 | 974.9 | 1073.0 |
+| 512 | 186.9 | 2910.6 | 4063.7 | 4457.2 |
+
+**`deepseek_v4_pro`** — hidden 7168, inter 3072, 384 experts, top-6
+
+| tok/rank | identity | nvfp4 cutedsl | w4a8 | w4a8 packed |
+|---|---|---|---|---|
+| 8 | 124.4 | 851.3 | 926.1 | 1010.7 |
+| 64 | 599.4 | 1613.3 | 2003.6 | 2066.6 |
+| 512 | 239.0 | 9480.9 | 14063.7 | 14523.2 |
+
+**`kimi_k2_6`** — hidden 7168, inter 2048, 384 experts, top-8
+
+| tok/rank | identity | nvfp4 cutedsl | w4a8 | w4a8 packed |
+|---|---|---|---|---|
+| 8 | 117.6 | 710.6 | 803.2 | 899.5 |
+| 64 | 582.0 | 1560.5 | 1618.4 | 1792.9 |
+| 512 | 275.9 | 7103.0 | 9961.7 | 10836.0 |
+
+### 3d.2 nixl_ep
+
+Same LL run (job 2391254). nixl_ep is **LL EXPERT_MAJOR only** with
+`max_tokens_per_rank <= 1024` and a hidden-size whitelist, so only the
+identity / nvfp4 / w4a8 kernels and tok/rank 8-512 apply (no packed-dispatch
+variant: the packed width whitelist and recv-shape handling are nccl_ep-only
+so far). Requires the UCX-device provisioned build — nixl-cu13 wheel pinned
+to the 3rdparty/nixl submodule tag (==1.3.1); see the flashinfer runbook.
+
+Findings vs the nccl_ep LL tables above: nixl_ep's comm is cheaper at decode
+batch sizes (identity@8: 82-128 µs vs nccl 113-125 µs; no combine blowup at
+64 tok/rank: 87-141 µs where nccl hits 560-599 µs), carrying a 6-13% e2e
+lead into the kernels at 8 tok/rank on every shape; at 512 tok/rank compute
+dominates (>90% of e2e) and the transports converge. nixl_ep also handles
+top-10 routing (qwen3_5 below), which nccl_ep LL cannot.
+
+**`deepseek_v3`** — hidden 7168, inter 2048, 256 experts, top-8
+
+| tok/rank | identity | nvfp4 cutedsl | w4a8 |
+|---|---|---|---|
+| 8 | 82.4 | 628.1 | 696.4 |
+| 64 | 100.9 | 1024.4 | 1162.8 |
+| 512 | 268.1 | 4757.2 | 6498.1 |
+
+**`deepseek_v4_flash`** — hidden 4096, inter 2048, 256 experts, top-6
+
+| tok/rank | identity | nvfp4 cutedsl | w4a8 |
+|---|---|---|---|
+| 8 | 127.8 | 596.1 | 666.6 |
+| 64 | 87.2 | 787.0 | 906.0 |
+| 512 | 165.0 | 2883.9 | 4037.5 |
+
+**`deepseek_v4_pro`** — hidden 7168, inter 3072, 384 experts, top-6
+
+| tok/rank | identity | nvfp4 cutedsl | w4a8 |
+|---|---|---|---|
+| 8 | 82.7 | 807.1 | 871.3 |
+| 64 | 98.4 | 1678.5 | 1981.6 |
+| 512 | 258.6 | 9506.8 | 13937.1 |
+
+**`kimi_k2_6`** — hidden 7168, inter 2048, 384 experts, top-8
+
+| tok/rank | identity | nvfp4 cutedsl | w4a8 |
+|---|---|---|---|
+| 8 | 85.8 | 664.8 | 762.2 |
+| 64 | 140.9 | 1307.2 | 1561.5 |
+| 512 | 301.9 | 6971.7 | 9855.9 |
+
+**`qwen3_5_397b`** — hidden 4096, inter 1024, 512 experts, top-10
+
+| tok/rank | identity | nvfp4 cutedsl | w4a8 |
+|---|---|---|---|
+| 8 | 84.4 | 593.5 | 668.4 |
+| 64 | 140.7 | 838.4 | 974.6 |
+| 512 | 226.0 | 3180.1 | 4220.3 |
 
 ## 4. Accuracy gate — GSM8K, both checkpoints
 
