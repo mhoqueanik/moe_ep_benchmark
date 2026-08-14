@@ -343,7 +343,7 @@ carries on. Its empty bf16 cells date from an over-strict fleet gate
 2026-08-10, job 2384696: 0.29% rel-L2; spot numbers 295/324/1500 µs at
 8/512/8192 tok/rank, barrier-cold e2e, NOT this table's `e2e_pipelined`).
 
-### 3.2 Split path — by kernel
+### 3.2 Split path — by model geometry
 
 No speedup-vs-mega brackets here: the split path is not competitive with the
 mega path at any point measured — **5-14x slower e2e at every HT cell**
@@ -368,164 +368,84 @@ sessions — read small-batch cross-column deltas as directional.
 cap 8 — runbook); `gpt_oss_120b` (hidden 2880) runs only the identity
 kernel (nvfp4/w4a8 geometry gates) and was not swept at LL.
 
-#### 3.2a identity (comm-only dispatch/combine roundtrip)
+One table per geometry: rows are the tokens/rank sweep (as in the §1/§2
+e2e tables), columns are transport x protocol x kernel. Column legend —
+`id` = identity (comm-only roundtrip), `fp4t` = `fused_moe` nvfp4
+trtllm-gen, `fp4c` = `fused_moe` nvfp4 CuTeDSL, `w4a8` =
+`sm100_mxfp8_mxfp4_bf16_cutedsl`, `w4a8p` = same with `mxfp8_dispatch=True`
+(packed MXFP8 dispatch payload, bit-identical output, nccl_ep only). `—` =
+not measured or not supported: LL was swept at 8-512 tok/rank only (nixl_ep
+caps `max_tokens_per_rank` at 1024); `fp4t` was measured at HT only;
+qwen3_5's nccl LL cells hit the top-k cap; gpt_oss runs only the identity
+kernel (geometry gates) and was not swept at LL.
 
-The transport floor with no expert compute. At 8 tok/rank the HT floor is
-~210-330 µs vs LL's ~80-130 µs (2-3x) — why HT is the prefill protocol and
-LL the decode one. nccl's combine anomaly between 8 and 64 tok/rank shows in
-BOTH protocols on the hidden-7168 shapes (HT: ~800 µs @64 vs ~330 @8 and
-~390 @512; LL: 560-599 µs @64, a 4.1-6.1x nixl advantage — nixl stays
-flat).
+Transport findings (from the LL columns): nixl_ep's comm is cheaper at
+decode batch sizes — identity@8 82-128 µs vs nccl's 113-125 µs, and nccl's
+combine anomaly at 64 tok/rank (560-599 µs vs nixl's 87-141 µs on the
+hidden-7168 shapes, 4.1-6.1x; visible in HT too: ~800 µs @64) — carrying a
+6-13% e2e lead into the kernels at 8 tok/rank; at 512 compute dominates
+(>90% of e2e) and the transports converge. nixl_ep also handles top-10
+routing, which nccl_ep LL cannot.
 
-HT (nccl_ep):
+#### `deepseek_v4_flash` — hidden 4096, inter 2048, 256 experts, top-6 — the geometry the §1 e2e sweep uses
 
-| shape \ tok/rank | 8 | 64 | 512 | 2048 | 8192 |
-|---|---|---|---|---|---|
-| deepseek_v4_flash | 315.9 | 315.2 | 315.9 | 1973.5 | 3154.8 |
-| deepseek_v4_pro | 229.1 | 799.2 | 367.3 | 2193.3 | 3953.8 |
-| deepseek_v3 | 324.3 | 801.7 | 389.2 | 2258.4 | 4079.8 |
-| kimi_k2_6 | 331.3 | 809.4 | 388.0 | 2256.7 | 4314.7 |
-| qwen3_5_397b | 212.0 | 342.8 | 377.4 | 2183.2 | 3760.3 |
-| gpt_oss_120b | 318.8 | 286.7 | 298.0 | 436.0 | 2578.8 |
+| tok/rank | nccl HT id | nccl HT fp4t | nccl HT fp4c | nccl HT w4a8 | nccl HT w4a8p | nccl LL id | nccl LL fp4c | nccl LL w4a8 | nccl LL w4a8p | nixl LL id | nixl LL fp4c | nixl LL w4a8 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 8 | 315.9 | 1642.2 | 832.5 | 928.4 | 1042.7 | 113.0 | 683.0 | 742.5 | 840.7 | 127.8 | 596.1 | 666.6 |
+| 64 | 315.2 | 1922.1 | 884.8 | 968.4 | 1093.7 | 144.2 | 845.6 | 974.9 | 1073.0 | 87.2 | 787.0 | 906.0 |
+| 512 | 315.9 | 1643.1 | 1158.6 | 1410.0 | 1484.7 | 186.9 | 2910.6 | 4063.7 | 4457.2 | 165.0 | 2883.9 | 4037.5 |
+| 2048 | 1973.5 | 4811.5 | 3979.9 | 4949.4 | 4880.4 | — | — | — | — | — | — | — |
+| 8192 | 3154.8 | 11777.9 | 9423.6 | 13437.1 | 13365.1 | — | — | — | — | — | — | — |
 
-LL, nccl_ep vs nixl_ep:
+#### `deepseek_v4_pro` — hidden 7168, inter 3072, 384 experts, top-6 — the geometry the §2 e2e sweep uses
 
-| shape | tok/rank | nccl_ep | nixl_ep | nixl vs nccl |
-|---|---|---|---|---|
-| deepseek_v4_flash | 8 | 113.0 | 127.8 | 0.88x |
-| deepseek_v4_flash | 64 | 144.2 | 87.2 | 1.65x |
-| deepseek_v4_flash | 512 | 186.9 | 165.0 | 1.13x |
-| deepseek_v4_pro | 8 | 124.4 | 82.7 | 1.50x |
-| deepseek_v4_pro | 64 | 599.4 | 98.4 | 6.09x |
-| deepseek_v4_pro | 512 | 239.0 | 258.6 | 0.92x |
-| deepseek_v3 | 8 | 119.6 | 82.4 | 1.45x |
-| deepseek_v3 | 64 | 560.4 | 100.9 | 5.55x |
-| deepseek_v3 | 512 | 273.8 | 268.1 | 1.02x |
-| kimi_k2_6 | 8 | 117.6 | 85.8 | 1.37x |
-| kimi_k2_6 | 64 | 582.0 | 140.9 | 4.13x |
-| kimi_k2_6 | 512 | 275.9 | 301.9 | 0.91x |
-| qwen3_5_397b | 8 | — | 84.4 | — |
-| qwen3_5_397b | 64 | — | 140.7 | — |
-| qwen3_5_397b | 512 | — | 226.0 | — |
+| tok/rank | nccl HT id | nccl HT fp4t | nccl HT fp4c | nccl HT w4a8 | nccl HT w4a8p | nccl LL id | nccl LL fp4c | nccl LL w4a8 | nccl LL w4a8p | nixl LL id | nixl LL fp4c | nixl LL w4a8 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 8 | 229.1 | 2636.0 | 1741.6 | 1424.5 | 1959.0 | 124.4 | 851.3 | 926.1 | 1010.7 | 82.7 | 807.1 | 871.3 |
+| 64 | 799.2 | 2478.1 | 1631.9 | 1716.3 | 2247.7 | 599.4 | 1613.3 | 2003.6 | 2066.6 | 98.4 | 1678.5 | 1981.6 |
+| 512 | 367.3 | 2526.9 | 1838.3 | 2326.0 | 2356.6 | 239.0 | 9480.9 | 14063.7 | 14523.2 | 258.6 | 9506.8 | 13937.1 |
+| 2048 | 2193.3 | 7631.7 | 6317.2 | 8096.2 | 7907.6 | — | — | — | — | — | — | — |
+| 8192 | 3953.8 | 22681.1 | 19984.6 | 27969.3 | 27637.4 | — | — | — | — | — | — | — |
 
-#### 3.2b nvfp4 trtllm (`fused_moe` split kernel, trtllm-gen backend)
+#### `deepseek_v3` — hidden 7168, inter 2048, 256 experts, top-8
 
-HT only (measured before the LL harness existed); trails the cutedsl
-backend at every point.
+| tok/rank | nccl HT id | nccl HT fp4t | nccl HT fp4c | nccl HT w4a8 | nccl HT w4a8p | nccl LL id | nccl LL fp4c | nccl LL w4a8 | nccl LL w4a8p | nixl LL id | nixl LL fp4c | nixl LL w4a8 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 8 | 324.3 | 2122.1 | 1676.0 | 1450.6 | 1939.8 | 119.6 | 688.1 | 756.1 | 840.5 | 82.4 | 628.1 | 696.4 |
+| 64 | 801.7 | 1831.6 | 1647.7 | 1560.1 | 2049.4 | 560.4 | 1370.2 | 1549.8 | 1775.6 | 100.9 | 1024.4 | 1162.8 |
+| 512 | 389.2 | 2277.2 | 1673.1 | 2124.9 | 2159.7 | 273.8 | 4802.0 | 6648.3 | 7251.3 | 268.1 | 4757.2 | 6498.1 |
+| 2048 | 2258.4 | 7186.4 | 6026.5 | 7755.7 | 7584.7 | — | — | — | — | — | — | — |
+| 8192 | 4079.8 | 21387.2 | 18715.2 | 26416.9 | 26429.0 | — | — | — | — | — | — | — |
 
-HT (nccl_ep):
+#### `kimi_k2_6` — hidden 7168, inter 2048, 384 experts, top-8
 
-| shape \ tok/rank | 8 | 64 | 512 | 2048 | 8192 |
-|---|---|---|---|---|---|
-| deepseek_v4_flash | 1642.2 | 1922.1 | 1643.1 | 4811.5 | 11777.9 |
-| deepseek_v4_pro | 2636.0 | 2478.1 | 2526.9 | 7631.7 | 22681.1 |
-| deepseek_v3 | 2122.1 | 1831.6 | 2277.2 | 7186.4 | 21387.2 |
-| kimi_k2_6 | 2419.1 | 1879.3 | 2347.9 | 7221.1 | 21391.3 |
-| qwen3_5_397b | 1594.5 | 1370.1 | 2233.8 | 4867.8 | 12108.0 |
+| tok/rank | nccl HT id | nccl HT fp4t | nccl HT fp4c | nccl HT w4a8 | nccl HT w4a8p | nccl LL id | nccl LL fp4c | nccl LL w4a8 | nccl LL w4a8p | nixl LL id | nixl LL fp4c | nixl LL w4a8 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 8 | 331.3 | 2419.1 | 1350.0 | 1451.9 | 1906.0 | 117.6 | 710.6 | 803.2 | 899.5 | 85.8 | 664.8 | 762.2 |
+| 64 | 809.4 | 1879.3 | 1806.4 | 1622.5 | 2128.6 | 582.0 | 1560.5 | 1618.4 | 1792.9 | 140.9 | 1307.2 | 1561.5 |
+| 512 | 388.0 | 2347.9 | 1716.8 | 2150.4 | 2182.5 | 275.9 | 7103.0 | 9961.7 | 10836.0 | 301.9 | 6971.7 | 9855.9 |
+| 2048 | 2256.7 | 7221.1 | 6078.9 | 7711.8 | 7625.9 | — | — | — | — | — | — | — |
+| 8192 | 4314.7 | 21391.3 | 19153.0 | 26691.1 | 26676.4 | — | — | — | — | — | — | — |
 
-#### 3.2c nvfp4 cutedsl (`fused_moe` split kernel, CuTeDSL backend)
+#### `qwen3_5_397b` — hidden 4096, inter 1024, 512 experts, top-10
 
-The fastest split kernel measured. At LL @8 tok/rank the nixl comm advantage
-carries a 6-13% e2e lead; at 512 compute dominates (>90% of e2e) and the
-transports converge.
+| tok/rank | nccl HT id | nccl HT fp4t | nccl HT fp4c | nccl HT w4a8 | nccl HT w4a8p | nccl LL id | nccl LL fp4c | nccl LL w4a8 | nccl LL w4a8p | nixl LL id | nixl LL fp4c | nixl LL w4a8 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 8 | 212.0 | 1594.5 | 841.8 | 937.9 | 1042.2 | — | — | — | — | 84.4 | 593.5 | 668.4 |
+| 64 | 342.8 | 1370.1 | 912.2 | 999.0 | 1100.3 | — | — | — | — | 140.7 | 838.4 | 974.6 |
+| 512 | 377.4 | 2233.8 | 1198.7 | 1422.0 | 1487.4 | — | — | — | — | 226.0 | 3180.1 | 4220.3 |
+| 2048 | 2183.2 | 4867.8 | 4322.5 | 4933.3 | 4842.1 | — | — | — | — | — | — | — |
+| 8192 | 3760.3 | 12108.0 | 9771.3 | 13321.3 | 13232.3 | — | — | — | — | — | — | — |
 
-HT (nccl_ep):
+#### `gpt_oss_120b` — hidden 2880, inter 2880, 128 experts, top-4
 
-| shape \ tok/rank | 8 | 64 | 512 | 2048 | 8192 |
-|---|---|---|---|---|---|
-| deepseek_v4_flash | 832.5 | 884.8 | 1158.6 | 3979.9 | 9423.6 |
-| deepseek_v4_pro | 1741.6 | 1631.9 | 1838.3 | 6317.2 | 19984.6 |
-| deepseek_v3 | 1676.0 | 1647.7 | 1673.1 | 6026.5 | 18715.2 |
-| kimi_k2_6 | 1350.0 | 1806.4 | 1716.8 | 6078.9 | 19153.0 |
-| qwen3_5_397b | 841.8 | 912.2 | 1198.7 | 4322.5 | 9771.3 |
-
-LL, nccl_ep vs nixl_ep:
-
-| shape | tok/rank | nccl_ep | nixl_ep | nixl vs nccl |
-|---|---|---|---|---|
-| deepseek_v4_flash | 8 | 683.0 | 596.1 | 1.15x |
-| deepseek_v4_flash | 64 | 845.6 | 787.0 | 1.07x |
-| deepseek_v4_flash | 512 | 2910.6 | 2883.9 | 1.01x |
-| deepseek_v4_pro | 8 | 851.3 | 807.1 | 1.05x |
-| deepseek_v4_pro | 64 | 1613.3 | 1678.5 | 0.96x |
-| deepseek_v4_pro | 512 | 9480.9 | 9506.8 | 1.00x |
-| deepseek_v3 | 8 | 688.1 | 628.1 | 1.10x |
-| deepseek_v3 | 64 | 1370.2 | 1024.4 | 1.34x |
-| deepseek_v3 | 512 | 4802.0 | 4757.2 | 1.01x |
-| kimi_k2_6 | 8 | 710.6 | 664.8 | 1.07x |
-| kimi_k2_6 | 64 | 1560.5 | 1307.2 | 1.19x |
-| kimi_k2_6 | 512 | 7103.0 | 6971.7 | 1.02x |
-| qwen3_5_397b | 8 | — | 593.5 | — |
-| qwen3_5_397b | 64 | — | 838.4 | — |
-| qwen3_5_397b | 512 | — | 3180.1 | — |
-
-#### 3.2d w4a8 (`sm100_mxfp8_mxfp4_bf16_cutedsl`)
-
-MXFP8 activations x MXFP4 weights, default kernel tactic (untuned — tracks
-nvfp4 cutedsl at 8-64 tok/rank, falls behind at 512+). `w4a8 packed`
-(`mxfp8_dispatch=True`) quantizes BEFORE dispatch and sends the packed
-fp8+UE8M0 payload — bit-identical output, nccl_ep only. Packed matches
-unpacked within noise at >=512 tok/rank under HT (16% faster dispatch stage
-at 8192: 695 → 585 µs on v4_flash) and trails at small batch under both
-protocols: the pre-dispatch quantize adds ~100-160 µs of launch overhead vs
-tens of µs saved on a single-node wire.
-
-HT (nccl_ep):
-
-| shape \ tok/rank | 8 | 64 | 512 | 2048 | 8192 |
-|---|---|---|---|---|---|
-| deepseek_v4_flash | 928.4 | 968.4 | 1410.0 | 4949.4 | 13437.1 |
-| deepseek_v4_pro | 1424.5 | 1716.3 | 2326.0 | 8096.2 | 27969.3 |
-| deepseek_v3 | 1450.6 | 1560.1 | 2124.9 | 7755.7 | 26416.9 |
-| kimi_k2_6 | 1451.9 | 1622.5 | 2150.4 | 7711.8 | 26691.1 |
-| qwen3_5_397b | 937.9 | 999.0 | 1422.0 | 4933.3 | 13321.3 |
-
-HT packed (nccl_ep):
-
-| shape \ tok/rank | 8 | 64 | 512 | 2048 | 8192 |
-|---|---|---|---|---|---|
-| deepseek_v4_flash | 1042.7 | 1093.7 | 1484.7 | 4880.4 | 13365.1 |
-| deepseek_v4_pro | 1959.0 | 2247.7 | 2356.6 | 7907.6 | 27637.4 |
-| deepseek_v3 | 1939.8 | 2049.4 | 2159.7 | 7584.7 | 26429.0 |
-| kimi_k2_6 | 1906.0 | 2128.6 | 2182.5 | 7625.9 | 26676.4 |
-| qwen3_5_397b | 1042.2 | 1100.3 | 1487.4 | 4842.1 | 13232.3 |
-
-LL, nccl_ep vs nixl_ep:
-
-| shape | tok/rank | nccl_ep | nixl_ep | nixl vs nccl |
-|---|---|---|---|---|
-| deepseek_v4_flash | 8 | 742.5 | 666.6 | 1.11x |
-| deepseek_v4_flash | 64 | 974.9 | 906.0 | 1.08x |
-| deepseek_v4_flash | 512 | 4063.7 | 4037.5 | 1.01x |
-| deepseek_v4_pro | 8 | 926.1 | 871.3 | 1.06x |
-| deepseek_v4_pro | 64 | 2003.6 | 1981.6 | 1.01x |
-| deepseek_v4_pro | 512 | 14063.7 | 13937.1 | 1.01x |
-| deepseek_v3 | 8 | 756.1 | 696.4 | 1.09x |
-| deepseek_v3 | 64 | 1549.8 | 1162.8 | 1.33x |
-| deepseek_v3 | 512 | 6648.3 | 6498.1 | 1.02x |
-| kimi_k2_6 | 8 | 803.2 | 762.2 | 1.05x |
-| kimi_k2_6 | 64 | 1618.4 | 1561.5 | 1.04x |
-| kimi_k2_6 | 512 | 9961.7 | 9855.9 | 1.01x |
-| qwen3_5_397b | 8 | — | 668.4 | — |
-| qwen3_5_397b | 64 | — | 974.6 | — |
-| qwen3_5_397b | 512 | — | 4220.3 | — |
-
-LL packed (nccl_ep only):
-
-| shape | tok/rank | nccl_ep |
-|---|---|---|
-| deepseek_v4_flash | 8 | 840.7 |
-| deepseek_v4_flash | 64 | 1073.0 |
-| deepseek_v4_flash | 512 | 4457.2 |
-| deepseek_v4_pro | 8 | 1010.7 |
-| deepseek_v4_pro | 64 | 2066.6 |
-| deepseek_v4_pro | 512 | 14523.2 |
-| deepseek_v3 | 8 | 840.5 |
-| deepseek_v3 | 64 | 1775.6 |
-| deepseek_v3 | 512 | 7251.3 |
-| kimi_k2_6 | 8 | 899.5 |
-| kimi_k2_6 | 64 | 1792.9 |
-| kimi_k2_6 | 512 | 10836.0 |
+| tok/rank | nccl HT id | nccl HT fp4t | nccl HT fp4c | nccl HT w4a8 | nccl HT w4a8p | nccl LL id | nccl LL fp4c | nccl LL w4a8 | nccl LL w4a8p | nixl LL id | nixl LL fp4c | nixl LL w4a8 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 8 | 318.8 | — | — | — | — | — | — | — | — | — | — | — |
+| 64 | 286.7 | — | — | — | — | — | — | — | — | — | — | — |
+| 512 | 298.0 | — | — | — | — | — | — | — | — | — | — | — |
+| 2048 | 436.0 | — | — | — | — | — | — | — | — | — | — | — |
+| 8192 | 2578.8 | — | — | — | — | — | — | — | — | — | — | — |
 
 ### 3.3 2xB200 EP2 baseline — quantized speedup vs bf16
 
