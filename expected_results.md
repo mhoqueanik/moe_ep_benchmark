@@ -390,12 +390,12 @@ routing, which nccl_ep LL cannot.
 
 The `identity` kernel is a pure dispatch/combine roundtrip (no expert
 compute), so this table is the transport comparison per geometry and batch
-size: **bold** = fastest comm option for that row. LL wins every decode-size
-row where it exists; nixl_ep wins most LL rows at 8-64 tok/rank (and avoids
-nccl's @64 combine anomaly — 560-599 µs vs 87-141 µs on the hidden-7168
-shapes, visible in HT too at ~800 µs); nccl_ep HT is the only option at
-2048+ tok/rank. LL cells are `—` at 2048/8192 (LL swept 8-512; nixl_ep caps
-`max_tokens_per_rank` at 1024) and gpt_oss was measured at HT only.
+size: **bold** = fastest comm option for that row. LL wins every row through 2048 tok/rank where measured (nixl_ep ahead at
+8-64, and it avoids nccl's @64 combine anomaly — 560-599 µs vs 87-141 µs
+on the hidden-7168 shapes, visible in HT too at ~800 µs); at 8192 HT
+takes over (e.g. v3: HT 4079.8 vs LL 4436.8). Remaining `—`: nixl_ep
+caps `max_tokens_per_rank` at 1024, qwen's nccl LL hits the top-k cap,
+and gpt_oss was measured at HT only.
 
 **`deepseek_v4_flash`**
 
@@ -404,8 +404,8 @@ shapes, visible in HT too at ~800 µs); nccl_ep HT is the only option at
 | 8 | 315.9 | **113.0** | 127.8 |
 | 64 | 315.2 | 144.2 | **87.2** |
 | 512 | 315.9 | 186.9 | **165.0** |
-| 2048 | **1973.5** | — | — |
-| 8192 | **3154.8** | — | — |
+| 2048 | 1973.5 | **413.3** | — |
+| 8192 | 3154.8 | **1372.8** | — |
 
 **`deepseek_v4_pro`**
 
@@ -414,8 +414,8 @@ shapes, visible in HT too at ~800 µs); nccl_ep HT is the only option at
 | 8 | 229.1 | 124.4 | **82.7** |
 | 64 | 799.2 | 599.4 | **98.4** |
 | 512 | 367.3 | **239.0** | 258.6 |
-| 2048 | **2193.3** | — | — |
-| 8192 | **3953.8** | — | — |
+| 2048 | 2193.3 | **640.6** | — |
+| 8192 | 3953.8 | **2355.0** | — |
 
 **`deepseek_v3`**
 
@@ -424,8 +424,8 @@ shapes, visible in HT too at ~800 µs); nccl_ep HT is the only option at
 | 8 | 324.3 | 119.6 | **82.4** |
 | 64 | 801.7 | 560.4 | **100.9** |
 | 512 | 389.2 | 273.8 | **268.1** |
-| 2048 | **2258.4** | — | — |
-| 8192 | **4079.8** | — | — |
+| 2048 | 2258.4 | **827.5** | — |
+| 8192 | **4079.8** | 4436.8 | — |
 
 **`kimi_k2_6`**
 
@@ -434,8 +434,8 @@ shapes, visible in HT too at ~800 µs); nccl_ep HT is the only option at
 | 8 | 331.3 | 117.6 | **85.8** |
 | 64 | 809.4 | 582.0 | **140.9** |
 | 512 | 388.0 | **275.9** | 301.9 |
-| 2048 | **2256.7** | — | — |
-| 8192 | **4314.7** | — | — |
+| 2048 | 2256.7 | **827.9** | — |
+| 8192 | **4314.7** | 4454.2 | — |
 
 **`qwen3_5_397b`**
 
@@ -469,12 +469,12 @@ shapes, visible in HT too at ~800 µs); nccl_ep HT is the only option at
 <tr><td>8</td><td>1642.2</td><td>832.5</td><td>928.4</td><td>1042.7</td><td>683.0</td><td>742.5</td><td>840.7</td><td><b>596.1</b></td><td>666.6</td></tr>
 <tr><td>64</td><td>1922.1</td><td>884.8</td><td>968.4</td><td>1093.7</td><td>845.6</td><td>974.9</td><td>1073.0</td><td><b>787.0</b></td><td>906.0</td></tr>
 <tr><td>512</td><td>1643.1</td><td><b>1158.6</b></td><td>1410.0</td><td>1484.7</td><td>2910.6</td><td>4063.7</td><td>4457.2</td><td>2883.9</td><td>4037.5</td></tr>
-<tr><td>2048</td><td>4811.5</td><td><b>3979.9</b></td><td>4949.4</td><td>4880.4</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
-<tr><td>8192</td><td>11777.9</td><td><b>9423.6</b></td><td>13437.1</td><td>13365.1</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>2048</td><td>4811.5</td><td><b>3979.9</b></td><td>4949.4</td><td>4880.4</td><td>9887.2</td><td>13952.5</td><td>16561.6</td><td>—</td><td>—</td></tr>
+<tr><td>8192</td><td>11777.9</td><td><b>9423.6</b></td><td>13437.1</td><td>13365.1</td><td>39898.0</td><td>57152.5</td><td>69001.6</td><td>—</td><td>—</td></tr>
 </tbody>
 </table>
 
-> LL columns are `—` at 2048/8192 tok/rank: the LL sweep runs 8-512 (nixl_ep caps `max_tokens_per_rank` at 1024; nccl_ep LL was swept at the same points for comparability).
+> nixl_ep LL is `—` at 2048/8192 tok/rank: the transport caps `max_tokens_per_rank` at 1024.
 
 #### `deepseek_v4_pro` — hidden 7168, inter 3072, 384 experts, top-6 — the geometry the §2 e2e sweep uses
 
@@ -488,12 +488,14 @@ shapes, visible in HT too at ~800 µs); nccl_ep HT is the only option at
 <tr><td>8</td><td>2636.0</td><td>1741.6</td><td>1424.5</td><td>1959.0</td><td>851.3</td><td>926.1</td><td>1010.7</td><td><b>807.1</b></td><td>871.3</td></tr>
 <tr><td>64</td><td>2478.1</td><td>1631.9</td><td>1716.3</td><td>2247.7</td><td><b>1613.3</b></td><td>2003.6</td><td>2066.6</td><td>1678.5</td><td>1981.6</td></tr>
 <tr><td>512</td><td>2526.9</td><td><b>1838.3</b></td><td>2326.0</td><td>2356.6</td><td>9480.9</td><td>14063.7</td><td>14523.2</td><td>9506.8</td><td>13937.1</td></tr>
-<tr><td>2048</td><td>7631.7</td><td><b>6317.2</b></td><td>8096.2</td><td>7907.6</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>2048</td><td>7631.7</td><td><b>6317.2</b></td><td>8096.2</td><td>7907.6</td><td>—</td><td>48038.3</td><td>56786.0</td><td>—</td><td>—</td></tr>
 <tr><td>8192</td><td>22681.1</td><td><b>19984.6</b></td><td>27969.3</td><td>27637.4</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
 </tbody>
 </table>
 
-> LL columns are `—` at 2048/8192 tok/rank: the LL sweep runs 8-512 (nixl_ep caps `max_tokens_per_rank` at 1024; nccl_ep LL was swept at the same points for comparability).
+> nixl_ep LL is `—` at 2048/8192 tok/rank: the transport caps `max_tokens_per_rank` at 1024.
+
+> The remaining nccl_ep LL `—` at 2048/8192 were attempted (job 2392073) and OOM: LL `EXPERT_MAJOR` pads compute to `local_experts x tokens x world` rows, and on the hidden-7168 shapes the resulting ~42 GiB allocations exceed B200 memory.
 
 #### `deepseek_v3` — hidden 7168, inter 2048, 256 experts, top-8
 
@@ -507,12 +509,14 @@ shapes, visible in HT too at ~800 µs); nccl_ep HT is the only option at
 <tr><td>8</td><td>2122.1</td><td>1676.0</td><td>1450.6</td><td>1939.8</td><td>688.1</td><td>756.1</td><td>840.5</td><td><b>628.1</b></td><td>696.4</td></tr>
 <tr><td>64</td><td>1831.6</td><td>1647.7</td><td>1560.1</td><td>2049.4</td><td>1370.2</td><td>1549.8</td><td>1775.6</td><td><b>1024.4</b></td><td>1162.8</td></tr>
 <tr><td>512</td><td>2277.2</td><td><b>1673.1</b></td><td>2124.9</td><td>2159.7</td><td>4802.0</td><td>6648.3</td><td>7251.3</td><td>4757.2</td><td>6498.1</td></tr>
-<tr><td>2048</td><td>7186.4</td><td><b>6026.5</b></td><td>7755.7</td><td>7584.7</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
-<tr><td>8192</td><td>21387.2</td><td><b>18715.2</b></td><td>26416.9</td><td>26429.0</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>2048</td><td>7186.4</td><td><b>6026.5</b></td><td>7755.7</td><td>7584.7</td><td>—</td><td>22905.3</td><td>27881.2</td><td>—</td><td>—</td></tr>
+<tr><td>8192</td><td>21387.2</td><td><b>18715.2</b></td><td>26416.9</td><td>26429.0</td><td>68686.8</td><td>97599.9</td><td>118296.6</td><td>—</td><td>—</td></tr>
 </tbody>
 </table>
 
-> LL columns are `—` at 2048/8192 tok/rank: the LL sweep runs 8-512 (nixl_ep caps `max_tokens_per_rank` at 1024; nccl_ep LL was swept at the same points for comparability).
+> nixl_ep LL is `—` at 2048/8192 tok/rank: the transport caps `max_tokens_per_rank` at 1024.
+
+> The remaining nccl_ep LL `—` at 2048/8192 were attempted (job 2392073) and OOM: LL `EXPERT_MAJOR` pads compute to `local_experts x tokens x world` rows, and on the hidden-7168 shapes the resulting ~42 GiB allocations exceed B200 memory.
 
 #### `kimi_k2_6` — hidden 7168, inter 2048, 384 experts, top-8
 
@@ -526,12 +530,14 @@ shapes, visible in HT too at ~800 µs); nccl_ep HT is the only option at
 <tr><td>8</td><td>2419.1</td><td>1350.0</td><td>1451.9</td><td>1906.0</td><td>710.6</td><td>803.2</td><td>899.5</td><td><b>664.8</b></td><td>762.2</td></tr>
 <tr><td>64</td><td>1879.3</td><td>1806.4</td><td>1622.5</td><td>2128.6</td><td>1560.5</td><td>1618.4</td><td>1792.9</td><td><b>1307.2</b></td><td>1561.5</td></tr>
 <tr><td>512</td><td>2347.9</td><td><b>1716.8</b></td><td>2150.4</td><td>2182.5</td><td>7103.0</td><td>9961.7</td><td>10836.0</td><td>6971.7</td><td>9855.9</td></tr>
-<tr><td>2048</td><td>7221.1</td><td><b>6078.9</b></td><td>7711.8</td><td>7625.9</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>2048</td><td>7221.1</td><td><b>6078.9</b></td><td>7711.8</td><td>7625.9</td><td>—</td><td>34909.6</td><td>42299.6</td><td>—</td><td>—</td></tr>
 <tr><td>8192</td><td>21391.3</td><td><b>19153.0</b></td><td>26691.1</td><td>26676.4</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
 </tbody>
 </table>
 
-> LL columns are `—` at 2048/8192 tok/rank: the LL sweep runs 8-512 (nixl_ep caps `max_tokens_per_rank` at 1024; nccl_ep LL was swept at the same points for comparability).
+> nixl_ep LL is `—` at 2048/8192 tok/rank: the transport caps `max_tokens_per_rank` at 1024.
+
+> The remaining nccl_ep LL `—` at 2048/8192 were attempted (job 2392073) and OOM: LL `EXPERT_MAJOR` pads compute to `local_experts x tokens x world` rows, and on the hidden-7168 shapes the resulting ~42 GiB allocations exceed B200 memory.
 
 #### `qwen3_5_397b` — hidden 4096, inter 1024, 512 experts, top-10
 
@@ -550,7 +556,7 @@ shapes, visible in HT too at ~800 µs); nccl_ep HT is the only option at
 </tbody>
 </table>
 
-> LL columns are `—` at 2048/8192 tok/rank: the LL sweep runs 8-512 (nixl_ep caps `max_tokens_per_rank` at 1024; nccl_ep LL was swept at the same points for comparability).
+> nixl_ep LL is `—` at 2048/8192 tok/rank: the transport caps `max_tokens_per_rank` at 1024.
 
 > nccl_ep LL cells are `—`: top-10 routing aborts on the nccl_ep LL device kernel (`numTopk <= kNumMaxTopK`, cap 8 — see the flashinfer runbook); the nixl_ep columns cover this shape.
 
